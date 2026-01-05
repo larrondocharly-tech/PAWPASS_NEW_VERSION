@@ -100,8 +100,9 @@ export default function DashboardPage() {
     };
   }, [wallet]);
 
-  const progress = Math.min(((wallet?.available_balance ?? 0) / 5) * 100, 100);
-  const missing = Math.max(5 - (wallet?.available_balance ?? 0), 0);
+  const walletBalance = Number(wallet?.available_balance ?? 0);
+  const progress = Math.min((walletBalance / 5) * 100, 100);
+  const missing = Math.max(5 - walletBalance, 0);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
