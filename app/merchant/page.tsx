@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import QRCodeCard from '@/components/QRCodeCard';
 import type { MerchantProfile } from '@/lib/types';
@@ -14,6 +15,7 @@ interface TransactionLite {
 
 export default function MerchantPage() {
   const supabase = createClient();
+  const router = useRouter();
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
   const [transactions, setTransactions] = useState<TransactionLite[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +48,8 @@ export default function MerchantPage() {
         return;
       }
 
-      if (merchantData.role?.toLowerCase() !== 'merchant') {
-        window.location.href = '/dashboard';
+      if (merchantData.role?.toUpperCase() !== 'MERCHANT') {
+        router.replace('/dashboard');
         return;
       }
 
@@ -126,7 +128,7 @@ export default function MerchantPage() {
   return (
     <div className="container">
       <div className="nav">
-        <strong>Commerçant</strong>
+        <strong>Mon QR commerçant</strong>
         <div className="nav-links">
           <Link href="/merchant">Mon QR</Link>
           <Link href="/settings">Paramètres</Link>

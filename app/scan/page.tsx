@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import type { MerchantProfile, Spa } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
@@ -31,6 +31,7 @@ const extractToken = (rawValue: string) => {
 
 export default function ScanPage() {
   const supabase = createClient();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const merchantToken = searchParams.get('m');
   const [token, setToken] = useState('');
@@ -48,12 +49,38 @@ export default function ScanPage() {
   const amountValue = useMemo(() => Number(amount.replace(',', '.')), [amount]);
 
   useEffect(() => {
+    const guardRole = async () => {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) {
+        return;
+      }
+
+      if (profile.role?.toUpperCase() === 'MERCHANT') {
+        router.replace('/merchant');
+      }
+    };
+
+    void guardRole();
+
     if (merchantToken) {
       const parsedToken = extractToken(merchantToken);
       setToken(parsedToken);
       setTokenInput(parsedToken);
     }
-  }, [merchantToken]);
+  }, [merchantToken, router, supabase]);
 
   useEffect(() => {
     const loadMerchant = async () => {

@@ -4,19 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabaseClient';
 import type { Profile } from '@/lib/types';
-import { formatCurrency } from '@/lib/utils';
-
-interface Wallet {
-  balance: number;
-  earned: number;
-  donated: number;
-}
 
 export default function DashboardPage() {
   const supabase = createClient();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string | null>(null);
-  const [wallet, setWallet] = useState<Wallet | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,19 +36,6 @@ export default function DashboardPage() {
       }
 
       setProfile(profileData);
-
-      const { data: walletData, error: walletError } = await supabase
-        .from('wallets')
-        .select('balance,earned,donated')
-        .eq('user_id', user.id)
-        .single();
-
-      if (walletError) {
-        setWallet({ balance: 0, earned: 0, donated: 0 });
-        return;
-      }
-
-      setWallet(walletData ?? { balance: 0, earned: 0, donated: 0 });
     };
 
     void loadData();
@@ -84,20 +63,7 @@ export default function DashboardPage() {
       <div className="grid grid-2">
         <div className="card">
           <h2>Bienvenue {email ?? 'client'} 👋</h2>
-          <p className="helper">Votre cashback disponible à utiliser ou reverser.</p>
-          {wallet && (
-            <div style={{ marginTop: 20 }}>
-              <p>
-                <strong>Solde disponible :</strong> {formatCurrency(wallet.balance)}
-              </p>
-              <p>
-                <strong>Total gagné :</strong> {formatCurrency(wallet.earned)}
-              </p>
-              <p>
-                <strong>Total donné :</strong> {formatCurrency(wallet.donated)}
-              </p>
-            </div>
-          )}
+          <p className="helper">Scannez un QR commerçant pour enregistrer vos achats.</p>
         </div>
         <div className="card">
           <h3>Actions rapides</h3>
