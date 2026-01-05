@@ -249,6 +249,19 @@ export default function ScanPage() {
     setReceiptFile(null);
     setDonateCashback(false);
     setSpaId('');
+
+    if (donationAmount > 0) {
+      const spaName = spas.find((spa) => spa.id === spaId)?.name ?? 'une SPA';
+      const formattedAmount = formatCurrency(donationAmount);
+      const params = new URLSearchParams({
+        thanks: '1',
+        amount: formattedAmount.replace('€', '').trim(),
+        spa: spaName
+      });
+      router.push(`/dashboard?${params.toString()}`);
+      return;
+    }
+
     router.push('/transactions');
   };
 
