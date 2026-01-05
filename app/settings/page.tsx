@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabaseClient';
-import type { Profile } from '@/lib/types';
+import type { Profile, Spa } from '@/lib/types';
 
 export default function SettingsPage() {
   const supabase = createClient();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState<string | null>(null);
+  const [spas, setSpas] = useState<Spa[]>([]);
+  const [spaId, setSpaId] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,11 +25,13 @@ export default function SettingsPage() {
         return;
       }
 
+      setEmail(user.email ?? null);
+
       const { data, error: profileError } = await supabase
         .from('profiles')
-        .select('id,email,role,full_name')
+        .select('id,role,spa_id,merchant_code')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
         setError(profileError.message);
@@ -35,10 +39,25 @@ export default function SettingsPage() {
       }
 
       setProfile(data);
-      setFullName(data.full_name ?? '');
+      setSpaId(data?.spa_id ?? '');
+    };
+
+    const loadSpas = async () => {
+      const { data, error: spaError } = await supabase
+        .from('spas')
+        .select('id,name,city,region')
+        .order('name');
+
+      if (spaError) {
+        setError(spaError.message);
+        return;
+      }
+
+      setSpas(data ?? []);
     };
 
     void loadProfile();
+    void loadSpas();
   }, [supabase]);
 
   const handleSave = async (event: React.FormEvent) => {
@@ -50,7 +69,7 @@ export default function SettingsPage() {
 
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ full_name: fullName })
+      .update({ spa_id: spaId || null })
       .eq('id', profile.id);
 
     if (updateError) {
@@ -64,6 +83,33 @@ export default function SettingsPage() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
+  };
+
+  const handleCreateProfile = async () => {
+    setError(null);
+    setStatus(null);
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setError('Session expirée.');
+      return;
+    }
+
+    const { data, error: createError } = await supabase
+      .from('profiles')
+      .insert({ id: user.id, role: 'client' })
+      .select('id,role,spa_id,merchant_code')
+      .single();
+
+    if (createError) {
+      setError(createError.message);
+      return;
+    }
+
+    setProfile(data);
+    setStatus('Profil créé ✅');
   };
 
   return (
@@ -83,20 +129,38 @@ export default function SettingsPage() {
           <form onSubmit={handleSave}>
             <label className="label" htmlFor="email">
               Email
-              <input id="email" className="input" value={profile.email ?? ''} readOnly />
+              <input id="email" className="input" value={email ?? ''} readOnly />
             </label>
             <label className="label" htmlFor="role">
               Rôle
               <input id="role" className="input" value={profile.role} readOnly />
             </label>
-            <label className="label" htmlFor="fullName">
-              Nom complet
-              <input
-                id="fullName"
-                className="input"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-              />
+            {profile.role === 'merchant' && (
+              <label className="label" htmlFor="merchantCode">
+                Code commerçant
+                <input
+                  id="merchantCode"
+                  className="input"
+                  value={profile.merchant_code ?? ''}
+                  readOnly
+                />
+              </label>
+            )}
+            <label className="label" htmlFor="spa">
+              SPA associée
+              <select
+                id="spa"
+                className="select"
+                value={spaId}
+                onChange={(event) => setSpaId(event.target.value)}
+              >
+                <option value="">Aucune</option>
+                {spas.map((spa) => (
+                  <option key={spa.id} value={spa.id}>
+                    {spa.name} {spa.city ? `· ${spa.city}` : ''}
+                  </option>
+                ))}
+              </select>
             </label>
             {error && <p className="error">{error}</p>}
             {status && <p>{status}</p>}
@@ -110,7 +174,14 @@ export default function SettingsPage() {
             </div>
           </form>
         ) : (
-          <p className="helper">Chargement du profil…</p>
+          <div>
+            <p className="helper">Aucun profil trouvé.</p>
+            <button className="button" type="button" onClick={handleCreateProfile}>
+              Créer mon profil
+            </button>
+            {error && <p className="error">{error}</p>}
+            {status && <p>{status}</p>}
+          </div>
         )}
       </div>
     </div>

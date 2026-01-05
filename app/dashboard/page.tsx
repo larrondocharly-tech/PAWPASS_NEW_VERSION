@@ -15,6 +15,7 @@ interface Wallet {
 export default function DashboardPage() {
   const supabase = createClient();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,9 +30,11 @@ export default function DashboardPage() {
         return;
       }
 
+      setEmail(user.email ?? null);
+
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id,email,role,full_name')
+        .select('id,role,spa_id,merchant_code')
         .eq('id', user.id)
         .single();
 
@@ -80,7 +83,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-2">
         <div className="card">
-          <h2>Bienvenue {profile?.full_name ?? profile?.email ?? 'client'} 👋</h2>
+          <h2>Bienvenue {email ?? 'client'} 👋</h2>
           <p className="helper">Votre cashback disponible à utiliser ou reverser.</p>
           {wallet && (
             <div style={{ marginTop: 20 }}>

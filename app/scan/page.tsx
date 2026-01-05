@@ -4,20 +4,41 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
-import type { Association, Merchant } from '@/lib/types';
+import type { MerchantProfile, Spa } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
+import QrScanner from '@/components/QrScanner';
 
 const MAX_AMOUNT = 200;
 const RANDOM_RECEIPT_RATE = 0.1;
+const DEFAULT_CASHBACK_PERCENT = 5;
+const DEFAULT_TICKET_THRESHOLD = 50;
+
+const extractToken = (rawValue: string) => {
+  if (!rawValue) return '';
+  try {
+    const url = new URL(rawValue);
+    const token = url.searchParams.get('m');
+    return token ?? rawValue;
+  } catch {
+    if (rawValue.includes('?')) {
+      const [, queryString] = rawValue.split('?');
+      const params = new URLSearchParams(queryString);
+      return params.get('m') ?? rawValue;
+    }
+    return rawValue;
+  }
+};
 
 export default function ScanPage() {
   const supabase = createClient();
   const searchParams = useSearchParams();
   const merchantToken = searchParams.get('m');
-  const [merchant, setMerchant] = useState<Merchant | null>(null);
+  const [token, setToken] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
+  const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
   const [amount, setAmount] = useState('');
-  const [associations, setAssociations] = useState<Association[]>([]);
-  const [associationId, setAssociationId] = useState<string>('');
+  const [spas, setSpas] = useState<Spa[]>([]);
+  const [spaId, setSpaId] = useState<string>('');
   const [donateCashback, setDonateCashback] = useState(false);
   const [receiptRequired, setReceiptRequired] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -27,16 +48,25 @@ export default function ScanPage() {
   const amountValue = useMemo(() => Number(amount.replace(',', '.')), [amount]);
 
   useEffect(() => {
+    if (merchantToken) {
+      const parsedToken = extractToken(merchantToken);
+      setToken(parsedToken);
+      setTokenInput(parsedToken);
+    }
+  }, [merchantToken]);
+
+  useEffect(() => {
     const loadMerchant = async () => {
-      if (!merchantToken) {
-        setError('QR code invalide.');
+      if (!token) {
+        setMerchant(null);
         return;
       }
 
       const { data, error: merchantError } = await supabase
-        .from('merchants')
-        .select('id,name,qr_token,cashback_percent,threshold_ticket')
-        .eq('qr_token', merchantToken)
+        .from('profiles')
+        .select('id,role,merchant_code')
+        .eq('merchant_code', token)
+        .eq('role', 'merchant')
         .single();
 
       if (merchantError) {
@@ -47,24 +77,24 @@ export default function ScanPage() {
       setMerchant(data);
     };
 
-    const loadAssociations = async () => {
-      const { data, error: associationsError } = await supabase
-        .from('associations')
-        .select('id,name,active')
-        .eq('active', true)
+    const loadSpas = async () => {
+      const { data, error: spaError } = await supabase
+        .from('spas')
+        .select('id,name,city,region')
         .order('name');
 
-      if (associationsError) {
-        setError(associationsError.message);
+      if (spaError) {
+        setError(spaError.message);
         return;
       }
 
-      setAssociations(data ?? []);
+      setSpas(data ?? []);
     };
 
+    setError(null);
     void loadMerchant();
-    void loadAssociations();
-  }, [merchantToken, supabase]);
+    void loadSpas();
+  }, [token, supabase]);
 
   useEffect(() => {
     if (!merchant) {
@@ -77,7 +107,7 @@ export default function ScanPage() {
     }
 
     const needsReceipt =
-      amountValue >= merchant.threshold_ticket || Math.random() < RANDOM_RECEIPT_RATE;
+      amountValue >= DEFAULT_TICKET_THRESHOLD || Math.random() < RANDOM_RECEIPT_RATE;
     setReceiptRequired(needsReceipt);
   }, [amountValue, merchant]);
 
@@ -85,6 +115,11 @@ export default function ScanPage() {
     event.preventDefault();
     setError(null);
     setStatus(null);
+
+    if (!token) {
+      setError('Veuillez saisir un token commerçant.');
+      return;
+    }
 
     if (!merchant) {
       setError('Commerçant introuvable.');
@@ -110,8 +145,8 @@ export default function ScanPage() {
       return;
     }
 
-    if (donateCashback && !associationId) {
-      setError('Veuillez sélectionner une association.');
+    if (donateCashback && !spaId) {
+      setError('Veuillez sélectionner une SPA.');
       return;
     }
 
@@ -145,7 +180,7 @@ export default function ScanPage() {
       p_amount: amountValue,
       p_receipt_path: receiptPath,
       p_donate_cashback: donateCashback,
-      p_association_id: donateCashback ? associationId || null : null
+      p_spa_id: donateCashback ? spaId || null : null
     });
 
     if (rpcError) {
@@ -157,7 +192,7 @@ export default function ScanPage() {
     setAmount('');
     setReceiptFile(null);
     setDonateCashback(false);
-    setAssociationId('');
+    setSpaId('');
   };
 
   return (
@@ -175,12 +210,42 @@ export default function ScanPage() {
         <h2>Scanner le QR commerçant</h2>
         {merchant ? (
           <p>
-            Vous êtes chez <strong>{merchant.name}</strong> · Cashback{' '}
-            <strong>{merchant.cashback_percent}%</strong>
+            Token détecté : <strong>{merchant.merchant_code}</strong>
           </p>
         ) : (
-          <p className="helper">Chargement du commerçant…</p>
+          <p className="helper">Aucun commerçant chargé.</p>
         )}
+
+        <div className="grid grid-2" style={{ marginTop: 16 }}>
+          <QrScanner
+            onResult={(value) => {
+              const parsed = extractToken(value);
+              setToken(parsed);
+              setTokenInput(parsed);
+            }}
+          />
+          <div className="card">
+            <h3>Entrer le token manuellement</h3>
+            <label className="label" htmlFor="token">
+              Code commerçant / Token QR
+              <input
+                id="token"
+                className="input"
+                value={tokenInput}
+                onChange={(event) => setTokenInput(event.target.value)}
+                placeholder="Ex: TEST_QR_TOKEN_123"
+              />
+            </label>
+            <button
+              className="button"
+              type="button"
+              onClick={() => setToken(extractToken(tokenInput.trim()))}
+              style={{ marginTop: 12 }}
+            >
+              Valider le token
+            </button>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
           <label className="label" htmlFor="amount">
@@ -199,11 +264,11 @@ export default function ScanPage() {
             <p className="helper">Plafond de {MAX_AMOUNT}€ par transaction.</p>
           </label>
 
-          {merchant && amountValue > 0 && !Number.isNaN(amountValue) && (
+          {amountValue > 0 && !Number.isNaN(amountValue) && (
             <p className="helper">
               Cashback estimé :{' '}
               <strong>
-                {formatCurrency((amountValue * merchant.cashback_percent) / 100)}
+                {formatCurrency((amountValue * DEFAULT_CASHBACK_PERCENT) / 100)}
               </strong>
             </p>
           )}
@@ -237,18 +302,18 @@ export default function ScanPage() {
 
           {donateCashback && (
             <label className="label" htmlFor="association">
-              Association
+              SPA / Association
               <select
                 id="association"
                 className="select"
-                value={associationId}
-                onChange={(event) => setAssociationId(event.target.value)}
+                value={spaId}
+                onChange={(event) => setSpaId(event.target.value)}
                 required
               >
-                <option value="">Sélectionner une association</option>
-                {associations.map((association) => (
-                  <option key={association.id} value={association.id}>
-                    {association.name}
+                <option value="">Sélectionner une SPA</option>
+                {spas.map((spa) => (
+                  <option key={spa.id} value={spa.id}>
+                    {spa.name} {spa.city ? `· ${spa.city}` : ''}
                   </option>
                 ))}
               </select>

@@ -4,17 +4,17 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabaseClient';
 import QRCodeCard from '@/components/QRCodeCard';
-import type { Merchant } from '@/lib/types';
+import type { MerchantProfile } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
 
 interface TransactionLite {
   amount: number;
-  cashback_amount: number;
+  cashback_total: number | null;
 }
 
 export default function MerchantPage() {
   const supabase = createClient();
-  const [merchant, setMerchant] = useState<Merchant | null>(null);
+  const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
   const [transactions, setTransactions] = useState<TransactionLite[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,9 +30,10 @@ export default function MerchantPage() {
       }
 
       const { data: merchantData, error: merchantError } = await supabase
-        .from('merchants')
-        .select('id,name,qr_token,cashback_percent,threshold_ticket')
-        .eq('user_id', user.id)
+        .from('profiles')
+        .select('id,role,merchant_code')
+        .eq('id', user.id)
+        .eq('role', 'merchant')
         .single();
 
       if (merchantError) {
@@ -44,7 +45,7 @@ export default function MerchantPage() {
 
       const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
-        .select('amount,cashback_amount')
+        .select('amount,cashback_total')
         .eq('merchant_id', merchantData.id);
 
       if (transactionError) {
@@ -58,12 +59,14 @@ export default function MerchantPage() {
     void loadMerchant();
   }, [supabase]);
 
-  const qrLink = merchant ? `${window.location.origin}/scan?m=${merchant.qr_token}` : '';
+  const qrLink = merchant?.merchant_code
+    ? `${window.location.origin}/scan?m=${merchant.merchant_code}`
+    : '';
 
   const stats = useMemo(() => {
     const totalVolume = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
     const totalCashback = transactions.reduce(
-      (sum, transaction) => sum + transaction.cashback_amount,
+      (sum, transaction) => sum + (transaction.cashback_total ?? 0),
       0
     );
     return { totalVolume, totalCashback, count: transactions.length };
@@ -86,7 +89,7 @@ export default function MerchantPage() {
 
       {merchant ? (
         <div className="grid grid-2">
-          <QRCodeCard value={qrLink} title={`QR PawPass · ${merchant.name}`} />
+          <QRCodeCard value={qrLink} title="QR PawPass · Commerçant" />
           <div className="card">
             <h2>Statistiques</h2>
             <p>

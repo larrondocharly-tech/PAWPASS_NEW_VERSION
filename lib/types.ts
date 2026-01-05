@@ -2,30 +2,34 @@ export type UserRole = 'client' | 'merchant';
 
 export interface Profile {
   id: string;
-  email: string | null;
   role: UserRole;
-  full_name: string | null;
+  spa_id: string | null;
+  merchant_code: string | null;
 }
 
-export interface Merchant {
+export interface MerchantProfile {
   id: string;
-  name: string;
-  qr_token: string;
-  cashback_percent: number;
-  threshold_ticket: number;
+  role: UserRole;
+  merchant_code: string | null;
 }
 
-export interface Association {
+export interface Spa {
   id: string;
   name: string;
-  active: boolean;
+  city: string | null;
+  region: string | null;
 }
 
 export interface TransactionRecord {
   id: string;
+  user_id: string;
+  merchant_id: string | null;
+  spa_id: string | null;
   amount: number;
-  cashback_amount: number;
-  status: string;
+  cashback_total: number | null;
+  donation_amount: number | null;
+  cashback_to_user: number | null;
+  donation_sent: boolean | null;
+  status: string | null;
   created_at: string;
-  merchant?: { name: string } | null;
 }

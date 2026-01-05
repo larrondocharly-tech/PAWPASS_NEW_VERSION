@@ -29,4 +29,4 @@ Collez le SQL de schéma, RLS, fonctions SECURITY DEFINER et policies directemen
 
 - Supabase Dashboard → **SQL Editor** → new query → exécuter.
 
-Le SQL doit créer les tables `profiles`, `merchants`, `transactions`, `wallets`, `associations`, `receipts` et la fonction RPC `create_transaction` utilisée par l’app.
+Le fichier `supabase/sql/fix_schema.sql` contient des policies RLS minimales pour `profiles`, `spas` et `transactions`. Exécutez-le en priorité si vous voyez des erreurs RLS.
