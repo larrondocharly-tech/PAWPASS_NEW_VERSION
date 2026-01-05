@@ -43,8 +43,10 @@ export default function ScanPage() {
   const [spaId, setSpaId] = useState<string>('');
   const [donateCashback, setDonateCashback] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
-  const [useReduction, setUseReduction] = useState(false);
+  const [reductionActive, setReductionActive] = useState(false);
   const [reductionAmount, setReductionAmount] = useState('5');
+  const [reductionRemaining, setReductionRemaining] = useState<number | null>(null);
+  const [reductionExpired, setReductionExpired] = useState(false);
   const [receiptRequired, setReceiptRequired] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -95,7 +97,7 @@ export default function ScanPage() {
 
       const { data, error: merchantError } = await supabase
         .from('profiles')
-        .select('id,role,merchant_code')
+        .select('id,role,merchant_code,email')
         .eq('merchant_code', token)
         .limit(1)
         .maybeSingle();
@@ -149,7 +151,7 @@ export default function ScanPage() {
 
       const { data, error: walletError } = await supabase
         .from('wallets')
-        .select('balance')
+        .select('available_balance')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -158,7 +160,7 @@ export default function ScanPage() {
         return;
       }
 
-      setWalletBalance(data?.balance ?? 0);
+      setWalletBalance(data?.available_balance ?? 0);
     };
 
     setError(null);
@@ -181,6 +183,39 @@ export default function ScanPage() {
       amountValue >= DEFAULT_TICKET_THRESHOLD || Math.random() < RANDOM_RECEIPT_RATE;
     setReceiptRequired(needsReceipt);
   }, [amountValue, merchant]);
+
+  useEffect(() => {
+    if (!reductionActive || !merchant) {
+      setReductionRemaining(null);
+      setReductionExpired(false);
+      return;
+    }
+
+    setReductionRemaining(60);
+    setReductionExpired(false);
+    const timer = window.setInterval(() => {
+      setReductionRemaining((prev) => {
+        if (prev === null) return prev;
+        if (prev <= 1) {
+          window.clearInterval(timer);
+          setReductionExpired(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [merchant, reductionActive]);
+
+  useEffect(() => {
+    if (!reductionActive) {
+      return;
+    }
+    const maxReduction = Math.min(walletBalance, amountValue || walletBalance, 5);
+    const nextDefault = maxReduction > 0 ? maxReduction : 5;
+    setReductionAmount(String(nextDefault));
+  }, [amountValue, reductionActive, walletBalance]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -221,8 +256,8 @@ export default function ScanPage() {
       return;
     }
 
-    const reductionValue = useReduction ? Number(reductionAmount.replace(',', '.')) : 0;
-    if (useReduction) {
+    const reductionValue = reductionActive ? Number(reductionAmount.replace(',', '.')) : 0;
+    if (reductionActive) {
       if (Number.isNaN(reductionValue) || reductionValue < 0) {
         setError('Montant de réduction invalide.');
         return;
@@ -237,6 +272,10 @@ export default function ScanPage() {
       }
       if (reductionValue > amountValue) {
         setError('La réduction dépasse le montant du ticket.');
+        return;
+      }
+      if (reductionExpired) {
+        setError('Le délai de réduction est expiré. Veuillez rescanner un commerçant.');
         return;
       }
     }
@@ -266,7 +305,7 @@ export default function ScanPage() {
       receiptPath = uploadData.path;
     }
 
-    const amountNet = amountValue - (useReduction ? reductionValue : 0);
+    const amountNet = amountValue - (reductionActive ? reductionValue : 0);
     const cashbackTotal = Number(((amountNet * DEFAULT_CASHBACK_PERCENT) / 100).toFixed(2));
     const donationAmount = donateCashback ? cashbackTotal : 0;
     const cashbackToUser = donateCashback ? 0 : cashbackTotal;
@@ -274,12 +313,12 @@ export default function ScanPage() {
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       'apply_cashback_transaction',
       {
-        p_merchant_code: token,
         p_amount: amountValue,
-        p_spa_id: donateCashback ? spaId || null : null,
         p_donate_cashback: donateCashback,
-        p_use_reduction: useReduction,
-        p_reduction_amount: useReduction ? reductionValue : 0
+        p_merchant_code: token,
+        p_reduction_amount: reductionActive ? reductionValue : 0,
+        p_spa_id: donateCashback ? spaId || null : null,
+        p_use_reduction: reductionActive
       }
     );
 
@@ -295,8 +334,10 @@ export default function ScanPage() {
     setReceiptFile(null);
     setDonateCashback(false);
     setSpaId('');
-    setUseReduction(false);
+    setReductionActive(false);
     setReductionAmount('5');
+    setReductionRemaining(null);
+    setReductionExpired(false);
 
     if (donationFromDb > 0) {
       const spaName = spas.find((spa) => spa.id === spaId)?.name ?? 'une SPA';
@@ -328,7 +369,7 @@ export default function ScanPage() {
         <h2>Scanner le QR commerçant</h2>
         {merchant ? (
           <p>
-            Commerçant trouvé · ID : <strong>{merchant.id}</strong>
+            Commerçant: <strong>{merchant.email ?? merchant.id}</strong>
           </p>
         ) : (
           <p className="helper">Aucun commerçant chargé.</p>
@@ -460,29 +501,37 @@ export default function ScanPage() {
                 Encore {formatCurrency(5 - walletBalance)} pour pouvoir utiliser vos réductions.
               </p>
             ) : (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={useReduction}
-                  onChange={(event) => setUseReduction(event.target.checked)}
-                />
-                Utiliser ma cagnotte
-              </label>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setReductionActive((prev) => !prev)}
+              >
+                {reductionActive ? 'Désactiver la réduction' : 'Utiliser ma cagnotte en réduction'}
+              </button>
             )}
-            {useReduction && walletBalance >= 5 && (
-              <label className="label" htmlFor="reduction">
-                Montant de réduction (€)
-                <input
-                  id="reduction"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  max={Math.min(walletBalance, amountValue || walletBalance)}
-                  value={reductionAmount}
-                  onChange={(event) => setReductionAmount(event.target.value)}
-                />
-              </label>
+
+            {reductionActive && walletBalance >= 5 && (
+              <div style={{ marginTop: 12 }}>
+                <label className="label" htmlFor="reduction">
+                  Montant de réduction (€)
+                  <input
+                    id="reduction"
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    max={Math.min(walletBalance, amountValue || walletBalance)}
+                    value={reductionAmount}
+                    onChange={(event) => setReductionAmount(event.target.value)}
+                  />
+                </label>
+                {reductionRemaining !== null && (
+                  <p className="helper">
+                    Délai restant : {reductionRemaining}s
+                    {reductionExpired ? ' (expiré)' : ''}
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

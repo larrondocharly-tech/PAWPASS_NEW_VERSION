@@ -13,10 +13,11 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string | null>(null);
-  const [transactions, setTransactions] = useState<
-    { donation_amount: number | null; cashback_total: number | null; cashback_to_user: number | null }[]
-  >([]);
-  const [walletBalance, setWalletBalance] = useState(0);
+  const [wallet, setWallet] = useState<{
+    available_balance: number;
+    total_earned: number;
+    total_donated: number;
+  } | null>(null);
   const [thanksMessage, setThanksMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,30 +47,28 @@ export default function DashboardPage() {
 
       setProfile(profileData);
 
-      const { data: transactionData, error: transactionError } = await supabase
-        .from('transactions')
-        .select('donation_amount,cashback_total,cashback_to_user')
-        .eq('user_id', user.id);
-
-      if (transactionError) {
-        setError(transactionError.message);
-        return;
-      }
-
-      setTransactions(transactionData ?? []);
-
       const { data: walletData, error: walletError } = await supabase
         .from('wallets')
-        .select('balance')
+        .select('available_balance,total_earned,total_donated')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (walletError) {
-        setWalletBalance(0);
+        setWallet({
+          available_balance: 0,
+          total_earned: 0,
+          total_donated: 0
+        });
         return;
       }
 
-      setWalletBalance(walletData?.balance ?? 0);
+      setWallet(
+        walletData ?? {
+          available_balance: 0,
+          total_earned: 0,
+          total_donated: 0
+        }
+      );
     };
 
     void loadData();
@@ -94,19 +93,15 @@ export default function DashboardPage() {
   }, [router, searchParams]);
 
   const totals = useMemo(() => {
-    return transactions.reduce(
-      (acc, transaction) => {
-        acc.donation += transaction.donation_amount ?? 0;
-        acc.cashbackTotal += transaction.cashback_total ?? 0;
-        acc.cashbackToUser += transaction.cashback_to_user ?? 0;
-        return acc;
-      },
-      { donation: 0, cashbackTotal: 0, cashbackToUser: 0 }
-    );
-  }, [transactions]);
+    return {
+      donation: wallet?.total_donated ?? 0,
+      cashbackTotal: wallet?.total_earned ?? 0,
+      cashbackToUser: wallet?.available_balance ?? 0
+    };
+  }, [wallet]);
 
-  const progress = Math.min((walletBalance / 5) * 100, 100);
-  const missing = Math.max(5 - walletBalance, 0);
+  const progress = Math.min(((wallet?.available_balance ?? 0) / 5) * 100, 100);
+  const missing = Math.max(5 - (wallet?.available_balance ?? 0), 0);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -153,7 +148,7 @@ export default function DashboardPage() {
         <div className="card">
           <h3>Réductions disponibles</h3>
           <p>
-            <strong>Solde cashback :</strong> {formatCurrency(walletBalance)}
+            <strong>Solde cashback :</strong> {formatCurrency(wallet?.available_balance ?? 0)}
           </p>
           <div style={{ marginTop: 12 }}>
             <div
