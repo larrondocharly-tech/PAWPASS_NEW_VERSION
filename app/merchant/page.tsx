@@ -60,21 +60,30 @@ export default function MerchantPage() {
         const generatedToken = `PP_${user.id.slice(0, 8)}_${Math.random()
           .toString(36)
           .slice(2, 8)}`.toUpperCase();
-        const { data: updated, error: updateError } = await supabase
+        const { error: updateError } = await supabase
           .from('profiles')
           .update({ merchant_code: generatedToken })
           .eq('id', user.id)
-          .select('id,role,merchant_code')
-          .single();
+          .select();
 
         if (updateError) {
           setError(updateError.message);
           return;
         }
-
-        updatedMerchant = updated;
       }
 
+      const { data: refreshed, error: refreshError } = await supabase
+        .from('profiles')
+        .select('id,role,merchant_code')
+        .eq('id', user.id)
+        .single();
+
+      if (refreshError) {
+        setError(refreshError.message);
+        return;
+      }
+
+      updatedMerchant = refreshed;
       setMerchant(updatedMerchant);
 
       const { data: transactionData, error: transactionError } = await supabase

@@ -17,18 +17,17 @@ const extractToken = (rawValue: string) => {
   if (!rawValue) return '';
   const sanitized = rawValue.trim();
   if (!sanitized) return '';
-  try {
-    const url = new URL(sanitized);
-    const token = url.searchParams.get('m');
-    return (token ?? sanitized).trim();
-  } catch {
-    if (sanitized.includes('?')) {
+  if (sanitized.includes('?m=')) {
+    try {
+      const url = new URL(sanitized);
+      return (url.searchParams.get('m') ?? '').trim();
+    } catch {
       const [, queryString] = sanitized.split('?');
       const params = new URLSearchParams(queryString);
-      return (params.get('m') ?? sanitized).trim();
+      return (params.get('m') ?? '').trim();
     }
-    return sanitized;
   }
+  return sanitized;
 };
 
 export default function ScanPage() {
@@ -97,12 +96,14 @@ export default function ScanPage() {
         .from('profiles')
         .select('id,role,merchant_code')
         .eq('merchant_code', token)
-        .eq('role', 'MERCHANT')
         .limit(1)
         .maybeSingle();
 
+      console.debug('[Scan] merchant lookup', token, { data, error: merchantError });
+
       if (merchantError) {
-        setError(merchantError.message);
+        console.error('[Scan] merchant lookup error', merchantError);
+        setError('Erreur base de données');
         setMerchant(null);
         setMerchantId(null);
         return;
@@ -112,6 +113,13 @@ export default function ScanPage() {
         setMerchant(null);
         setMerchantId(null);
         setError('Commerçant introuvable.');
+        return;
+      }
+
+      if (data.role?.toLowerCase() !== 'merchant') {
+        setMerchant(null);
+        setMerchantId(null);
+        setError("Ce QR n'appartient pas à un commerçant.");
         return;
       }
 
@@ -164,7 +172,7 @@ export default function ScanPage() {
     }
 
     if (!merchantId) {
-      setError('Veuillez scanner un commerçant.');
+      setError('Veuillez scanner/valider un commerçant.');
       return;
     }
 
@@ -284,9 +292,11 @@ export default function ScanPage() {
                 onChange={(event) => {
                   const value = event.target.value;
                   setTokenInput(value);
-                  if (value.includes('http') || value.includes('m=')) {
+                  if (value.includes('?m=')) {
                     const parsed = extractToken(value);
-                    setToken(parsed);
+                    if (parsed) {
+                      setToken(parsed);
+                    }
                   }
                 }}
                 placeholder="Ex: TEST_QR_TOKEN_123"
