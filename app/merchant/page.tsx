@@ -17,6 +17,7 @@ export default function MerchantPage() {
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
   const [transactions, setTransactions] = useState<TransactionLite[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [qrValue, setQrValue] = useState('');
 
   useEffect(() => {
     const loadMerchant = async () => {
@@ -33,7 +34,6 @@ export default function MerchantPage() {
         .from('profiles')
         .select('id,role,merchant_code')
         .eq('id', user.id)
-        .eq('role', 'merchant')
         .single();
 
       if (merchantError) {
@@ -41,7 +41,38 @@ export default function MerchantPage() {
         return;
       }
 
-      setMerchant(merchantData);
+      if (!merchantData) {
+        setError('Profil introuvable.');
+        return;
+      }
+
+      if (merchantData.role?.toLowerCase() !== 'merchant') {
+        window.location.href = '/dashboard';
+        return;
+      }
+
+      let updatedMerchant = merchantData;
+
+      if (!merchantData.merchant_code) {
+        const generatedToken = `PP_${user.id.slice(0, 8)}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}`.toUpperCase();
+        const { data: updated, error: updateError } = await supabase
+          .from('profiles')
+          .update({ merchant_code: generatedToken })
+          .eq('id', user.id)
+          .select('id,role,merchant_code')
+          .single();
+
+        if (updateError) {
+          setError(updateError.message);
+          return;
+        }
+
+        updatedMerchant = updated;
+      }
+
+      setMerchant(updatedMerchant);
 
       const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
@@ -59,9 +90,19 @@ export default function MerchantPage() {
     void loadMerchant();
   }, [supabase]);
 
-  const qrLink = merchant?.merchant_code
-    ? `${window.location.origin}/scan?m=${merchant.merchant_code}`
-    : '';
+  useEffect(() => {
+    if (!merchant?.merchant_code) {
+      setQrValue('');
+      return;
+    }
+
+    const baseUrl =
+      typeof window !== 'undefined'
+        ? window.location.origin
+        : process.env.NEXT_PUBLIC_APP_URL;
+
+    setQrValue(baseUrl ? `${baseUrl}/scan?m=${merchant.merchant_code}` : merchant.merchant_code);
+  }, [merchant]);
 
   const stats = useMemo(() => {
     const totalVolume = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -73,8 +114,13 @@ export default function MerchantPage() {
   }, [transactions]);
 
   const handleCopy = async () => {
-    if (!qrLink) return;
-    await navigator.clipboard.writeText(qrLink);
+    if (!qrValue) return;
+    await navigator.clipboard.writeText(qrValue);
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
   };
 
   return (
@@ -82,14 +128,17 @@ export default function MerchantPage() {
       <div className="nav">
         <strong>Commerçant</strong>
         <div className="nav-links">
-          <Link href="/settings">Paramètres</Link>
           <Link href="/merchant">Mon QR</Link>
+          <Link href="/settings">Paramètres</Link>
+          <button className="button secondary" type="button" onClick={handleSignOut}>
+            Déconnexion
+          </button>
         </div>
       </div>
 
       {merchant ? (
         <div className="grid grid-2">
-          <QRCodeCard value={qrLink} title="QR PawPass · Commerçant" />
+          <QRCodeCard value={qrValue} title="QR PawPass · Commerçant" />
           <div className="card">
             <h2>Statistiques</h2>
             <p>
@@ -104,6 +153,12 @@ export default function MerchantPage() {
             <button className="button" type="button" onClick={handleCopy} style={{ marginTop: 12 }}>
               Copier le lien QR
             </button>
+            <div style={{ marginTop: 16 }}>
+              <p>
+                <strong>Code commerçant :</strong> {merchant.merchant_code}
+              </p>
+              <p className="helper">Les clients scannent ce QR à la caisse.</p>
+            </div>
           </div>
         </div>
       ) : (

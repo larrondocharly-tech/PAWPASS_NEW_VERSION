@@ -72,7 +72,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
 
     setLoading(false);
-    if (profile.role === 'merchant') {
+    const role = profile.role?.toLowerCase();
+    if (role === 'merchant') {
       router.push('/merchant');
     } else {
       router.push('/dashboard');

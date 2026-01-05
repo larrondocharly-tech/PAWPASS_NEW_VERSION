@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [spaId, setSpaId] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const role = profile?.role?.toLowerCase();
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -117,9 +118,18 @@ export default function SettingsPage() {
       <div className="nav">
         <strong>Paramètres</strong>
         <div className="nav-links">
-          <Link href="/dashboard">Dashboard</Link>
-          <Link href="/scan">Scanner</Link>
-          <Link href="/transactions">Transactions</Link>
+          {role === 'merchant' ? (
+            <>
+              <Link href="/merchant">Mon QR</Link>
+              <Link href="/settings">Paramètres</Link>
+            </>
+          ) : (
+            <>
+              <Link href="/dashboard">Dashboard</Link>
+              <Link href="/scan">Scanner</Link>
+              <Link href="/transactions">Transactions</Link>
+            </>
+          )}
         </div>
       </div>
 

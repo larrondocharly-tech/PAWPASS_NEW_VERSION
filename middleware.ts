@@ -50,15 +50,16 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  const role = profile.role?.toLowerCase();
   const pathname = request.nextUrl.pathname;
 
-  if (profile.role === 'merchant' && ['/dashboard', '/scan', '/transactions'].some((path) => pathname.startsWith(path))) {
+  if (role === 'merchant' && ['/dashboard', '/scan', '/transactions'].some((path) => pathname.startsWith(path))) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/merchant';
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (profile.role === 'client' && pathname.startsWith('/merchant')) {
+  if (role === 'client' && pathname.startsWith('/merchant')) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     return NextResponse.redirect(redirectUrl);

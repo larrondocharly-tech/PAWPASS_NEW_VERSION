@@ -52,11 +52,11 @@ export default function DashboardPage() {
         .single();
 
       if (walletError) {
-        setError(walletError.message);
+        setWallet({ balance: 0, earned: 0, donated: 0 });
         return;
       }
 
-      setWallet(walletData);
+      setWallet(walletData ?? { balance: 0, earned: 0, donated: 0 });
     };
 
     void loadData();
