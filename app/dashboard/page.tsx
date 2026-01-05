@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<
     { donation_amount: number | null; cashback_total: number | null; cashback_to_user: number | null }[]
   >([]);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [thanksMessage, setThanksMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +57,19 @@ export default function DashboardPage() {
       }
 
       setTransactions(transactionData ?? []);
+
+      const { data: walletData, error: walletError } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (walletError) {
+        setWalletBalance(0);
+        return;
+      }
+
+      setWalletBalance(walletData?.balance ?? 0);
     };
 
     void loadData();
@@ -90,6 +104,9 @@ export default function DashboardPage() {
       { donation: 0, cashbackTotal: 0, cashbackToUser: 0 }
     );
   }, [transactions]);
+
+  const progress = Math.min((walletBalance / 5) * 100, 100);
+  const missing = Math.max(5 - walletBalance, 0);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -132,6 +149,35 @@ export default function DashboardPage() {
           <p>
             <strong>Solde disponible :</strong> {formatCurrency(totals.cashbackToUser)}
           </p>
+        </div>
+        <div className="card">
+          <h3>Réductions disponibles</h3>
+          <p>
+            <strong>Solde cashback :</strong> {formatCurrency(walletBalance)}
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <div
+              style={{
+                height: 10,
+                background: '#e2e8f0',
+                borderRadius: 999,
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                style={{
+                  width: `${progress}%`,
+                  height: '100%',
+                  background: progress >= 100 ? '#16a34a' : '#1f6feb'
+                }}
+              />
+            </div>
+            <p className="helper" style={{ marginTop: 8 }}>
+              {walletBalance >= 5
+                ? 'Vous pouvez utiliser vos réductions chez un commerçant.'
+                : `Encore ${formatCurrency(missing)} pour pouvoir utiliser vos réductions.`}
+            </p>
+          </div>
         </div>
         <div className="card">
           <h3>Actions rapides</h3>
