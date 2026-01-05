@@ -13,9 +13,9 @@ const RANDOM_RECEIPT_RATE = 0.1;
 const DEFAULT_CASHBACK_PERCENT = 5;
 const DEFAULT_TICKET_THRESHOLD = 50;
 
-const extractToken = (rawValue: string) => {
-  if (!rawValue) return '';
-  const sanitized = rawValue.trim();
+const parseMerchantCode = (input: string) => {
+  if (!input) return '';
+  const sanitized = input.trim();
   if (!sanitized) return '';
   if (sanitized.includes('?m=')) {
     try {
@@ -27,6 +27,9 @@ const extractToken = (rawValue: string) => {
       return (params.get('m') ?? '').trim();
     }
   }
+  if (sanitized.startsWith('PP_')) {
+    return sanitized;
+  }
   return sanitized;
 };
 
@@ -35,9 +38,10 @@ export default function ScanPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const merchantToken = searchParams.get('m');
-  const [token, setToken] = useState('');
+  const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
+  const [merchantValidated, setMerchantValidated] = useState(false);
   const [amount, setAmount] = useState('');
   const [spas, setSpas] = useState<Spa[]>([]);
   const [spaId, setSpaId] = useState<string>('');
@@ -53,6 +57,45 @@ export default function ScanPage() {
   const [error, setError] = useState<string | null>(null);
 
   const amountValue = useMemo(() => Number(amount.replace(',', '.')), [amount]);
+
+  const validateMerchant = async (code: string) => {
+    setError(null);
+    setMerchant(null);
+    setMerchantValidated(false);
+
+    if (!code) {
+      setError('Commerçant introuvable.');
+      return;
+    }
+
+    const { data, error: merchantError } = await supabase
+      .from('profiles')
+      .select('id,role,merchant_code,email')
+      .eq('merchant_code', code)
+      .limit(1)
+      .maybeSingle();
+
+    console.debug('[Scan] merchant lookup', code, { data, error: merchantError });
+
+    if (merchantError) {
+      console.error('[Scan] merchant lookup error', merchantError);
+      setError(merchantError.message);
+      return;
+    }
+
+    if (!data) {
+      setError('Commerçant introuvable.');
+      return;
+    }
+
+    if (data.role?.toLowerCase() !== 'merchant') {
+      setError("Ce QR n'appartient pas à un commerçant.");
+      return;
+    }
+
+    setMerchant(data);
+    setMerchantValidated(true);
+  };
 
   useEffect(() => {
     const guardRole = async () => {
@@ -82,50 +125,16 @@ export default function ScanPage() {
     void guardRole();
 
     if (merchantToken) {
-      const parsedToken = extractToken(merchantToken);
-      setToken(parsedToken);
-      setTokenInput(parsedToken);
+      const parsedToken = parseMerchantCode(merchantToken);
+      if (parsedToken) {
+        setMerchantCode(parsedToken);
+        setTokenInput(parsedToken);
+        void validateMerchant(parsedToken);
+      }
     }
   }, [merchantToken, router, supabase]);
 
   useEffect(() => {
-    const loadMerchant = async () => {
-      if (!token) {
-        setMerchant(null);
-        return;
-      }
-
-      const { data, error: merchantError } = await supabase
-        .from('profiles')
-        .select('id,role,merchant_code,email')
-        .eq('merchant_code', token)
-        .limit(1)
-        .maybeSingle();
-
-      console.debug('[Scan] merchant lookup', token, { data, error: merchantError });
-
-      if (merchantError) {
-        console.error('[Scan] merchant lookup error', merchantError);
-        setError('Erreur base de données');
-        setMerchant(null);
-        return;
-      }
-
-      if (!data) {
-        setMerchant(null);
-        setError('Commerçant introuvable.');
-        return;
-      }
-
-      if (data.role?.toLowerCase() !== 'merchant') {
-        setMerchant(null);
-        setError("Ce QR n'appartient pas à un commerçant.");
-        return;
-      }
-
-      setMerchant(data);
-    };
-
     const loadSpas = async () => {
       const { data, error: spaError } = await supabase
         .from('spas')
@@ -164,10 +173,9 @@ export default function ScanPage() {
     };
 
     setError(null);
-    void loadMerchant();
     void loadSpas();
     void loadWallet();
-  }, [token, supabase]);
+  }, [supabase]);
 
   useEffect(() => {
     if (!merchant) {
@@ -185,7 +193,7 @@ export default function ScanPage() {
   }, [amountValue, merchant]);
 
   useEffect(() => {
-    if (!reductionActive || !merchant) {
+    if (!reductionActive || !merchantValidated || !merchant) {
       setReductionRemaining(null);
       setReductionExpired(false);
       return;
@@ -227,7 +235,7 @@ export default function ScanPage() {
       return;
     }
 
-    if (!merchant) {
+    if (!merchantValidated || !merchant || !merchantCode) {
       setError('Veuillez scanner/valider un commerçant.');
       return;
     }
@@ -315,7 +323,7 @@ export default function ScanPage() {
       {
         p_amount: amountValue,
         p_donate_cashback: donateCashback,
-        p_merchant_code: token,
+        p_merchant_code: merchantCode,
         p_reduction_amount: reductionActive ? reductionValue : 0,
         p_spa_id: donateCashback ? spaId || null : null,
         p_use_reduction: reductionActive
@@ -367,7 +375,7 @@ export default function ScanPage() {
 
       <div className="card">
         <h2>Scanner le QR commerçant</h2>
-        {merchant ? (
+        {merchantValidated && merchant ? (
           <p>
             Commerçant: <strong>{merchant.email ?? merchant.id}</strong>
           </p>
@@ -378,9 +386,14 @@ export default function ScanPage() {
         <div className="grid grid-2" style={{ marginTop: 16 }}>
           <QrScanner
             onResult={(value) => {
-              const parsed = extractToken(value);
-              setToken(parsed);
+              const parsed = parseMerchantCode(value);
+              if (!parsed) {
+                setError('Commerçant introuvable.');
+                return;
+              }
+              setMerchantCode(parsed);
               setTokenInput(parsed);
+              void validateMerchant(parsed);
             }}
           />
           <div className="card">
@@ -395,9 +408,10 @@ export default function ScanPage() {
                   const value = event.target.value;
                   setTokenInput(value);
                   if (value.includes('?m=')) {
-                    const parsed = extractToken(value);
+                    const parsed = parseMerchantCode(value);
                     if (parsed) {
-                      setToken(parsed);
+                      setMerchantCode(parsed);
+                      void validateMerchant(parsed);
                     }
                   }
                 }}
@@ -407,14 +421,18 @@ export default function ScanPage() {
             <button
               className="button"
               type="button"
-              onClick={() => setToken(extractToken(tokenInput))}
+              onClick={() => {
+                const parsed = parseMerchantCode(tokenInput);
+                setMerchantCode(parsed);
+                void validateMerchant(parsed);
+              }}
               style={{ marginTop: 12 }}
             >
               Valider le token
             </button>
-            {token && (
+            {merchantCode && (
               <p className="helper" style={{ marginTop: 8 }}>
-                Token détecté : <strong>{token}</strong>
+                Token détecté : <strong>{merchantCode}</strong>
               </p>
             )}
           </div>
