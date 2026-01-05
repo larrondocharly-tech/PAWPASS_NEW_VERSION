@@ -46,3 +46,7 @@ do $$ begin
     using (auth.uid() = user_id);
 exception when duplicate_object then null;
 end $$;
+
+create unique index if not exists profiles_merchant_code_unique
+  on public.profiles (merchant_code)
+  where merchant_code is not null;

@@ -20,6 +20,7 @@ export default function MerchantPage() {
   const [transactions, setTransactions] = useState<TransactionLite[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [qrValue, setQrValue] = useState('');
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const loadMerchant = async () => {
@@ -106,6 +107,10 @@ export default function MerchantPage() {
     setQrValue(baseUrl ? `${baseUrl}/scan?m=${merchant.merchant_code}` : merchant.merchant_code);
   }, [merchant]);
 
+  useEffect(() => {
+    setCopyStatus(null);
+  }, [qrValue]);
+
   const stats = useMemo(() => {
     const totalVolume = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
     const totalCashback = transactions.reduce(
@@ -117,7 +122,22 @@ export default function MerchantPage() {
 
   const handleCopy = async () => {
     if (!qrValue) return;
-    await navigator.clipboard.writeText(qrValue);
+    try {
+      await navigator.clipboard.writeText(qrValue);
+      setCopyStatus('Copié ✅');
+    } catch (copyError) {
+      try {
+        const input = document.createElement('input');
+        input.value = qrValue;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        setCopyStatus('Copié ✅');
+      } catch {
+        setCopyStatus('Copie impossible.');
+      }
+    }
   };
 
   const handleSignOut = async () => {
@@ -155,10 +175,15 @@ export default function MerchantPage() {
             <button className="button" type="button" onClick={handleCopy} style={{ marginTop: 12 }}>
               Copier le lien QR
             </button>
+            {copyStatus && <p className="helper">{copyStatus}</p>}
             <div style={{ marginTop: 16 }}>
               <p>
                 <strong>Code commerçant :</strong> {merchant.merchant_code}
               </p>
+              <label className="label" htmlFor="qrLink">
+                Lien QR complet
+                <input id="qrLink" className="input" value={qrValue} readOnly />
+              </label>
               <p className="helper">Les clients scannent ce QR à la caisse.</p>
             </div>
           </div>

@@ -15,17 +15,19 @@ const DEFAULT_TICKET_THRESHOLD = 50;
 
 const extractToken = (rawValue: string) => {
   if (!rawValue) return '';
+  const sanitized = rawValue.trim();
+  if (!sanitized) return '';
   try {
-    const url = new URL(rawValue);
+    const url = new URL(sanitized);
     const token = url.searchParams.get('m');
-    return token ?? rawValue;
+    return (token ?? sanitized).trim();
   } catch {
-    if (rawValue.includes('?')) {
-      const [, queryString] = rawValue.split('?');
+    if (sanitized.includes('?')) {
+      const [, queryString] = sanitized.split('?');
       const params = new URLSearchParams(queryString);
-      return params.get('m') ?? rawValue;
+      return (params.get('m') ?? sanitized).trim();
     }
-    return rawValue;
+    return sanitized;
   }
 };
 
@@ -37,6 +39,7 @@ export default function ScanPage() {
   const [token, setToken] = useState('');
   const [tokenInput, setTokenInput] = useState('');
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
+  const [merchantId, setMerchantId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [spas, setSpas] = useState<Spa[]>([]);
   const [spaId, setSpaId] = useState<string>('');
@@ -86,6 +89,7 @@ export default function ScanPage() {
     const loadMerchant = async () => {
       if (!token) {
         setMerchant(null);
+        setMerchantId(null);
         return;
       }
 
@@ -93,15 +97,26 @@ export default function ScanPage() {
         .from('profiles')
         .select('id,role,merchant_code')
         .eq('merchant_code', token)
-        .eq('role', 'merchant')
-        .single();
+        .eq('role', 'MERCHANT')
+        .limit(1)
+        .maybeSingle();
 
       if (merchantError) {
         setError(merchantError.message);
+        setMerchant(null);
+        setMerchantId(null);
+        return;
+      }
+
+      if (!data) {
+        setMerchant(null);
+        setMerchantId(null);
+        setError('Commerçant introuvable.');
         return;
       }
 
       setMerchant(data);
+      setMerchantId(data.id);
     };
 
     const loadSpas = async () => {
@@ -148,8 +163,8 @@ export default function ScanPage() {
       return;
     }
 
-    if (!merchant) {
-      setError('Commerçant introuvable.');
+    if (!merchantId) {
+      setError('Veuillez scanner un commerçant.');
       return;
     }
 
@@ -202,16 +217,22 @@ export default function ScanPage() {
       receiptPath = uploadData.path;
     }
 
-    const { error: rpcError } = await supabase.rpc('create_transaction', {
-      p_merchant_id: merchant.id,
-      p_amount: amountValue,
-      p_receipt_path: receiptPath,
-      p_donate_cashback: donateCashback,
-      p_spa_id: donateCashback ? spaId || null : null
+    const cashbackTotal = Number(((amountValue * DEFAULT_CASHBACK_PERCENT) / 100).toFixed(2));
+    const donationAmount = donateCashback ? cashbackTotal : 0;
+    const cashbackToUser = donateCashback ? 0 : cashbackTotal;
+
+    const { error: insertError } = await supabase.from('transactions').insert({
+      user_id: user.id,
+      merchant_id: merchantId,
+      amount: amountValue,
+      cashback_total: cashbackTotal,
+      donation_amount: donationAmount,
+      cashback_to_user: cashbackToUser,
+      spa_id: donateCashback ? spaId || null : null
     });
 
-    if (rpcError) {
-      setError(rpcError.message);
+    if (insertError) {
+      setError(insertError.message);
       return;
     }
 
@@ -220,6 +241,7 @@ export default function ScanPage() {
     setReceiptFile(null);
     setDonateCashback(false);
     setSpaId('');
+    router.push('/transactions');
   };
 
   return (
@@ -237,7 +259,7 @@ export default function ScanPage() {
         <h2>Scanner le QR commerçant</h2>
         {merchant ? (
           <p>
-            Token détecté : <strong>{merchant.merchant_code}</strong>
+            Commerçant trouvé · ID : <strong>{merchant.id}</strong>
           </p>
         ) : (
           <p className="helper">Aucun commerçant chargé.</p>
@@ -259,18 +281,30 @@ export default function ScanPage() {
                 id="token"
                 className="input"
                 value={tokenInput}
-                onChange={(event) => setTokenInput(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTokenInput(value);
+                  if (value.includes('http') || value.includes('m=')) {
+                    const parsed = extractToken(value);
+                    setToken(parsed);
+                  }
+                }}
                 placeholder="Ex: TEST_QR_TOKEN_123"
               />
             </label>
             <button
               className="button"
               type="button"
-              onClick={() => setToken(extractToken(tokenInput.trim()))}
+              onClick={() => setToken(extractToken(tokenInput))}
               style={{ marginTop: 12 }}
             >
               Valider le token
             </button>
+            {token && (
+              <p className="helper" style={{ marginTop: 8 }}>
+                Token détecté : <strong>{token}</strong>
+              </p>
+            )}
           </div>
         </div>
 
