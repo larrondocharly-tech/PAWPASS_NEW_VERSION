@@ -37,10 +37,11 @@ const formatTimeLeft = (seconds: number) => {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 };
 
-const COOLDOWN_MS = process.env.NODE_ENV === 'development' ? 30_000 : 2 * 60 * 60 * 1000;
+const COOLDOWN_SECONDS = 7200;
+const COOLDOWN_MS = COOLDOWN_SECONDS * 1000;
 const cooldownKey = (code: string) => `pawpass:cooldown:${code}`;
 
-const readCooldownMinutes = (code: string) => {
+const readCooldownSeconds = (code: string) => {
   try {
     const raw = localStorage.getItem(cooldownKey(code));
     if (!raw) return null;
@@ -48,10 +49,20 @@ const readCooldownMinutes = (code: string) => {
     if (Number.isNaN(last)) return null;
     const remainingMs = COOLDOWN_MS - (Date.now() - last);
     if (remainingMs <= 0) return null;
-    return Math.ceil(remainingMs / 60000);
+    return Math.ceil(remainingMs / 1000);
   } catch {
     return null;
   }
+};
+
+const formatCooldown = (seconds: number) => {
+  const clamped = Math.max(0, seconds);
+  const hours = Math.floor(clamped / 3600);
+  const mins = Math.ceil((clamped % 3600) / 60);
+  if (hours >= 1) {
+    return mins > 0 ? `${hours} h ${mins} min` : `${hours} h`;
+  }
+  return `${Math.max(1, mins)} min`;
 };
 
 export default function ScanPage() {
@@ -310,13 +321,11 @@ export default function ScanPage() {
       return;
     }
 
-    const cooldown = readCooldownMinutes(merchantCode);
-    if (cooldown !== null) {
-      const cooldownText =
-        cooldown >= 120
-          ? '2 heures'
-          : `${cooldown} min`;
-      setError(`Anti-triche : vous pourrez refaire un achat dans ${cooldownText}.`);
+    const cooldownSeconds = readCooldownSeconds(merchantCode);
+    if (cooldownSeconds !== null) {
+      setError(
+        `Anti-triche : vous pourrez refaire un achat dans ${formatCooldown(cooldownSeconds)}.`
+      );
       return;
     }
 
