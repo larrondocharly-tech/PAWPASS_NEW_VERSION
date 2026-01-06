@@ -27,7 +27,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setLoading(true);
 
     if (mode === 'register') {
-      const userRole = role;
+      const userRole = role === 'merchant' ? 'merchant' : 'user';
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,

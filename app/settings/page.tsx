@@ -98,9 +98,15 @@ export default function SettingsPage() {
       return;
     }
 
+    const rawRole = String(user.user_metadata?.role ?? '').toLowerCase();
+    const normalizedRole =
+      rawRole === 'merchant' || rawRole === 'commercant' || rawRole === 'commerçant'
+        ? 'merchant'
+        : 'user';
+
     const { data, error: createError } = await supabase
       .from('profiles')
-      .insert({ id: user.id, role: 'user' })
+      .insert({ id: user.id, role: normalizedRole })
       .select('id,role,spa_id,merchant_code')
       .single();
 
