@@ -318,15 +318,16 @@ export default function ScanPage() {
     const donationAmount = donateCashback ? cashbackTotal : 0;
     const cashbackToUser = donateCashback ? 0 : cashbackTotal;
 
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
+    const walletSpent = reductionActive ? reductionValue : 0;
+
+    const { error: rpcError } = await supabase.rpc(
       'apply_cashback_transaction',
       {
-        p_amount: amountValue,
-        p_donate_cashback: donateCashback,
         p_merchant_code: merchantCode,
-        p_reduction_amount: reductionActive ? reductionValue : 0,
+        p_amount: amountValue,
         p_spa_id: donateCashback ? spaId || null : null,
-        p_use_reduction: reductionActive
+        p_use_wallet: reductionActive,
+        p_wallet_spent: walletSpent
       }
     );
 
@@ -334,8 +335,6 @@ export default function ScanPage() {
       setError(rpcError.message);
       return;
     }
-
-    const donationFromDb = rpcData?.donation_amount ?? donationAmount;
 
     setStatus('Transaction enregistrée ✅');
     setAmount('');
@@ -347,9 +346,9 @@ export default function ScanPage() {
     setReductionRemaining(null);
     setReductionExpired(false);
 
-    if (donationFromDb > 0) {
+    if (donationAmount > 0) {
       const spaName = spas.find((spa) => spa.id === spaId)?.name ?? 'une SPA';
-      const formattedAmount = formatCurrency(donationFromDb);
+      const formattedAmount = formatCurrency(donationAmount);
       const params = new URLSearchParams({
         thanks: '1',
         amount: formattedAmount.replace('€', '').trim(),
