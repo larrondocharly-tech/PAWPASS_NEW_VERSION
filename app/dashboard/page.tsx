@@ -14,9 +14,10 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState(0);
-  const [transactions, setTransactions] = useState<
-    { donation_amount: number | null; cashback_total: number | null; cashback_to_user: number | null }[]
+  const [donationTransactions, setDonationTransactions] = useState<
+    { donation_amount: number | null }[]
   >([]);
+  const [walletEarns, setWalletEarns] = useState<{ amount: number }[]>([]);
   const [thanksMessage, setThanksMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,17 +59,30 @@ export default function DashboardPage() {
         setWalletBalance(Number(walletData?.balance ?? 0));
       }
 
-      const { data: transactionData, error: transactionError } = await supabase
+      const { data: donationData, error: donationError } = await supabase
         .from('transactions')
-        .select('donation_amount,cashback_total,cashback_to_user')
+        .select('donation_amount')
         .eq('user_id', user.id);
 
-      if (transactionError) {
-        setError(transactionError.message);
+      if (donationError) {
+        setError(donationError.message);
         return;
       }
 
-      setTransactions(transactionData ?? []);
+      setDonationTransactions(donationData ?? []);
+
+      const { data: earnData, error: earnError } = await supabase
+        .from('wallet_transactions')
+        .select('amount')
+        .eq('user_id', user.id)
+        .eq('type', 'EARN');
+
+      if (earnError) {
+        setError(earnError.message);
+        return;
+      }
+
+      setWalletEarns(earnData ?? []);
     };
 
     void loadData();
@@ -93,16 +107,17 @@ export default function DashboardPage() {
   }, [router, searchParams]);
 
   const totals = useMemo(() => {
-    return transactions.reduce(
-      (acc, transaction) => {
-        acc.donation += transaction.donation_amount ?? 0;
-        acc.cashbackTotal += transaction.cashback_total ?? 0;
-        acc.cashbackToUser += transaction.cashback_to_user ?? 0;
-        return acc;
-      },
-      { donation: 0, cashbackTotal: 0, cashbackToUser: 0 }
+    const donation = donationTransactions.reduce(
+      (sum, transaction) => sum + (transaction.donation_amount ?? 0),
+      0
     );
-  }, [transactions]);
+    const cashbackTotal = walletEarns.reduce((sum, entry) => sum + (entry.amount ?? 0), 0);
+    return {
+      donation,
+      cashbackTotal,
+      cashbackToUser: walletBalance
+    };
+  }, [donationTransactions, walletBalance, walletEarns]);
   const progress = Math.min((walletBalance / 5) * 100, 100);
   const missing = Math.max(5 - walletBalance, 0);
 
