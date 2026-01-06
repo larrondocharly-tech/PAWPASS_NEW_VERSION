@@ -65,6 +65,10 @@ export default function ScanPage() {
   const [receiptRequired, setReceiptRequired] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{
+    message: string;
+    dashboardUrl: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const amountValue = useMemo(() => Number(amount.replace(',', '.')), [amount]);
@@ -76,6 +80,7 @@ export default function ScanPage() {
     setValidatedAt(null);
     setExpiryAt(null);
     setTimeLeft(0);
+    setSuccessInfo(null);
 
     if (!code) {
       setError('Commerçant introuvable.');
@@ -268,8 +273,8 @@ export default function ScanPage() {
     setError(null);
     setStatus(null);
 
-    if (!token) {
-      setError('Veuillez saisir un token commerçant.');
+    if (!merchantCode) {
+      setError('Veuillez saisir un code commerçant.');
       return;
     }
 
@@ -397,11 +402,17 @@ export default function ScanPage() {
         amount: formattedAmount.replace('€', '').trim(),
         spa: spaName
       });
-      router.push(`/dashboard?${params.toString()}`);
+      setSuccessInfo({
+        message: `Cashback ajouté. Merci pour votre don à ${spaName} ❤️`,
+        dashboardUrl: `/dashboard?${params.toString()}`
+      });
       return;
     }
 
-    router.push('/transactions');
+    setSuccessInfo({
+      message: 'Cashback ajouté ✅',
+      dashboardUrl: '/dashboard'
+    });
   };
 
   return (
@@ -416,7 +427,14 @@ export default function ScanPage() {
       </div>
 
       <div className="card">
-        <h2>Scanner le QR commerçant</h2>
+        <h2>Parcours en 3 étapes</h2>
+        <div className="grid" style={{ gap: 8, marginTop: 12 }}>
+          <div className="badge">1 · Scanner</div>
+          <div className="badge">2 · Montant</div>
+          <div className="badge">3 · Choix</div>
+        </div>
+
+        <h3 style={{ marginTop: 20 }}>Étape 1 · Scanner</h3>
         {merchantValidated && merchant ? (
           <div className="card" style={{ marginTop: 12 }}>
             <p>
@@ -438,50 +456,6 @@ export default function ScanPage() {
         )}
 
         <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Utiliser ma réduction</label>
-            <p className="helper">Solde disponible : {formatCurrency(walletBalance)}</p>
-            {walletBalance < 5 ? (
-              <p className="helper">
-                Encore {formatCurrency(5 - walletBalance)} pour pouvoir utiliser vos réductions.
-              </p>
-            ) : (
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => setReductionActive((prev) => !prev)}
-              >
-                {reductionActive
-                  ? 'Désactiver la réduction'
-                  : 'Utiliser ma cagnotte en réduction'}
-              </button>
-            )}
-
-            {reductionActive && walletBalance >= 5 && (
-              <div style={{ marginTop: 12 }}>
-                <label className="label" htmlFor="reduction">
-                  Montant de réduction (€)
-                  <input
-                    id="reduction"
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    max={Math.min(walletBalance, amountValue || walletBalance)}
-                    value={reductionAmount}
-                    onChange={(event) => setReductionAmount(event.target.value)}
-                  />
-                </label>
-                {reductionRemaining !== null && (
-                  <p className="helper">
-                    Délai restant : {reductionRemaining}s
-                    {reductionExpired ? ' (expiré)' : ''}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
           <div className="grid grid-2" style={{ marginTop: 16 }}>
             <QrScanner
               onResult={(value) => {
@@ -496,9 +470,9 @@ export default function ScanPage() {
               }}
             />
             <div className="card">
-              <h3>Entrer le token manuellement</h3>
+              <h3>Entrer le code commerçant</h3>
               <label className="label" htmlFor="token">
-                Code commerçant / Token QR
+                Code commerçant
                 <input
                   id="token"
                   className="input"
@@ -514,7 +488,7 @@ export default function ScanPage() {
                       }
                     }
                   }}
-                  placeholder="Ex: TEST_QR_TOKEN_123"
+                  placeholder="Ex: PP_XXXX"
                 />
               </label>
               <button
@@ -527,15 +501,17 @@ export default function ScanPage() {
                 }}
                 style={{ marginTop: 12 }}
               >
-                Valider le token
+                Continuer
               </button>
               {merchantCode && (
                 <p className="helper" style={{ marginTop: 8 }}>
-                  Token détecté : <strong>{merchantCode}</strong>
+                  Code commerçant détecté : <strong>{merchantCode}</strong>
                 </p>
               )}
             </div>
           </div>
+
+          <h3 style={{ marginTop: 16 }}>Étape 2 · Montant</h3>
           <label className="label" htmlFor="amount">
             Montant du ticket
             <input
@@ -608,6 +584,49 @@ export default function ScanPage() {
             </label>
           )}
 
+          <div style={{ marginTop: 16 }}>
+            <h3>Étape 3 · Choix</h3>
+            <label className="label">Utiliser ma cagnotte</label>
+            <p className="helper">Solde disponible : {formatCurrency(walletBalance)}</p>
+            {walletBalance < 5 ? (
+              <p className="helper">
+                Encore {formatCurrency(5 - walletBalance)} pour pouvoir utiliser vos réductions.
+              </p>
+            ) : (
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setReductionActive((prev) => !prev)}
+              >
+                {reductionActive ? 'Désactiver la réduction' : 'Utiliser ma cagnotte'}
+              </button>
+            )}
+
+            {reductionActive && walletBalance >= 5 && (
+              <div style={{ marginTop: 12 }}>
+                <label className="label" htmlFor="reduction">
+                  Montant à utiliser (€)
+                  <input
+                    id="reduction"
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    max={Math.min(walletBalance, amountValue || walletBalance)}
+                    value={reductionAmount}
+                    onChange={(event) => setReductionAmount(event.target.value)}
+                  />
+                </label>
+                {reductionRemaining !== null && (
+                  <p className="helper">
+                    Délai restant : {reductionRemaining}s
+                    {reductionExpired ? ' (expiré)' : ''}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {error && <p className="error">{error}</p>}
           {status && <p>{status}</p>}
 
@@ -620,6 +639,55 @@ export default function ScanPage() {
             Valider la transaction
           </button>
         </form>
+
+        {successInfo && (
+          <div className="card" style={{ marginTop: 16, textAlign: 'center' }}>
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                margin: '0 auto 12px',
+                background: '#22c55e',
+                animation: 'pulse 1.2s ease-in-out infinite'
+              }}
+            />
+            <h3>{successInfo.message}</h3>
+            <p className="helper">Merci ! Votre cashback est à jour.</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+              <button
+                className="button"
+                type="button"
+                onClick={() => router.push(successInfo.dashboardUrl)}
+              >
+                Retour au dashboard
+              </button>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => router.push('/transactions')}
+              >
+                Voir mes transactions
+              </button>
+            </div>
+            <style jsx>{`
+              @keyframes pulse {
+                0% {
+                  transform: scale(0.9);
+                  opacity: 0.7;
+                }
+                50% {
+                  transform: scale(1.05);
+                  opacity: 1;
+                }
+                100% {
+                  transform: scale(0.9);
+                  opacity: 0.7;
+                }
+              }
+            `}</style>
+          </div>
+        )}
       </div>
     </div>
   );

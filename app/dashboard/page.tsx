@@ -156,11 +156,15 @@ export default function DashboardPage() {
           <button
             className="button"
             type="button"
-            disabled={walletBalance < 5}
-            onClick={() => router.push('/scan?mode=use_wallet')}
+            onClick={() => router.push('/scan')}
             style={{ marginTop: 12 }}
           >
-            Utiliser mon cashback
+            Scanner & gagner{' '}
+            {walletBalance >= 5 && (
+              <span className="badge" style={{ marginLeft: 8 }}>
+                Réduction dispo
+              </span>
+            )}
           </button>
           <div style={{ marginTop: 12 }}>
             <div
