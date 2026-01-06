@@ -83,6 +83,7 @@ declare
   v_cashback_to_user numeric := 0;
   v_tx public.transactions;
   v_merchant_id uuid;
+  v_last_tx_at timestamptz;
 begin
   if v_user_id is null then
     raise exception 'Not authenticated';
@@ -104,6 +105,15 @@ begin
 
   if v_merchant_id is null then
     raise exception 'Merchant not found';
+  end if;
+
+  select max(created_at) into v_last_tx_at
+  from public.transactions
+  where user_id = v_user_id
+    and merchant_id = v_merchant_id;
+
+  if v_last_tx_at is not null and (now() - v_last_tx_at) < interval '2 hours' then
+    raise exception 'Cooldown active';
   end if;
 
   select balance into v_balance
