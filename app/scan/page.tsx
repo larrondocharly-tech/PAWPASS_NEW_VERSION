@@ -70,7 +70,7 @@ export default function ScanPage() {
 
     const { data, error: merchantError } = await supabase
       .from('profiles')
-      .select('id,role,merchant_code,email')
+      .select('id,role,merchant_code')
       .eq('merchant_code', code)
       .limit(1)
       .maybeSingle();
@@ -377,7 +377,7 @@ export default function ScanPage() {
         <h2>Scanner le QR commerçant</h2>
         {merchantValidated && merchant ? (
           <p>
-            Commerçant: <strong>{merchant.email ?? merchant.id}</strong>
+            Commerçant validé · ID : <strong>{merchant.id}</strong>
           </p>
         ) : (
           <p className="helper">Aucun commerçant chargé.</p>

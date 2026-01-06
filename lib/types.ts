@@ -3,7 +3,6 @@ export type UserRole = 'client' | 'merchant' | 'CLIENT' | 'MERCHANT';
 export interface Profile {
   id: string;
   role: UserRole;
-  email: string | null;
   spa_id: string | null;
   merchant_code: string | null;
 }
@@ -11,7 +10,6 @@ export interface Profile {
 export interface MerchantProfile {
   id: string;
   role: UserRole;
-  email: string | null;
   merchant_code: string | null;
 }
 
