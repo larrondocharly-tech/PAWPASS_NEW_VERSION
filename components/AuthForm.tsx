@@ -27,12 +27,13 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setLoading(true);
 
     if (mode === 'register') {
+      const userRole = role;
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            role
+            role: userRole
           }
         }
       });
@@ -72,8 +73,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
 
     setLoading(false);
-    const role = profile.role?.toLowerCase();
-    if (role === 'merchant') {
+    const profileRole = profile.role?.toLowerCase();
+    if (profileRole === 'merchant') {
       router.push('/merchant');
     } else {
       router.push('/dashboard');
