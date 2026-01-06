@@ -57,6 +57,7 @@ export default function ScanPage() {
   const [spas, setSpas] = useState<Spa[]>([]);
   const [spaId, setSpaId] = useState<string>('');
   const [donateCashback, setDonateCashback] = useState(false);
+  const [donationPercent, setDonationPercent] = useState<50 | 100>(50);
   const [walletBalance, setWalletBalance] = useState(0);
   const [reductionActive, setReductionActive] = useState(false);
   const [reductionAmount, setReductionAmount] = useState('5');
@@ -363,7 +364,7 @@ export default function ScanPage() {
 
     const amountNet = amountValue - (reductionActive ? reductionValue : 0);
     const cashbackTotal = Number(((amountNet * DEFAULT_CASHBACK_PERCENT) / 100).toFixed(2));
-    const donationAmount = donateCashback ? cashbackTotal : 0;
+    const donationAmount = donateCashback ? (cashbackTotal * donationPercent) / 100 : 0;
     const cashbackToUser = donateCashback ? 0 : cashbackTotal;
 
     const walletSpent = reductionActive ? reductionValue : 0;
@@ -375,7 +376,8 @@ export default function ScanPage() {
         p_amount: amountValue,
         p_spa_id: donateCashback ? spaId || null : null,
         p_use_wallet: reductionActive,
-        p_wallet_spent: walletSpent
+        p_wallet_spent: walletSpent,
+        p_donation_percent: donateCashback ? donationPercent : 0
       }
     );
 
@@ -389,6 +391,7 @@ export default function ScanPage() {
     setReceiptFile(null);
     setDonateCashback(false);
     setSpaId('');
+    setDonationPercent(50);
     setReductionActive(false);
     setReductionAmount('5');
     setReductionRemaining(null);
@@ -580,6 +583,21 @@ export default function ScanPage() {
                     {spa.name} {spa.city ? `· ${spa.city}` : ''}
                   </option>
                 ))}
+              </select>
+            </label>
+          )}
+
+          {donateCashback && (
+            <label className="label" htmlFor="donationPercent">
+              Pourcentage reversé
+              <select
+                id="donationPercent"
+                className="select"
+                value={donationPercent}
+                onChange={(event) => setDonationPercent(Number(event.target.value) as 50 | 100)}
+              >
+                <option value={50}>50% (recommandé)</option>
+                <option value={100}>100%</option>
               </select>
             </label>
           )}
