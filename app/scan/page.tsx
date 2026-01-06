@@ -33,6 +33,13 @@ const parseMerchantCode = (input: string) => {
   return sanitized;
 };
 
+const formatTimeLeft = (seconds: number) => {
+  const clamped = Math.max(0, seconds);
+  const mins = Math.floor(clamped / 60);
+  const secs = clamped % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+};
+
 export default function ScanPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -42,6 +49,9 @@ export default function ScanPage() {
   const [tokenInput, setTokenInput] = useState('');
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
   const [merchantValidated, setMerchantValidated] = useState(false);
+  const [validatedAt, setValidatedAt] = useState<number | null>(null);
+  const [expiryAt, setExpiryAt] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
   const [amount, setAmount] = useState('');
   const [spas, setSpas] = useState<Spa[]>([]);
   const [spaId, setSpaId] = useState<string>('');
@@ -62,6 +72,9 @@ export default function ScanPage() {
     setError(null);
     setMerchant(null);
     setMerchantValidated(false);
+    setValidatedAt(null);
+    setExpiryAt(null);
+    setTimeLeft(0);
 
     if (!code) {
       setError('Commerçant introuvable.');
@@ -95,6 +108,10 @@ export default function ScanPage() {
 
     setMerchant(data);
     setMerchantValidated(true);
+    const now = Date.now();
+    setValidatedAt(now);
+    setExpiryAt(now + 120_000);
+    setTimeLeft(120);
   };
 
   useEffect(() => {
@@ -225,6 +242,22 @@ export default function ScanPage() {
     setReductionAmount(String(nextDefault));
   }, [amountValue, reductionActive, walletBalance]);
 
+  useEffect(() => {
+    if (!merchantValidated || !expiryAt) {
+      setTimeLeft(0);
+      return;
+    }
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((expiryAt - Date.now()) / 1000));
+      setTimeLeft(remaining);
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [expiryAt, merchantValidated]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -237,6 +270,11 @@ export default function ScanPage() {
 
     if (!merchantValidated || !merchant || !merchantCode) {
       setError('Veuillez scanner/valider un commerçant.');
+      return;
+    }
+
+    if (timeLeft <= 0) {
+      setError('Le délai est expiré. Veuillez rescanner un commerçant.');
       return;
     }
 
@@ -375,69 +413,124 @@ export default function ScanPage() {
       <div className="card">
         <h2>Scanner le QR commerçant</h2>
         {merchantValidated && merchant ? (
-          <p>
-            Commerçant validé · ID : <strong>{merchant.id}</strong>
-          </p>
+          <div className="card" style={{ marginTop: 12 }}>
+            <p>
+              <strong>Commerçant :</strong> {merchant.merchant_code ?? merchant.id}
+            </p>
+            <p>
+              <strong>Validé le :</strong>{' '}
+              {validatedAt ? new Date(validatedAt).toLocaleString('fr-FR') : '—'}
+            </p>
+            <p>
+              <strong>Temps restant :</strong> {formatTimeLeft(timeLeft)}
+            </p>
+            {timeLeft <= 0 && (
+              <p className="error">Le délai est expiré. Veuillez rescanner un commerçant.</p>
+            )}
+          </div>
         ) : (
           <p className="helper">Aucun commerçant chargé.</p>
         )}
 
-        <div className="grid grid-2" style={{ marginTop: 16 }}>
-          <QrScanner
-            onResult={(value) => {
-              const parsed = parseMerchantCode(value);
-              if (!parsed) {
-                setError('Commerçant introuvable.');
-                return;
-              }
-              setMerchantCode(parsed);
-              setTokenInput(parsed);
-              void validateMerchant(parsed);
-            }}
-          />
-          <div className="card">
-            <h3>Entrer le token manuellement</h3>
-            <label className="label" htmlFor="token">
-              Code commerçant / Token QR
-              <input
-                id="token"
-                className="input"
-                value={tokenInput}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setTokenInput(value);
-                  if (value.includes('?m=')) {
-                    const parsed = parseMerchantCode(value);
-                    if (parsed) {
-                      setMerchantCode(parsed);
-                      void validateMerchant(parsed);
-                    }
-                  }
-                }}
-                placeholder="Ex: TEST_QR_TOKEN_123"
-              />
-            </label>
-            <button
-              className="button"
-              type="button"
-              onClick={() => {
-                const parsed = parseMerchantCode(tokenInput);
-                setMerchantCode(parsed);
-                void validateMerchant(parsed);
-              }}
-              style={{ marginTop: 12 }}
-            >
-              Valider le token
-            </button>
-            {merchantCode && (
-              <p className="helper" style={{ marginTop: 8 }}>
-                Token détecté : <strong>{merchantCode}</strong>
+        <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
+          <div style={{ marginBottom: 16 }}>
+            <label className="label">Utiliser ma réduction</label>
+            <p className="helper">Solde disponible : {formatCurrency(walletBalance)}</p>
+            {walletBalance < 5 ? (
+              <p className="helper">
+                Encore {formatCurrency(5 - walletBalance)} pour pouvoir utiliser vos réductions.
               </p>
+            ) : (
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setReductionActive((prev) => !prev)}
+              >
+                {reductionActive
+                  ? 'Désactiver la réduction'
+                  : 'Utiliser ma cagnotte en réduction'}
+              </button>
+            )}
+
+            {reductionActive && walletBalance >= 5 && (
+              <div style={{ marginTop: 12 }}>
+                <label className="label" htmlFor="reduction">
+                  Montant de réduction (€)
+                  <input
+                    id="reduction"
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    max={Math.min(walletBalance, amountValue || walletBalance)}
+                    value={reductionAmount}
+                    onChange={(event) => setReductionAmount(event.target.value)}
+                  />
+                </label>
+                {reductionRemaining !== null && (
+                  <p className="helper">
+                    Délai restant : {reductionRemaining}s
+                    {reductionExpired ? ' (expiré)' : ''}
+                  </p>
+                )}
+              </div>
             )}
           </div>
-        </div>
 
-        <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
+          <div className="grid grid-2" style={{ marginTop: 16 }}>
+            <QrScanner
+              onResult={(value) => {
+                const parsed = parseMerchantCode(value);
+                if (!parsed) {
+                  setError('Commerçant introuvable.');
+                  return;
+                }
+                setMerchantCode(parsed);
+                setTokenInput(parsed);
+                void validateMerchant(parsed);
+              }}
+            />
+            <div className="card">
+              <h3>Entrer le token manuellement</h3>
+              <label className="label" htmlFor="token">
+                Code commerçant / Token QR
+                <input
+                  id="token"
+                  className="input"
+                  value={tokenInput}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setTokenInput(value);
+                    if (value.includes('?m=')) {
+                      const parsed = parseMerchantCode(value);
+                      if (parsed) {
+                        setMerchantCode(parsed);
+                        void validateMerchant(parsed);
+                      }
+                    }
+                  }}
+                  placeholder="Ex: TEST_QR_TOKEN_123"
+                />
+              </label>
+              <button
+                className="button"
+                type="button"
+                onClick={() => {
+                  const parsed = parseMerchantCode(tokenInput);
+                  setMerchantCode(parsed);
+                  void validateMerchant(parsed);
+                }}
+                style={{ marginTop: 12 }}
+              >
+                Valider le token
+              </button>
+              {merchantCode && (
+                <p className="helper" style={{ marginTop: 8 }}>
+                  Token détecté : <strong>{merchantCode}</strong>
+                </p>
+              )}
+            </div>
+          </div>
           <label className="label" htmlFor="amount">
             Montant du ticket
             <input
@@ -510,52 +603,15 @@ export default function ScanPage() {
             </label>
           )}
 
-          <div style={{ marginTop: 16 }}>
-            <label className="label">Utiliser ma cagnotte en réduction</label>
-            <p className="helper">Solde disponible : {formatCurrency(walletBalance)}</p>
-            {walletBalance < 5 ? (
-              <p className="helper">
-                Encore {formatCurrency(5 - walletBalance)} pour pouvoir utiliser vos réductions.
-              </p>
-            ) : (
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => setReductionActive((prev) => !prev)}
-              >
-                {reductionActive ? 'Désactiver la réduction' : 'Utiliser ma cagnotte en réduction'}
-              </button>
-            )}
-
-            {reductionActive && walletBalance >= 5 && (
-              <div style={{ marginTop: 12 }}>
-                <label className="label" htmlFor="reduction">
-                  Montant de réduction (€)
-                  <input
-                    id="reduction"
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    max={Math.min(walletBalance, amountValue || walletBalance)}
-                    value={reductionAmount}
-                    onChange={(event) => setReductionAmount(event.target.value)}
-                  />
-                </label>
-                {reductionRemaining !== null && (
-                  <p className="helper">
-                    Délai restant : {reductionRemaining}s
-                    {reductionExpired ? ' (expiré)' : ''}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
           {error && <p className="error">{error}</p>}
           {status && <p>{status}</p>}
 
-          <button className="button" type="submit" style={{ marginTop: 16 }}>
+          <button
+            className="button"
+            type="submit"
+            style={{ marginTop: 16 }}
+            disabled={!merchantValidated || timeLeft <= 0}
+          >
             Valider la transaction
           </button>
         </form>
