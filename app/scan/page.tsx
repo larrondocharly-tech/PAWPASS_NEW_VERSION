@@ -92,7 +92,7 @@ export default function ScanPage() {
   const searchParams = useSearchParams();
   const merchantToken = searchParams.get('m');
   const mode = searchParams.get('mode');
-  const [scanMode, setScanMode] = useState<'after_payment' | 'before_payment_discount'>('after_payment');
+  const [scanMode, setScanMode] = useState<'after' | 'before'>('after');
   const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
@@ -278,7 +278,7 @@ export default function ScanPage() {
       setReductionActive(true);
     }
     if (mode === 'before_payment_discount') {
-      setScanMode('before_payment_discount');
+      setScanMode('before');
     }
 
     if (merchantToken) {
@@ -513,7 +513,7 @@ export default function ScanPage() {
       }
     }
 
-    if (scanMode === 'after_payment' && receiptRequired && !receiptFile) {
+    if (scanMode === 'after' && receiptRequired && !receiptFile) {
       setError('Le ticket est requis pour cette transaction.');
       return;
     }
@@ -521,7 +521,7 @@ export default function ScanPage() {
     let receiptPath: string | null = null;
     let receiptUrl: string | null = null;
 
-    if (scanMode === 'after_payment' && receiptRequired && receiptFile) {
+    if (scanMode === 'after' && receiptRequired && receiptFile) {
       const fileExt = receiptFile.name.split('.').pop();
       const fileName = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -718,13 +718,19 @@ export default function ScanPage() {
         <div style={{ marginTop: 16 }}>
           <label className="label">Mode de scan</label>
           <div style={{ display: 'flex', gap: 12 }}>
-            <button className="button" type="button" onClick={() => setScanMode('after_payment')}>
+            <button
+              className={`button${scanMode === 'after' ? '' : ' secondary'}`}
+              type="button"
+              aria-pressed={scanMode === 'after'}
+              onClick={() => setScanMode('after')}
+            >
               Après paiement
             </button>
             <button
-              className="button secondary"
+              className={`button${scanMode === 'before' ? '' : ' secondary'}`}
               type="button"
-              onClick={() => setScanMode('before_payment_discount')}
+              aria-pressed={scanMode === 'before'}
+              onClick={() => setScanMode('before')}
             >
               Avant paiement
             </button>
@@ -836,7 +842,7 @@ export default function ScanPage() {
             </p>
           )}
 
-          {scanMode === 'after_payment' && receiptRequired && (
+          {scanMode === 'after' && receiptRequired && (
             <label className="label" htmlFor="receipt">
               Ticket requis
               <input
@@ -849,7 +855,7 @@ export default function ScanPage() {
             </label>
           )}
 
-          {scanMode === 'after_payment' && (
+          {scanMode === 'after' && (
             <div style={{ marginTop: 16 }}>
               <label className="label">
                 Souhaitez-vous reverser votre cashback ?
@@ -865,7 +871,7 @@ export default function ScanPage() {
             </div>
           )}
 
-          {donateCashback && scanMode === 'after_payment' && (
+          {donateCashback && scanMode === 'after' && (
             <label className="label" htmlFor="association">
               SPA / Association
               <select
@@ -885,7 +891,7 @@ export default function ScanPage() {
             </label>
           )}
 
-          {donateCashback && scanMode === 'after_payment' && (
+          {donateCashback && scanMode === 'after' && (
             <label className="label" htmlFor="donationPercent">
               Pourcentage reversé
               <select
@@ -900,7 +906,7 @@ export default function ScanPage() {
             </label>
           )}
 
-          {scanMode === 'after_payment' && (
+          {scanMode === 'after' && (
             <div style={{ marginTop: 16 }}>
               <h3>Étape 3 · Choix</h3>
               <label className="label">Utiliser ma cagnotte</label>
@@ -945,7 +951,7 @@ export default function ScanPage() {
             </div>
           )}
 
-          {scanMode === 'before_payment_discount' && (
+          {scanMode === 'before' && (
             <div className="card" style={{ marginTop: 16 }}>
               <h3>Utiliser mes crédits (avant paiement)</h3>
               <label className="label" htmlFor="discountAmount">
@@ -1032,7 +1038,7 @@ export default function ScanPage() {
           {error && <p className="error">{error}</p>}
           {status && <p>{status}</p>}
 
-          {scanMode === 'after_payment' && (
+          {scanMode === 'after' && (
             <button
               className="button"
               type="submit"
