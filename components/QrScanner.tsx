@@ -18,7 +18,14 @@ export default function QrScanner({ onResult }: QrScannerProps) {
 
   const stopScanner = async () => {
     console.debug('[QrScanner] stop called');
-    readerRef.current?.reset();
+    const reader = readerRef.current as { reset?: () => void; stop?: () => void; stopContinuousDecode?: () => void } | null;
+    if (reader?.reset) {
+      reader.reset();
+    } else if (reader?.stop) {
+      reader.stop();
+    } else if (reader?.stopContinuousDecode) {
+      reader.stopContinuousDecode();
+    }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) {
