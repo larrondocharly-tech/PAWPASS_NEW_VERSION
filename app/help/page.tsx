@@ -6,7 +6,7 @@ export default function HelpPage() {
       <div className="nav">
         <strong>Comment ça marche ?</strong>
         <div className="nav-links">
-          <Link href="/dashboard">Dashboard</Link>
+          <Link href="/dashboard">Tableau de bord</Link>
           <Link href="/scan">Scanner</Link>
         </div>
       </div>

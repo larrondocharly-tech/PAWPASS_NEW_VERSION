@@ -55,7 +55,7 @@ export default function TransactionsPage() {
       <div className="nav">
         <strong>Historique</strong>
         <div className="nav-links">
-          <Link href="/dashboard">Dashboard</Link>
+          <Link href="/dashboard">Tableau de bord</Link>
           <Link href="/scan">Scanner</Link>
           <Link href="/settings">Paramètres</Link>
         </div>

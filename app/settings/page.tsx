@@ -125,9 +125,9 @@ export default function SettingsPage() {
             </>
           ) : (
             <>
-              <Link href="/dashboard">Dashboard</Link>
+              <Link href="/dashboard">Tableau de bord</Link>
               <Link href="/scan">Scanner</Link>
-              <Link href="/transactions">Transactions</Link>
+              <Link href="/transactions">Historique</Link>
             </>
           )}
         </div>

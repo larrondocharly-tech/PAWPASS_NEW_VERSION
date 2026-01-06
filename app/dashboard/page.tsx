@@ -132,7 +132,7 @@ export default function DashboardPage() {
         <strong>PawPass</strong>
         <div className="nav-links">
           <Link href="/scan">Scanner</Link>
-          <Link href="/transactions">Transactions</Link>
+          <Link href="/transactions">Historique</Link>
           <Link href="/settings">Paramètres</Link>
           <button className="button secondary" type="button" onClick={handleSignOut}>
             Déconnexion
@@ -174,10 +174,10 @@ export default function DashboardPage() {
             onClick={() => router.push('/scan')}
             style={{ marginTop: 12 }}
           >
-            Scanner & gagner{' '}
+            Scanner et gagner{' '}
             {walletBalance >= 5 && (
               <span className="badge" style={{ marginLeft: 8 }}>
-                Réduction dispo
+                Réduction disponible
               </span>
             )}
           </button>

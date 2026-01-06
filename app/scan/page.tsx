@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
@@ -12,6 +12,7 @@ const MAX_AMOUNT = 200;
 const RANDOM_RECEIPT_RATE = 0.1;
 const DEFAULT_CASHBACK_PERCENT = 5;
 const DEFAULT_TICKET_THRESHOLD = 50;
+const CARD_STORAGE_KEY = 'pawpass:card';
 
 const normalizeMerchantInput = (input: string) => {
   if (!input) return '';
@@ -65,6 +66,26 @@ const formatCooldown = (seconds: number) => {
   return `${Math.max(1, mins)} min`;
 };
 
+const readStoredCard = () => {
+  try {
+    const raw = localStorage.getItem(CARD_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { name?: string; email?: string };
+    if (!parsed?.name || !parsed?.email) return null;
+    return { name: parsed.name, email: parsed.email };
+  } catch {
+    return null;
+  }
+};
+
+const storeCard = (card: { name: string; email: string }) => {
+  try {
+    localStorage.setItem(CARD_STORAGE_KEY, JSON.stringify(card));
+  } catch {
+    // ignore storage errors
+  }
+};
+
 export default function ScanPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -89,6 +110,11 @@ export default function ScanPage() {
   const [reductionAmount, setReductionAmount] = useState('5');
   const [reductionRemaining, setReductionRemaining] = useState<number | null>(null);
   const [reductionExpired, setReductionExpired] = useState(false);
+  const [cardInfo, setCardInfo] = useState<{ name: string; email: string } | null>(null);
+  const [showCardModal, setShowCardModal] = useState(false);
+  const [cardName, setCardName] = useState('');
+  const [cardEmail, setCardEmail] = useState('');
+  const [cardError, setCardError] = useState<string | null>(null);
   const [receiptRequired, setReceiptRequired] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -107,8 +133,18 @@ export default function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [transactionSucceeded, setTransactionSucceeded] = useState(false);
+  const amountInputRef = useRef<HTMLInputElement | null>(null);
 
   const amountValue = useMemo(() => Number(amount.replace(',', '.')), [amount]);
+  const reductionValue = useMemo(
+    () => Number(reductionAmount.replace(',', '.')),
+    [reductionAmount]
+  );
+  const amountAfterReduction = useMemo(() => {
+    if (!amountValue || Number.isNaN(amountValue)) return null;
+    if (Number.isNaN(reductionValue)) return amountValue;
+    return Math.max(amountValue - Math.max(0, reductionValue), 0);
+  }, [amountValue, reductionValue]);
 
   const validateMerchant = async (code: string) => {
     setError(null);
@@ -161,15 +197,25 @@ export default function ScanPage() {
   const handleStartDiscount = async () => {
     setError(null);
     setStatus(null);
+    setCardError(null);
+
+    if (!cardInfo) {
+      setShowCardModal(true);
+      setCardError('Veuillez créer votre carte PawPass pour continuer.');
+      return;
+    }
 
     if (!merchantValidated || !merchantCode) {
       setError('Veuillez scanner/valider un commerçant.');
       return;
     }
 
-    const reductionValue = Number(reductionAmount.replace(',', '.'));
     if (Number.isNaN(reductionValue) || reductionValue <= 0) {
       setError('Montant de réduction invalide.');
+      return;
+    }
+    if (reductionValue > walletBalance) {
+      setError('Le montant dépasse votre solde disponible.');
       return;
     }
 
@@ -186,6 +232,10 @@ export default function ScanPage() {
     const session = Array.isArray(data) ? data[0] : data;
     if (!session) {
       setError('Impossible de démarrer la session.');
+      return;
+    }
+    if (session.ok === false) {
+      setError(session.error ?? 'Impossible de démarrer la session.');
       return;
     }
     setDiscountCoupon({
@@ -240,6 +290,19 @@ export default function ScanPage() {
       }
     }
   }, [merchantToken, mode, router, supabase]);
+
+  useEffect(() => {
+    setCardInfo(readStoredCard());
+  }, []);
+
+  useEffect(() => {
+    if (!merchantValidated || !merchantCode) {
+      return;
+    }
+    if (!cardInfo) {
+      setShowCardModal(true);
+    }
+  }, [cardInfo, merchantCode, merchantValidated]);
 
   useEffect(() => {
     const loadSpas = async () => {
@@ -367,8 +430,15 @@ export default function ScanPage() {
     event.preventDefault();
     setError(null);
     setStatus(null);
+    setCardError(null);
 
     if (loading) {
+      return;
+    }
+
+    if (!cardInfo) {
+      setShowCardModal(true);
+      setCardError('Veuillez créer votre carte PawPass pour continuer.');
       return;
     }
 
@@ -410,7 +480,7 @@ export default function ScanPage() {
     }
 
     if (amountValue > MAX_AMOUNT) {
-      setError(`Montant maximum autorisé : ${MAX_AMOUNT}€.`);
+      setError(`Montant maximum autorisé : ${MAX_AMOUNT} €.`);
       return;
     }
 
@@ -419,9 +489,9 @@ export default function ScanPage() {
       return;
     }
 
-    const reductionValue = reductionActive ? Number(reductionAmount.replace(',', '.')) : 0;
+    const walletReduction = reductionActive ? reductionValue : 0;
     if (reductionActive) {
-      if (Number.isNaN(reductionValue) || reductionValue < 0) {
+      if (Number.isNaN(walletReduction) || walletReduction < 0) {
         setError('Montant de réduction invalide.');
         return;
       }
@@ -429,11 +499,11 @@ export default function ScanPage() {
         setError('Votre solde cashback doit atteindre 5€ pour utiliser une réduction.');
         return;
       }
-      if (reductionValue > walletBalance) {
+      if (walletReduction > walletBalance) {
         setError('La réduction dépasse votre solde disponible.');
         return;
       }
-      if (reductionValue > amountValue) {
+      if (walletReduction > amountValue) {
         setError('La réduction dépasse le montant du ticket.');
         return;
       }
@@ -471,12 +541,12 @@ export default function ScanPage() {
       receiptUrl = publicData.publicUrl ?? null;
     }
 
-    const amountNet = amountValue - (reductionActive ? reductionValue : 0);
+    const amountNet = amountValue - (reductionActive ? walletReduction : 0);
     const cashbackTotal = Number(((amountNet * DEFAULT_CASHBACK_PERCENT) / 100).toFixed(2));
     const donationAmount = donateCashback ? (cashbackTotal * donationPercent) / 100 : 0;
     const cashbackToUser = donateCashback ? 0 : cashbackTotal;
 
-    const walletSpent = reductionActive ? reductionValue : 0;
+    const walletSpent = reductionActive ? walletReduction : 0;
 
     setLoading(true);
     const { error: rpcError } = await supabase.rpc(
@@ -540,13 +610,100 @@ export default function ScanPage() {
   return (
     <div className="container">
       <div className="nav">
-        <strong>Scan PawPass</strong>
+        <strong>Scanner PawPass</strong>
         <div className="nav-links">
-          <Link href="/dashboard">Dashboard</Link>
-          <Link href="/transactions">Transactions</Link>
+          <Link href="/dashboard">Tableau de bord</Link>
+          <Link href="/transactions">Historique</Link>
           <Link href="/settings">Paramètres</Link>
         </div>
       </div>
+
+      {showCardModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 60,
+            background: 'rgba(15, 23, 42, 0.72)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16
+          }}
+        >
+          <div className="card" style={{ width: '100%', maxWidth: 420 }}>
+            <h2>Créer votre carte PawPass</h2>
+            <p className="helper">
+              Renseignez vos informations pour continuer vers le paiement.
+            </p>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                setCardError(null);
+                const trimmedName = cardName.trim();
+                const trimmedEmail = cardEmail.trim();
+                if (!trimmedName) {
+                  setCardError('Veuillez saisir votre nom.');
+                  return;
+                }
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+                  setCardError('Veuillez saisir un email valide.');
+                  return;
+                }
+                const nextCard = { name: trimmedName, email: trimmedEmail };
+                storeCard(nextCard);
+                setCardInfo(nextCard);
+                setShowCardModal(false);
+                setCardName('');
+                setCardEmail('');
+                setStatus('Carte PawPass créée ✅ Vous pouvez passer au paiement.');
+                window.setTimeout(() => {
+                  amountInputRef.current?.focus();
+                  amountInputRef.current?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                  });
+                }, 0);
+              }}
+            >
+              <label className="label" htmlFor="cardName">
+                Nom et prénom
+                <input
+                  id="cardName"
+                  className="input"
+                  value={cardName}
+                  onChange={(event) => setCardName(event.target.value)}
+                  required
+                />
+              </label>
+              <label className="label" htmlFor="cardEmail">
+                Email
+                <input
+                  id="cardEmail"
+                  className="input"
+                  type="email"
+                  value={cardEmail}
+                  onChange={(event) => setCardEmail(event.target.value)}
+                  required
+                />
+              </label>
+              {cardError && <p className="error">{cardError}</p>}
+              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                <button className="button" type="submit">
+                  Continuer
+                </button>
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => setShowCardModal(false)}
+                >
+                  Plus tard
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -559,7 +716,7 @@ export default function ScanPage() {
           <div className="badge">3 · Choix</div>
         </div>
         <div style={{ marginTop: 16 }}>
-          <label className="label">Mode</label>
+          <label className="label">Mode de scan</label>
           <div style={{ display: 'flex', gap: 12 }}>
             <button className="button" type="button" onClick={() => setScanMode('after_payment')}>
               Après paiement
@@ -664,9 +821,10 @@ export default function ScanPage() {
               max={MAX_AMOUNT}
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
+              ref={amountInputRef}
               required
             />
-            <p className="helper">Plafond de {MAX_AMOUNT}€ par transaction.</p>
+            <p className="helper">Plafond de {MAX_AMOUNT} € par transaction.</p>
           </label>
 
           {amountValue > 0 && !Number.isNaN(amountValue) && (
@@ -802,6 +960,11 @@ export default function ScanPage() {
                   onChange={(event) => setReductionAmount(event.target.value)}
                 />
               </label>
+              {amountAfterReduction !== null && (
+                <p className="helper">
+                  Total après réduction : <strong>{formatCurrency(amountAfterReduction)}</strong>
+                </p>
+              )}
               <button className="button" type="button" onClick={handleStartDiscount}>
                 Générer le code
               </button>
@@ -901,7 +1064,7 @@ export default function ScanPage() {
                 type="button"
                 onClick={() => router.push(successInfo.dashboardUrl)}
               >
-                Retour au dashboard
+                Retour au tableau de bord
               </button>
               <button
                 className="button secondary"
