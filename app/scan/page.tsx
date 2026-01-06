@@ -125,11 +125,12 @@ export default function ScanPage() {
   const [discountCoupon, setDiscountCoupon] = useState<{
     token: string;
     amount: number;
-    merchant_name: string;
-    created_at: string;
-    expires_at: string;
+    merchantName: string;
+    createdAt: string;
+    expiresAt: string;
   } | null>(null);
   const [discountTimeLeft, setDiscountTimeLeft] = useState(0);
+  const [couponConfirmed, setCouponConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [transactionSucceeded, setTransactionSucceeded] = useState(false);
@@ -241,10 +242,11 @@ export default function ScanPage() {
     setDiscountCoupon({
       token: session.token,
       amount: session.amount,
-      merchant_name: session.merchant?.name ?? merchantCode,
-      created_at: session.created_at,
-      expires_at: session.expires_at
+      merchantName: session.merchant?.name ?? merchantCode,
+      createdAt: session.created_at,
+      expiresAt: session.expires_at
     });
+    setCouponConfirmed(false);
   };
 
   useEffect(() => {
@@ -412,11 +414,11 @@ export default function ScanPage() {
   }, [expiryAt, merchantValidated]);
 
   useEffect(() => {
-    if (!discountCoupon?.expires_at) {
+    if (!discountCoupon?.expiresAt) {
       setDiscountTimeLeft(0);
       return;
     }
-    const expiresAt = new Date(discountCoupon.expires_at).getTime();
+    const expiresAt = new Date(discountCoupon.expiresAt).getTime();
     const tick = () => {
       const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
       setDiscountTimeLeft(remaining);
@@ -990,45 +992,66 @@ export default function ScanPage() {
                     textAlign: 'center'
                   }}
                 >
-                  <h3>Montrez au commerçant</h3>
+                  <h3>Vous bénéficiez d’une réduction</h3>
                   <p style={{ fontSize: '1.8rem', fontWeight: 700 }}>
-                    Réduction : {formatCurrency(discountCoupon.amount)}
+                    {formatCurrency(discountCoupon.amount)}
                   </p>
+                  <p className="helper" style={{ maxWidth: 320 }}>
+                    Vous bénéficiez de {formatCurrency(discountCoupon.amount)} de réduction chez{' '}
+                    <strong>{discountCoupon.merchantName}</strong>.
+                  </p>
+                  <p className="helper">Veuillez valider devant le commerçant.</p>
                   <p>
-                    <strong>Commerçant :</strong> {discountCoupon.merchant_name}
+                    <strong>Date :</strong>{' '}
+                    {new Date(discountCoupon.createdAt).toLocaleString('fr-FR')}
                   </p>
-                  <p>
-                    <strong>Créé le :</strong>{' '}
-                    {new Date(discountCoupon.created_at).toLocaleString('fr-FR')}
+                  {discountCoupon.token && (
+                    <p style={{ fontSize: '1.6rem', fontWeight: 700 }}>
+                      {discountCoupon.token}
+                    </p>
+                  )}
+                  <p style={{ fontSize: '1.2rem', fontWeight: 700 }}>
+                    Temps restant : {formatTimeLeft(discountTimeLeft)}
                   </p>
-                  <p style={{ fontSize: '1.6rem', fontWeight: 700 }}>
-                    {discountCoupon.token}
-                  </p>
-                  <p>
-                    <strong>Temps restant :</strong> {formatTimeLeft(discountTimeLeft)}
-                  </p>
-                  <p className="helper">
-                    Montrez cet écran au commerçant avant la fin du timer.
-                  </p>
+                  {couponConfirmed ? (
+                    <p className="helper">Validé ✅ Montrez cet écran au commerçant.</p>
+                  ) : (
+                    <p className="helper">Montrez cet écran au commerçant avant la fin du timer.</p>
+                  )}
                   {discountTimeLeft <= 0 && <p className="error">Coupon expiré.</p>}
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+                    {discountTimeLeft > 0 && (
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => setCouponConfirmed(true)}
+                      >
+                        Valider
+                      </button>
+                    )}
                     <button
                       className="button secondary"
                       type="button"
-                      onClick={() => setDiscountCoupon(null)}
+                      onClick={() => {
+                        setDiscountCoupon(null);
+                        setCouponConfirmed(false);
+                      }}
                     >
                       Fermer
                     </button>
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={() => {
-                        setDiscountCoupon(null);
-                        setReductionAmount('5');
-                      }}
-                    >
-                      Générer un nouveau coupon
-                    </button>
+                    {discountTimeLeft <= 0 && (
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={() => {
+                          setDiscountCoupon(null);
+                          setCouponConfirmed(false);
+                          setReductionAmount('5');
+                        }}
+                      >
+                        Générer un nouveau coupon
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
