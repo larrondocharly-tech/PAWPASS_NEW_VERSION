@@ -28,7 +28,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     if (mode === 'register') {
       const normalizedRole = role === 'merchant' ? 'merchant' : 'user';
-      console.log('selected role:', role, 'normalized:', normalizedRole);
+      console.log('REGISTER role', role, 'normalized', normalizedRole);
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -38,7 +38,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
           }
         }
       });
-      console.log('signup user_metadata:', data.user?.user_metadata);
 
       if (signUpError) {
         setError(signUpError.message);
@@ -46,6 +45,42 @@ export default function AuthForm({ mode }: AuthFormProps) {
         return;
       }
 
+      console.log('signup user_metadata:', data.user?.user_metadata);
+
+      let session = data.session ?? null;
+      if (!session) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (signInError) {
+          setError(signInError.message);
+          setLoading(false);
+          return;
+        }
+
+        session = signInData.session;
+      }
+
+      if (!session) {
+        setError('Impossible de démarrer une session.');
+        setLoading(false);
+        return;
+      }
+
+      const { error: roleError } = await supabase.rpc('set_my_role', {
+        p_role: normalizedRole
+      });
+
+      if (roleError) {
+        console.error('set_my_role error', roleError);
+        setError('Impossible de mettre à jour le rôle.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('RPC set_my_role done', normalizedRole);
       setLoading(false);
       router.push('/login');
       return;
