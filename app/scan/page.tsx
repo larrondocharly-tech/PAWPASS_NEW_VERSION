@@ -96,10 +96,12 @@ export default function ScanPage() {
     message: string;
     dashboardUrl: string;
   } | null>(null);
-  const [discountSession, setDiscountSession] = useState<{
+  const [discountCoupon, setDiscountCoupon] = useState<{
     token: string;
+    amount: number;
+    merchant_name: string;
+    created_at: string;
     expires_at: string;
-    amount_reserved: number;
   } | null>(null);
   const [discountTimeLeft, setDiscountTimeLeft] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -171,9 +173,9 @@ export default function ScanPage() {
       return;
     }
 
-    const { data, error: startError } = await supabase.rpc('start_discount_session', {
+    const { data, error: startError } = await supabase.rpc('create_discount_coupon', {
       p_merchant_code: merchantCode,
-      p_amount_reserved: reductionValue
+      p_amount: reductionValue
     });
 
     if (startError) {
@@ -186,7 +188,13 @@ export default function ScanPage() {
       setError('Impossible de démarrer la session.');
       return;
     }
-    setDiscountSession(session);
+    setDiscountCoupon({
+      token: session.token,
+      amount: session.amount,
+      merchant_name: session.merchant?.name ?? merchantCode,
+      created_at: session.created_at,
+      expires_at: session.expires_at
+    });
   };
 
   useEffect(() => {
@@ -341,11 +349,11 @@ export default function ScanPage() {
   }, [expiryAt, merchantValidated]);
 
   useEffect(() => {
-    if (!discountSession?.expires_at) {
+    if (!discountCoupon?.expires_at) {
       setDiscountTimeLeft(0);
       return;
     }
-    const expiresAt = new Date(discountSession.expires_at).getTime();
+    const expiresAt = new Date(discountCoupon.expires_at).getTime();
     const tick = () => {
       const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
       setDiscountTimeLeft(remaining);
@@ -353,7 +361,7 @@ export default function ScanPage() {
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
-  }, [discountSession]);
+  }, [discountCoupon]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -797,28 +805,62 @@ export default function ScanPage() {
               <button className="button" type="button" onClick={handleStartDiscount}>
                 Générer le code
               </button>
-              {discountSession && (
-                <div className="card" style={{ marginTop: 12 }}>
+              {discountCoupon && (
+                <div
+                  className="card"
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 50,
+                    margin: 0,
+                    borderRadius: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    textAlign: 'center'
+                  }}
+                >
                   <h3>Montrez au commerçant</h3>
-                  <p style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-                    {formatCurrency(discountSession.amount_reserved)}
+                  <p style={{ fontSize: '1.8rem', fontWeight: 700 }}>
+                    Réduction : {formatCurrency(discountCoupon.amount)}
                   </p>
                   <p>
-                    <strong>Code :</strong> {discountSession.token}
+                    <strong>Commerçant :</strong> {discountCoupon.merchant_name}
                   </p>
                   <p>
-                    <strong>Commerçant :</strong> {merchant?.merchant_code ?? merchant?.id}
+                    <strong>Créé le :</strong>{' '}
+                    {new Date(discountCoupon.created_at).toLocaleString('fr-FR')}
+                  </p>
+                  <p style={{ fontSize: '1.6rem', fontWeight: 700 }}>
+                    {discountCoupon.token}
                   </p>
                   <p>
                     <strong>Temps restant :</strong> {formatTimeLeft(discountTimeLeft)}
                   </p>
-                  <button
-                    className="button secondary"
-                    type="button"
-                    onClick={() => setDiscountSession(null)}
-                  >
-                    Annuler
-                  </button>
+                  <p className="helper">
+                    Montrez cet écran au commerçant avant la fin du timer.
+                  </p>
+                  {discountTimeLeft <= 0 && <p className="error">Coupon expiré.</p>}
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => setDiscountCoupon(null)}
+                    >
+                      Fermer
+                    </button>
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => {
+                        setDiscountCoupon(null);
+                        setReductionAmount('5');
+                      }}
+                    >
+                      Générer un nouveau coupon
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
