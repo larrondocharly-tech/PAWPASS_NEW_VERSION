@@ -45,6 +45,7 @@ export default function ScanPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const merchantToken = searchParams.get('m');
+  const mode = searchParams.get('mode');
   const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
@@ -141,6 +142,10 @@ export default function ScanPage() {
 
     void guardRole();
 
+    if (mode === 'use_wallet') {
+      setReductionActive(true);
+    }
+
     if (merchantToken) {
       const parsedToken = parseMerchantCode(merchantToken);
       if (parsedToken) {
@@ -149,7 +154,7 @@ export default function ScanPage() {
         void validateMerchant(parsedToken);
       }
     }
-  }, [merchantToken, router, supabase]);
+  }, [merchantToken, mode, router, supabase]);
 
   useEffect(() => {
     const loadSpas = async () => {
