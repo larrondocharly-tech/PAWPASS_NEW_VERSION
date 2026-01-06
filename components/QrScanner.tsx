@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { BrowserMultiFormatReader, NotFoundException } from '@zxing/browser';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 interface QrScannerProps {
   onResult: (value: string) => void;
@@ -81,7 +81,8 @@ export default function QrScanner({ onResult }: QrScannerProps) {
           return;
         }
 
-        if (err && !(err instanceof NotFoundException)) {
+        const errName = (err as { name?: string } | null | undefined)?.name;
+        if (err && errName !== 'NotFoundException') {
           console.error('[QrScanner] decode error', err);
           setError('Impossible de lire le QR code.');
         }
