@@ -13,11 +13,11 @@ const RANDOM_RECEIPT_RATE = 0.1;
 const DEFAULT_CASHBACK_PERCENT = 5;
 const DEFAULT_TICKET_THRESHOLD = 50;
 
-const parseMerchantCode = (input: string) => {
+const normalizeMerchantInput = (input: string) => {
   if (!input) return '';
   const sanitized = input.trim();
   if (!sanitized) return '';
-  if (sanitized.includes('?m=')) {
+  if (sanitized.includes('m=')) {
     try {
       const url = new URL(sanitized);
       return (url.searchParams.get('m') ?? '').trim();
@@ -26,9 +26,6 @@ const parseMerchantCode = (input: string) => {
       const params = new URLSearchParams(queryString);
       return (params.get('m') ?? '').trim();
     }
-  }
-  if (sanitized.startsWith('PP_')) {
-    return sanitized;
   }
   return sanitized;
 };
@@ -40,7 +37,7 @@ const formatTimeLeft = (seconds: number) => {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 };
 
-const COOLDOWN_MS = 2 * 60 * 60 * 1000;
+const COOLDOWN_MS = process.env.NODE_ENV === 'development' ? 30_000 : 2 * 60 * 60 * 1000;
 const cooldownKey = (code: string) => `pawpass:cooldown:${code}`;
 
 const readCooldownMinutes = (code: string) => {
@@ -89,7 +86,7 @@ export default function ScanPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cooldownMinutes, setCooldownMinutes] = useState<number | null>(null);
+  const [transactionSucceeded, setTransactionSucceeded] = useState(false);
 
   const amountValue = useMemo(() => Number(amount.replace(',', '.')), [amount]);
 
@@ -101,7 +98,7 @@ export default function ScanPage() {
     setExpiryAt(null);
     setTimeLeft(0);
     setSuccessInfo(null);
-    setCooldownMinutes(null);
+    setTransactionSucceeded(false);
 
     if (!code) {
       setError('Commerçant introuvable.');
@@ -139,7 +136,6 @@ export default function ScanPage() {
     setValidatedAt(now);
     setExpiryAt(now + 120_000);
     setTimeLeft(120);
-    setCooldownMinutes(readCooldownMinutes(code));
   };
 
   useEffect(() => {
@@ -174,7 +170,7 @@ export default function ScanPage() {
     }
 
     if (merchantToken) {
-      const parsedToken = parseMerchantCode(merchantToken);
+      const parsedToken = normalizeMerchantInput(merchantToken);
       if (parsedToken) {
         setMerchantCode(parsedToken);
         setTokenInput(parsedToken);
@@ -290,14 +286,6 @@ export default function ScanPage() {
     return () => window.clearInterval(timer);
   }, [expiryAt, merchantValidated]);
 
-  useEffect(() => {
-    if (!merchantCode) {
-      setCooldownMinutes(null);
-      return;
-    }
-    setCooldownMinutes(readCooldownMinutes(merchantCode));
-  }, [merchantCode]);
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -324,7 +312,6 @@ export default function ScanPage() {
 
     const cooldown = readCooldownMinutes(merchantCode);
     if (cooldown !== null) {
-      setCooldownMinutes(cooldown);
       setError(
         `Vous avez déjà validé un achat chez ce commerçant récemment. Réessayez dans ${cooldown} min.`
       );
@@ -435,7 +422,6 @@ export default function ScanPage() {
     } catch {
       // ignore storage errors
     }
-    setCooldownMinutes(readCooldownMinutes(merchantCode));
 
     setStatus('Transaction enregistrée ✅');
     setAmount('');
@@ -447,6 +433,7 @@ export default function ScanPage() {
     setReductionAmount('5');
     setReductionRemaining(null);
     setReductionExpired(false);
+    setTransactionSucceeded(true);
 
     if (donationAmount > 0) {
       const spaName = spas.find((spa) => spa.id === spaId)?.name ?? 'une SPA';
@@ -494,20 +481,16 @@ export default function ScanPage() {
             <p>
               <strong>Commerçant :</strong> {merchant.merchant_code ?? merchant.id}
             </p>
-            <p>
-              <strong>Validé le :</strong>{' '}
-              {validatedAt ? new Date(validatedAt).toLocaleString('fr-FR') : '—'}
-            </p>
-            <p>
-              <strong>Temps restant :</strong> {formatTimeLeft(timeLeft)}
-            </p>
-            {timeLeft <= 0 && (
-              <p className="error">Le délai est expiré. Veuillez rescanner un commerçant.</p>
-            )}
-            {cooldownMinutes !== null && (
-              <p className="helper" style={{ marginTop: 8 }}>
-                Anti-triche : encore {cooldownMinutes} min avant un nouvel achat.
-              </p>
+            {transactionSucceeded && (
+              <>
+                <p>
+                  <strong>Validé le :</strong>{' '}
+                  {validatedAt ? new Date(validatedAt).toLocaleString('fr-FR') : '—'}
+                </p>
+                <p>
+                  <strong>Temps restant :</strong> {formatTimeLeft(timeLeft)}
+                </p>
+              </>
             )}
           </div>
         ) : (
@@ -518,7 +501,7 @@ export default function ScanPage() {
           <div className="grid grid-2" style={{ marginTop: 16 }}>
             <QrScanner
               onResult={(value) => {
-                const parsed = parseMerchantCode(value);
+                const parsed = normalizeMerchantInput(value);
                 if (!parsed) {
                   setError('Commerçant introuvable.');
                   return;
@@ -538,12 +521,12 @@ export default function ScanPage() {
                   value={tokenInput}
                   onChange={(event) => {
                     const value = event.target.value;
-                    setTokenInput(value);
-                    if (value.includes('?m=')) {
-                      const parsed = parseMerchantCode(value);
-                      if (parsed) {
-                        setMerchantCode(parsed);
-                        void validateMerchant(parsed);
+                    const normalized = normalizeMerchantInput(value);
+                    setTokenInput(normalized || value.trim());
+                    if (value.includes('m=')) {
+                      if (normalized) {
+                        setMerchantCode(normalized);
+                        void validateMerchant(normalized);
                       }
                     }
                   }}
@@ -554,7 +537,7 @@ export default function ScanPage() {
                 className="button"
                 type="button"
                 onClick={() => {
-                  const parsed = parseMerchantCode(tokenInput);
+                  const parsed = normalizeMerchantInput(tokenInput);
                   setMerchantCode(parsed);
                   void validateMerchant(parsed);
                 }}
@@ -708,7 +691,7 @@ export default function ScanPage() {
             className="button"
             type="submit"
             style={{ marginTop: 16 }}
-            disabled={!merchantValidated || timeLeft <= 0 || loading || cooldownMinutes !== null}
+            disabled={!merchantValidated || timeLeft <= 0 || loading}
           >
             {loading ? 'Validation...' : 'Valider la transaction'}
           </button>
