@@ -40,6 +40,23 @@ const formatTimeLeft = (seconds: number) => {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 };
 
+const COOLDOWN_MS = 2 * 60 * 60 * 1000;
+const cooldownKey = (code: string) => `pawpass:cooldown:${code}`;
+
+const readCooldownMinutes = (code: string) => {
+  try {
+    const raw = localStorage.getItem(cooldownKey(code));
+    if (!raw) return null;
+    const last = Number(raw);
+    if (Number.isNaN(last)) return null;
+    const remainingMs = COOLDOWN_MS - (Date.now() - last);
+    if (remainingMs <= 0) return null;
+    return Math.ceil(remainingMs / 60000);
+  } catch {
+    return null;
+  }
+};
+
 export default function ScanPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -71,6 +88,8 @@ export default function ScanPage() {
     dashboardUrl: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [cooldownMinutes, setCooldownMinutes] = useState<number | null>(null);
 
   const amountValue = useMemo(() => Number(amount.replace(',', '.')), [amount]);
 
@@ -82,6 +101,7 @@ export default function ScanPage() {
     setExpiryAt(null);
     setTimeLeft(0);
     setSuccessInfo(null);
+    setCooldownMinutes(null);
 
     if (!code) {
       setError('Commerçant introuvable.');
@@ -119,6 +139,7 @@ export default function ScanPage() {
     setValidatedAt(now);
     setExpiryAt(now + 120_000);
     setTimeLeft(120);
+    setCooldownMinutes(readCooldownMinutes(code));
   };
 
   useEffect(() => {
@@ -269,10 +290,22 @@ export default function ScanPage() {
     return () => window.clearInterval(timer);
   }, [expiryAt, merchantValidated]);
 
+  useEffect(() => {
+    if (!merchantCode) {
+      setCooldownMinutes(null);
+      return;
+    }
+    setCooldownMinutes(readCooldownMinutes(merchantCode));
+  }, [merchantCode]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     setStatus(null);
+
+    if (loading) {
+      return;
+    }
 
     if (!merchantCode) {
       setError('Veuillez saisir un code commerçant.');
@@ -286,6 +319,15 @@ export default function ScanPage() {
 
     if (timeLeft <= 0) {
       setError('Le délai est expiré. Veuillez rescanner un commerçant.');
+      return;
+    }
+
+    const cooldown = readCooldownMinutes(merchantCode);
+    if (cooldown !== null) {
+      setCooldownMinutes(cooldown);
+      setError(
+        `Vous avez déjà validé un achat chez ce commerçant récemment. Réessayez dans ${cooldown} min.`
+      );
       return;
     }
 
@@ -369,6 +411,7 @@ export default function ScanPage() {
 
     const walletSpent = reductionActive ? reductionValue : 0;
 
+    setLoading(true);
     const { error: rpcError } = await supabase.rpc(
       'apply_cashback_transaction',
       {
@@ -380,11 +423,19 @@ export default function ScanPage() {
         p_donation_percent: donateCashback ? donationPercent : 0
       }
     );
+    setLoading(false);
 
     if (rpcError) {
       setError(rpcError.message);
       return;
     }
+
+    try {
+      localStorage.setItem(cooldownKey(merchantCode), String(Date.now()));
+    } catch {
+      // ignore storage errors
+    }
+    setCooldownMinutes(readCooldownMinutes(merchantCode));
 
     setStatus('Transaction enregistrée ✅');
     setAmount('');
@@ -452,6 +503,11 @@ export default function ScanPage() {
             </p>
             {timeLeft <= 0 && (
               <p className="error">Le délai est expiré. Veuillez rescanner un commerçant.</p>
+            )}
+            {cooldownMinutes !== null && (
+              <p className="helper" style={{ marginTop: 8 }}>
+                Anti-triche : encore {cooldownMinutes} min avant un nouvel achat.
+              </p>
             )}
           </div>
         ) : (
@@ -652,9 +708,9 @@ export default function ScanPage() {
             className="button"
             type="submit"
             style={{ marginTop: 16 }}
-            disabled={!merchantValidated || timeLeft <= 0}
+            disabled={!merchantValidated || timeLeft <= 0 || loading || cooldownMinutes !== null}
           >
-            Valider la transaction
+            {loading ? 'Validation...' : 'Valider la transaction'}
           </button>
         </form>
 
