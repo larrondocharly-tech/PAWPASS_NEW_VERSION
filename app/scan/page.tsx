@@ -312,9 +312,11 @@ export default function ScanPage() {
 
     const cooldown = readCooldownMinutes(merchantCode);
     if (cooldown !== null) {
-      setError(
-        `Vous avez déjà validé un achat chez ce commerçant récemment. Réessayez dans ${cooldown} min.`
-      );
+      const cooldownText =
+        cooldown >= 120
+          ? '2 heures'
+          : `${cooldown} min`;
+      setError(`Anti-triche : vous pourrez refaire un achat dans ${cooldownText}.`);
       return;
     }
 
