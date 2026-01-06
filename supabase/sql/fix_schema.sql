@@ -56,19 +56,14 @@ declare
 begin
   v_role := lower(coalesce(new.raw_user_meta_data->>'role', 'user'));
 
-  if v_role in ('commercant', 'commerçant') then
-    v_role := 'merchant';
-  end if;
-
   if v_role not in ('user', 'merchant') then
     v_role := 'user';
   end if;
 
-  insert into public.profiles (id, email, role)
-  values (new.id, new.email, v_role)
+  insert into public.profiles (id, role)
+  values (new.id, v_role)
   on conflict (id) do update
-    set email = excluded.email,
-        role = excluded.role;
+    set role = excluded.role;
 
   return new;
 end;

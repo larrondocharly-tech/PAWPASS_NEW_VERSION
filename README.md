@@ -30,3 +30,5 @@ Collez le SQL de schéma, RLS, fonctions SECURITY DEFINER et policies directemen
 - Supabase Dashboard → **SQL Editor** → new query → exécuter.
 
 Le fichier `supabase/sql/fix_schema.sql` contient des policies RLS minimales pour `profiles`, `spas` et `transactions`. Exécutez-le en priorité si vous voyez des erreurs RLS.
+
+Exécutez également `supabase/sql/fix_schema.sql` dans Supabase pour créer/mettre à jour le trigger `handle_new_user` (création du profil avec `role`).

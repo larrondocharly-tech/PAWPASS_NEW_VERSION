@@ -99,10 +99,7 @@ export default function SettingsPage() {
     }
 
     const rawRole = String(user.user_metadata?.role ?? '').toLowerCase();
-    const normalizedRole =
-      rawRole === 'merchant' || rawRole === 'commercant' || rawRole === 'commerçant'
-        ? 'merchant'
-        : 'user';
+    const normalizedRole = rawRole === 'merchant' ? 'merchant' : 'user';
 
     const { data, error: createError } = await supabase
       .from('profiles')
