@@ -100,7 +100,7 @@ export default function SettingsPage() {
 
     const { data, error: createError } = await supabase
       .from('profiles')
-      .insert({ id: user.id, role: 'client' })
+      .insert({ id: user.id, role: 'user' })
       .select('id,role,spa_id,merchant_code')
       .single();
 

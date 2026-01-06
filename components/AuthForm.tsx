@@ -10,14 +10,14 @@ interface AuthFormProps {
   mode: 'login' | 'register';
 }
 
-const roleOptions: UserRole[] = ['client', 'merchant'];
+const roleOptions: UserRole[] = ['user', 'merchant'];
 
 export default function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
   const supabase = createClient();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('client');
+  const [role, setRole] = useState<UserRole>('user');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,7 +117,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           >
             {roleOptions.map((option) => (
               <option key={option} value={option}>
-                {option === 'client' ? 'Client' : 'Commerçant'}
+                {option === 'user' ? 'Client' : 'Commerçant'}
               </option>
             ))}
           </select>
