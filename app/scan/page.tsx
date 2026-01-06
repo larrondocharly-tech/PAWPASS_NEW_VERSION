@@ -160,7 +160,7 @@ export default function ScanPage() {
 
       const { data, error: walletError } = await supabase
         .from('wallets')
-        .select('available_balance')
+        .select('balance')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -169,7 +169,7 @@ export default function ScanPage() {
         return;
       }
 
-      setWalletBalance(data?.available_balance ?? 0);
+      setWalletBalance(data?.balance ?? 0);
     };
 
     setError(null);

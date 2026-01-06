@@ -13,11 +13,10 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string | null>(null);
-  const [wallet, setWallet] = useState<{
-    available_balance: number;
-    total_earned: number;
-    total_donated: number;
-  } | null>(null);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [transactions, setTransactions] = useState<
+    { donation_amount: number | null; cashback_total: number | null; cashback_to_user: number | null }[]
+  >([]);
   const [thanksMessage, setThanksMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,26 +48,27 @@ export default function DashboardPage() {
 
       const { data: walletData, error: walletError } = await supabase
         .from('wallets')
-        .select('available_balance,total_earned,total_donated')
+        .select('balance')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (walletError) {
-        setWallet({
-          available_balance: 0,
-          total_earned: 0,
-          total_donated: 0
-        });
+        setWalletBalance(0);
+      } else {
+        setWalletBalance(Number(walletData?.balance ?? 0));
+      }
+
+      const { data: transactionData, error: transactionError } = await supabase
+        .from('transactions')
+        .select('donation_amount,cashback_total,cashback_to_user')
+        .eq('user_id', user.id);
+
+      if (transactionError) {
+        setError(transactionError.message);
         return;
       }
 
-      setWallet(
-        walletData ?? {
-          available_balance: 0,
-          total_earned: 0,
-          total_donated: 0
-        }
-      );
+      setTransactions(transactionData ?? []);
     };
 
     void loadData();
@@ -93,14 +93,16 @@ export default function DashboardPage() {
   }, [router, searchParams]);
 
   const totals = useMemo(() => {
-    return {
-      donation: wallet?.total_donated ?? 0,
-      cashbackTotal: wallet?.total_earned ?? 0,
-      cashbackToUser: wallet?.available_balance ?? 0
-    };
-  }, [wallet]);
-
-  const walletBalance = Number(wallet?.available_balance ?? 0);
+    return transactions.reduce(
+      (acc, transaction) => {
+        acc.donation += transaction.donation_amount ?? 0;
+        acc.cashbackTotal += transaction.cashback_total ?? 0;
+        acc.cashbackToUser += transaction.cashback_to_user ?? 0;
+        return acc;
+      },
+      { donation: 0, cashbackTotal: 0, cashbackToUser: 0 }
+    );
+  }, [transactions]);
   const progress = Math.min((walletBalance / 5) * 100, 100);
   const missing = Math.max(5 - walletBalance, 0);
 
@@ -149,7 +151,7 @@ export default function DashboardPage() {
         <div className="card">
           <h3>Réductions disponibles</h3>
           <p>
-            <strong>Solde cashback :</strong> {formatCurrency(wallet?.available_balance ?? 0)}
+            <strong>Solde cashback :</strong> {formatCurrency(walletBalance)}
           </p>
           <div style={{ marginTop: 12 }}>
             <div
