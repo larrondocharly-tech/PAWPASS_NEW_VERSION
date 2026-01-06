@@ -71,6 +71,7 @@ export default function ScanPage() {
   const searchParams = useSearchParams();
   const merchantToken = searchParams.get('m');
   const mode = searchParams.get('mode');
+  const [scanMode, setScanMode] = useState<'after_payment' | 'before_payment_discount'>('after_payment');
   const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
@@ -95,6 +96,12 @@ export default function ScanPage() {
     message: string;
     dashboardUrl: string;
   } | null>(null);
+  const [discountSession, setDiscountSession] = useState<{
+    token: string;
+    expires_at: string;
+    amount_reserved: number;
+  } | null>(null);
+  const [discountTimeLeft, setDiscountTimeLeft] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [transactionSucceeded, setTransactionSucceeded] = useState(false);
@@ -149,6 +156,39 @@ export default function ScanPage() {
     setTimeLeft(120);
   };
 
+  const handleStartDiscount = async () => {
+    setError(null);
+    setStatus(null);
+
+    if (!merchantValidated || !merchantCode) {
+      setError('Veuillez scanner/valider un commerçant.');
+      return;
+    }
+
+    const reductionValue = Number(reductionAmount.replace(',', '.'));
+    if (Number.isNaN(reductionValue) || reductionValue <= 0) {
+      setError('Montant de réduction invalide.');
+      return;
+    }
+
+    const { data, error: startError } = await supabase.rpc('start_discount_session', {
+      p_merchant_code: merchantCode,
+      p_amount_reserved: reductionValue
+    });
+
+    if (startError) {
+      setError(startError.message);
+      return;
+    }
+
+    const session = Array.isArray(data) ? data[0] : data;
+    if (!session) {
+      setError('Impossible de démarrer la session.');
+      return;
+    }
+    setDiscountSession(session);
+  };
+
   useEffect(() => {
     const guardRole = async () => {
       const {
@@ -178,6 +218,9 @@ export default function ScanPage() {
 
     if (mode === 'use_wallet') {
       setReductionActive(true);
+    }
+    if (mode === 'before_payment_discount') {
+      setScanMode('before_payment_discount');
     }
 
     if (merchantToken) {
@@ -297,6 +340,21 @@ export default function ScanPage() {
     return () => window.clearInterval(timer);
   }, [expiryAt, merchantValidated]);
 
+  useEffect(() => {
+    if (!discountSession?.expires_at) {
+      setDiscountTimeLeft(0);
+      return;
+    }
+    const expiresAt = new Date(discountSession.expires_at).getTime();
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      setDiscountTimeLeft(remaining);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [discountSession]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -377,14 +435,15 @@ export default function ScanPage() {
       }
     }
 
-    if (receiptRequired && !receiptFile) {
+    if (scanMode === 'after_payment' && receiptRequired && !receiptFile) {
       setError('Le ticket est requis pour cette transaction.');
       return;
     }
 
     let receiptPath: string | null = null;
+    let receiptUrl: string | null = null;
 
-    if (receiptRequired && receiptFile) {
+    if (scanMode === 'after_payment' && receiptRequired && receiptFile) {
       const fileExt = receiptFile.name.split('.').pop();
       const fileName = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -400,6 +459,8 @@ export default function ScanPage() {
       }
 
       receiptPath = uploadData.path;
+      const { data: publicData } = supabase.storage.from('receipts').getPublicUrl(receiptPath);
+      receiptUrl = publicData.publicUrl ?? null;
     }
 
     const amountNet = amountValue - (reductionActive ? reductionValue : 0);
@@ -418,7 +479,8 @@ export default function ScanPage() {
         p_spa_id: donateCashback ? spaId || null : null,
         p_use_wallet: reductionActive,
         p_wallet_spent: walletSpent,
-        p_donation_percent: donateCashback ? donationPercent : 0
+        p_donation_percent: donateCashback ? donationPercent : 0,
+        p_receipt_image_url: receiptUrl
       }
     );
     setLoading(false);
@@ -479,11 +541,29 @@ export default function ScanPage() {
       </div>
 
       <div className="card">
-        <h2>Parcours en 3 étapes</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Parcours en 3 étapes</h2>
+          <Link href="/help">Comment ça marche ?</Link>
+        </div>
         <div className="grid" style={{ gap: 8, marginTop: 12 }}>
           <div className="badge">1 · Scanner</div>
           <div className="badge">2 · Montant</div>
           <div className="badge">3 · Choix</div>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <label className="label">Mode</label>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button className="button" type="button" onClick={() => setScanMode('after_payment')}>
+              Après paiement
+            </button>
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => setScanMode('before_payment_discount')}
+            >
+              Avant paiement
+            </button>
+          </div>
         </div>
 
         <h3 style={{ marginTop: 20 }}>Étape 1 · Scanner</h3>
@@ -590,7 +670,7 @@ export default function ScanPage() {
             </p>
           )}
 
-          {receiptRequired && (
+          {scanMode === 'after_payment' && receiptRequired && (
             <label className="label" htmlFor="receipt">
               Ticket requis
               <input
@@ -603,21 +683,23 @@ export default function ScanPage() {
             </label>
           )}
 
-          <div style={{ marginTop: 16 }}>
-            <label className="label">
-              Souhaitez-vous reverser votre cashback ?
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={donateCashback}
-                onChange={(event) => setDonateCashback(event.target.checked)}
-              />
-              Oui, je souhaite donner
-            </label>
-          </div>
+          {scanMode === 'after_payment' && (
+            <div style={{ marginTop: 16 }}>
+              <label className="label">
+                Souhaitez-vous reverser votre cashback ?
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={donateCashback}
+                  onChange={(event) => setDonateCashback(event.target.checked)}
+                />
+                Oui, je souhaite donner
+              </label>
+            </div>
+          )}
 
-          {donateCashback && (
+          {donateCashback && scanMode === 'after_payment' && (
             <label className="label" htmlFor="association">
               SPA / Association
               <select
@@ -637,7 +719,7 @@ export default function ScanPage() {
             </label>
           )}
 
-          {donateCashback && (
+          {donateCashback && scanMode === 'after_payment' && (
             <label className="label" htmlFor="donationPercent">
               Pourcentage reversé
               <select
@@ -652,60 +734,109 @@ export default function ScanPage() {
             </label>
           )}
 
-          <div style={{ marginTop: 16 }}>
-            <h3>Étape 3 · Choix</h3>
-            <label className="label">Utiliser ma cagnotte</label>
-            <p className="helper">Solde disponible : {formatCurrency(walletBalance)}</p>
-            {walletBalance < 5 ? (
-              <p className="helper">
-                Encore {formatCurrency(5 - walletBalance)} pour pouvoir utiliser vos réductions.
-              </p>
-            ) : (
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => setReductionActive((prev) => !prev)}
-              >
-                {reductionActive ? 'Désactiver la réduction' : 'Utiliser ma cagnotte'}
-              </button>
-            )}
+          {scanMode === 'after_payment' && (
+            <div style={{ marginTop: 16 }}>
+              <h3>Étape 3 · Choix</h3>
+              <label className="label">Utiliser ma cagnotte</label>
+              <p className="helper">Solde disponible : {formatCurrency(walletBalance)}</p>
+              {walletBalance < 5 ? (
+                <p className="helper">
+                  Encore {formatCurrency(5 - walletBalance)} pour pouvoir utiliser vos réductions.
+                </p>
+              ) : (
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => setReductionActive((prev) => !prev)}
+                >
+                  {reductionActive ? 'Désactiver la réduction' : 'Utiliser ma cagnotte'}
+                </button>
+              )}
 
-            {reductionActive && walletBalance >= 5 && (
-              <div style={{ marginTop: 12 }}>
-                <label className="label" htmlFor="reduction">
-                  Montant à utiliser (€)
-                  <input
-                    id="reduction"
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    max={Math.min(walletBalance, amountValue || walletBalance)}
-                    value={reductionAmount}
-                    onChange={(event) => setReductionAmount(event.target.value)}
-                  />
-                </label>
-                {reductionRemaining !== null && (
-                  <p className="helper">
-                    Délai restant : {reductionRemaining}s
-                    {reductionExpired ? ' (expiré)' : ''}
+              {reductionActive && walletBalance >= 5 && (
+                <div style={{ marginTop: 12 }}>
+                  <label className="label" htmlFor="reduction">
+                    Montant à utiliser (€)
+                    <input
+                      id="reduction"
+                      className="input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      max={Math.min(walletBalance, amountValue || walletBalance)}
+                      value={reductionAmount}
+                      onChange={(event) => setReductionAmount(event.target.value)}
+                    />
+                  </label>
+                  {reductionRemaining !== null && (
+                    <p className="helper">
+                      Délai restant : {reductionRemaining}s
+                      {reductionExpired ? ' (expiré)' : ''}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {scanMode === 'before_payment_discount' && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <h3>Utiliser mes crédits (avant paiement)</h3>
+              <label className="label" htmlFor="discountAmount">
+                Montant de réduction à utiliser
+                <input
+                  id="discountAmount"
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={reductionAmount}
+                  onChange={(event) => setReductionAmount(event.target.value)}
+                />
+              </label>
+              <button className="button" type="button" onClick={handleStartDiscount}>
+                Générer le code
+              </button>
+              {discountSession && (
+                <div className="card" style={{ marginTop: 12 }}>
+                  <h3>Montrez au commerçant</h3>
+                  <p style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+                    {formatCurrency(discountSession.amount_reserved)}
                   </p>
-                )}
-              </div>
-            )}
-          </div>
+                  <p>
+                    <strong>Code :</strong> {discountSession.token}
+                  </p>
+                  <p>
+                    <strong>Commerçant :</strong> {merchant?.merchant_code ?? merchant?.id}
+                  </p>
+                  <p>
+                    <strong>Temps restant :</strong> {formatTimeLeft(discountTimeLeft)}
+                  </p>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => setDiscountSession(null)}
+                  >
+                    Annuler
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {error && <p className="error">{error}</p>}
           {status && <p>{status}</p>}
 
-          <button
-            className="button"
-            type="submit"
-            style={{ marginTop: 16 }}
-            disabled={!merchantValidated || timeLeft <= 0 || loading}
-          >
-            {loading ? 'Validation...' : 'Valider la transaction'}
-          </button>
+          {scanMode === 'after_payment' && (
+            <button
+              className="button"
+              type="submit"
+              style={{ marginTop: 16 }}
+              disabled={!merchantValidated || timeLeft <= 0 || loading}
+            >
+              {loading ? 'Validation...' : 'Valider la transaction'}
+            </button>
+          )}
         </form>
 
         {successInfo && (

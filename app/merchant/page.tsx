@@ -21,6 +21,8 @@ export default function MerchantPage() {
   const [error, setError] = useState<string | null>(null);
   const [qrValue, setQrValue] = useState('');
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [discountToken, setDiscountToken] = useState('');
+  const [discountStatus, setDiscountStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const loadMerchant = async () => {
@@ -154,6 +156,30 @@ export default function MerchantPage() {
     window.location.href = '/login';
   };
 
+  const handleApproveDiscount = async () => {
+    setDiscountStatus(null);
+    const { error: approveError } = await supabase.rpc('approve_discount_session', {
+      token: discountToken
+    });
+    if (approveError) {
+      setDiscountStatus(approveError.message);
+      return;
+    }
+    setDiscountStatus('Réduction approuvée ✅');
+  };
+
+  const handleConsumeDiscount = async () => {
+    setDiscountStatus(null);
+    const { error: consumeError } = await supabase.rpc('consume_discount_session', {
+      token: discountToken
+    });
+    if (consumeError) {
+      setDiscountStatus(consumeError.message);
+      return;
+    }
+    setDiscountStatus('Réduction consommée ✅');
+  };
+
   return (
     <div className="container">
       <div className="nav">
@@ -195,6 +221,28 @@ export default function MerchantPage() {
               </label>
               <p className="helper">Les clients scannent ce QR à la caisse.</p>
             </div>
+          </div>
+          <div className="card">
+            <h2>Valider réduction</h2>
+            <label className="label" htmlFor="discountToken">
+              Code de réduction
+              <input
+                id="discountToken"
+                className="input"
+                value={discountToken}
+                onChange={(event) => setDiscountToken(event.target.value)}
+                placeholder="Token de session"
+              />
+            </label>
+            <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+              <button className="button" type="button" onClick={handleApproveDiscount}>
+                Approuver
+              </button>
+              <button className="button secondary" type="button" onClick={handleConsumeDiscount}>
+                Consommer
+              </button>
+            </div>
+            {discountStatus && <p className="helper">{discountStatus}</p>}
           </div>
         </div>
       ) : (
