@@ -21,7 +21,7 @@ const baseNavItems = [
 export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
   const pathname = usePathname();
   const supabase = createClient();
-  const [role, setRole] = useState<'client' | 'merchant'>('client');
+  const [role, setRole] = useState<'user' | 'merchant' | 'refuge' | 'admin'>('user');
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -32,7 +32,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setRole('client');
+        setRole('user');
         setIsAuthenticated(false);
         return;
       }
@@ -45,12 +45,17 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
         .maybeSingle();
 
       if (error) {
-        setRole('client');
+        setRole('user');
         setIsAuthenticated(true);
         return;
       }
 
-      setRole(data?.role?.toLowerCase() === 'merchant' ? 'merchant' : 'client');
+      const nextRole = data?.role?.toLowerCase();
+      if (nextRole === 'admin' || nextRole === 'merchant' || nextRole === 'refuge') {
+        setRole(nextRole);
+      } else {
+        setRole('user');
+      }
     };
 
     void loadRole();
@@ -77,7 +82,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
   return (
     <div className="nav">
-      <Image src="/pawpass-logo.svg" alt="PawPass" width={140} height={70} priority />
+      <Image src="/pawpass-logo.jpg" alt="PawPass" width={140} height={70} priority />
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
@@ -98,6 +103,21 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
             </Link>
           );
         })}
+        {role === 'admin' && (
+          <Link
+            href="/admin"
+            style={{
+              fontWeight: pathname.startsWith('/admin') ? 700 : 500,
+              color: pathname.startsWith('/admin') ? '#0e3a4a' : 'inherit',
+              background: pathname.startsWith('/admin') ? '#f3d9a4' : 'transparent',
+              padding: '6px 12px',
+              borderRadius: 10
+            }}
+            aria-current={pathname.startsWith('/admin') ? 'page' : undefined}
+          >
+            Admin
+          </Link>
+        )}
         {isAuthenticated && (
           <>
             <button
