@@ -113,22 +113,23 @@ export default function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', data.user.id)
-      .single();
-
-    if (profileError) {
-      setError(profileError.message);
+    const nextSession = data.session ?? (await supabase.auth.getSession()).data.session;
+    if (!nextSession) {
+      setError('Impossible de démarrer une session.');
       setLoading(false);
       return;
     }
 
     setLoading(false);
-    const profileRole = profile.role?.toLowerCase();
-    if (profileRole === 'merchant') {
+    const role =
+      (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
+
+    if (role === 'admin') {
+      router.push('/admin');
+    } else if (role === 'merchant') {
       router.push('/merchant');
+    } else if (role === 'refuge') {
+      router.push('/refuge');
     } else {
       router.push('/dashboard');
     }
