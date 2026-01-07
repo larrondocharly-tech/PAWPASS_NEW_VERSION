@@ -1,6 +1,5 @@
 'use client';
 
-import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 
 const faqItems = [
@@ -37,15 +36,9 @@ const faqItems = [
 ];
 
 export default function FaqPage() {
-  const supabase = createClient();
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
   return (
     <main className="container">
-      <TopNav title="FAQ" onSignOut={handleSignOut} />
+      <TopNav title="FAQ" />
 
       <section className="card" style={{ marginBottom: 24 }}>
         <h1>FAQ – Questions fréquentes</h1>

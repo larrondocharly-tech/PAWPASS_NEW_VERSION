@@ -1,19 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 
 export default function HowItWorksPage() {
-  const supabase = createClient();
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
   return (
     <main className="container">
-      <TopNav title="Comment fonctionne PawPass ?" onSignOut={handleSignOut} />
+      <TopNav title="Comment fonctionne PawPass ?" />
 
       <section className="card" style={{ marginBottom: 24 }}>
         <h1>Comment fonctionne PawPass ?</h1>

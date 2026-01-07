@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 
 export default function HelpPage() {
@@ -13,7 +12,7 @@ export default function HelpPage() {
 
   return (
     <div className="container">
-      <TopNav title="Comment fonctionne PawPass ?" onSignOut={handleSignOut} />
+      <TopNav title="Comment fonctionne PawPass ?" />
 
       <div className="grid grid-2">
         <div className="card">
@@ -47,22 +46,6 @@ export default function HelpPage() {
             temps.
           </p>
         </div>
-
-        <div className="card">
-          <h2>Dons aux SPA</h2>
-          <p className="helper">🐾 Soutenir les associations</p>
-          <p>
-            Vous pouvez choisir de donner une partie ou la totalité de vos crédits à une SPA
-            partenaire. PawPass collecte les crédits et les reverse aux associations dans un second
-            temps.
-          </p>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 24 }}>
-        <Link className="button" href="/scan">
-          Revenir au scan
-        </Link>
       </div>
 
       <div style={{ marginTop: 24 }}>

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 
 interface ContactFormState {
@@ -12,7 +11,6 @@ interface ContactFormState {
 }
 
 export default function ContactPage() {
-  const supabase = createClient();
   const [formState, setFormState] = useState<ContactFormState>({
     name: '',
     email: '',
@@ -21,11 +19,6 @@ export default function ContactPage() {
   });
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
 
   const handleChange = (field: keyof ContactFormState, value: string) => {
     setFormState((prev) => ({ ...prev, [field]: value }));
@@ -63,7 +56,7 @@ export default function ContactPage() {
 
   return (
     <main className="container">
-      <TopNav title="Contact" onSignOut={handleSignOut} />
+      <TopNav title="Contact" />
 
       <section className="card" style={{ marginBottom: 24 }}>
         <h1>Contact</h1>

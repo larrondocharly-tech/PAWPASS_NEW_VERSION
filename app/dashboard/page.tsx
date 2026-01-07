@@ -18,16 +18,6 @@ interface TransactionSummary {
   created_at: string;
 }
 
-interface TransactionSummary {
-  id: string;
-  merchant_id: string | null;
-  amount: number;
-  cashback_total: number | null;
-  donation_amount: number | null;
-  wallet_spent: number | null;
-  created_at: string;
-}
-
 export default function DashboardPage() {
   const supabase = createClient();
   const router = useRouter();
