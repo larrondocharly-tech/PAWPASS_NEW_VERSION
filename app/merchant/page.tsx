@@ -11,7 +11,10 @@ import { formatCurrency } from '@/lib/utils';
 interface TransactionLite {
   amount: number;
   cashback_total: number | null;
+  created_at: string;
 }
+
+const CASHBACK_RATE = 0.05;
 
 export default function MerchantPage() {
   const supabase = createClient();
@@ -88,7 +91,7 @@ export default function MerchantPage() {
 
       const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
-        .select('amount,cashback_total')
+        .select('amount,cashback_total,created_at')
         .eq('merchant_id', merchantData.id);
 
       if (transactionError) {
@@ -126,7 +129,26 @@ export default function MerchantPage() {
       (sum, transaction) => sum + (transaction.cashback_total ?? 0),
       0
     );
-    return { totalVolume, totalCashback, count: transactions.length };
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthly = transactions.filter(
+      (transaction) => new Date(transaction.created_at).getTime() >= monthStart.getTime()
+    );
+    const monthlyCashback = monthly.reduce(
+      (sum, transaction) => sum + (transaction.cashback_total ?? 0),
+      0
+    );
+    const monthlyRevenueEstimate =
+      CASHBACK_RATE > 0 ? monthlyCashback / CASHBACK_RATE : monthlyCashback;
+    return {
+      totalVolume,
+      totalCashback,
+      count: transactions.length,
+      monthlyCount: monthly.length,
+      monthlyCashback,
+      monthlyRevenueEstimate
+    };
   }, [transactions]);
 
   const handleCopy = async () => {
@@ -174,13 +196,15 @@ export default function MerchantPage() {
           <div className="card">
             <h2>Statistiques</h2>
             <p>
-              <strong>Nombre de transactions :</strong> {stats.count}
+              <strong>Transactions ce mois-ci :</strong> {stats.monthlyCount}
             </p>
             <p>
-              <strong>Volume total :</strong> {formatCurrency(stats.totalVolume)}
+              <strong>Cashback distribué (mois) :</strong>{' '}
+              {formatCurrency(stats.monthlyCashback)}
             </p>
             <p>
-              <strong>Cashback distribué :</strong> {formatCurrency(stats.totalCashback)}
+              <strong>CA estimé PawPass :</strong>{' '}
+              {formatCurrency(stats.monthlyRevenueEstimate)}
             </p>
             <button className="button" type="button" onClick={handleCopy} style={{ marginTop: 12 }}>
               Copier le lien QR
@@ -201,6 +225,34 @@ export default function MerchantPage() {
       ) : (
         <div className="card">
           <p className="helper">Chargement des informations commerçant…</p>
+        </div>
+      )}
+
+      {merchant && (
+        <div className="grid grid-2" style={{ marginTop: 24 }}>
+          <div className="card">
+            <h3>Résumé du mois</h3>
+            <p>
+              Vous avez généré environ{' '}
+              <strong>{formatCurrency(stats.monthlyRevenueEstimate)}</strong> de chiffre d’affaires
+              grâce à PawPass.
+            </p>
+            <p className="helper">
+              Basé sur {formatCurrency(stats.monthlyCashback)} de cashback distribué ce mois-ci.
+            </p>
+          </div>
+          <div className="card">
+            <h3>Totaux cumulés</h3>
+            <p>
+              <strong>Transactions au total :</strong> {stats.count}
+            </p>
+            <p>
+              <strong>Volume total :</strong> {formatCurrency(stats.totalVolume)}
+            </p>
+            <p>
+              <strong>Cashback distribué :</strong> {formatCurrency(stats.totalCashback)}
+            </p>
+          </div>
         </div>
       )}
 
