@@ -11,12 +11,11 @@ interface TopNavProps {
   onSignOut?: () => void;
 }
 
-const clientNavItems = [
-  { href: '/dashboard', label: 'Tableau de bord' },
-  { href: '/scan', label: 'Scanner' }
-];
-
-const merchantNavItems = [{ href: '/merchant', label: 'Tableau de bord' }];
+const baseNavItems = [
+  { key: 'dashboard', label: 'Tableau de bord' },
+  { key: 'scan', label: 'Scanner' },
+  { key: 'history', label: 'Historique' }
+] as const;
 
 export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
   const pathname = usePathname();
@@ -56,7 +55,18 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     void loadRole();
   }, [supabase]);
 
-  const navItems = role === 'merchant' ? merchantNavItems : clientNavItems;
+  const navItems = baseNavItems.map((item) => {
+    if (item.key === 'dashboard') {
+      return {
+        href: role === 'merchant' ? '/merchant' : '/dashboard',
+        label: item.label
+      };
+    }
+    if (item.key === 'scan') {
+      return { href: '/scan', label: item.label };
+    }
+    return { href: '/transactions', label: item.label };
+  });
   const handleSignOut = onSignOut
     ? onSignOut
     : async () => {
@@ -69,22 +79,17 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
       <strong>{title}</strong>
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
         {navItems.map((item) => {
-          const isActive =
-            role === 'merchant'
-              ? pathname.startsWith('/merchant')
-              : item.href === '/dashboard'
-              ? pathname.startsWith('/dashboard')
-              : pathname.startsWith('/scan');
+          const isActive = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
               style={{
                 fontWeight: isActive ? 700 : 500,
-                color: isActive ? '#0f172a' : 'inherit',
-                background: isActive ? '#e2e8f0' : 'transparent',
-                padding: '6px 10px',
-                borderRadius: 8
+                color: isActive ? '#0e3a4a' : 'inherit',
+                background: isActive ? '#f3d9a4' : 'transparent',
+                padding: '6px 12px',
+                borderRadius: 10
               }}
               aria-current={isActive ? 'page' : undefined}
             >

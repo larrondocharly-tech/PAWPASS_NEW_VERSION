@@ -17,33 +17,11 @@ interface AccountMenuOverlayProps {
   onSignOut: () => Promise<void> | void;
 }
 
-const buildClientItems = (onSignOut: () => Promise<void> | void, onClose: () => void) =>
+const buildMenuItems = (onSignOut: () => Promise<void> | void, onClose: () => void) =>
   [
-    { label: 'Ma cagnotte & mes dons', href: '/dashboard', icon: '💰' },
-    { label: 'Scanner un commerçant', href: '/scan', icon: '📷' },
-    { label: 'Mes transactions', href: '/transactions', icon: '🧾' },
-    { label: 'Mon profil', href: '/settings', icon: '👤' },
-    { label: 'Centre d’aide / FAQ', href: '/faq', icon: '❓' },
     { label: 'Comment ça marche ?', href: '/how-it-works', icon: '🧭' },
-    { label: 'Nous contacter', href: '/contact', icon: '✉️' },
-    { label: 'Mentions légales', href: '/mentions-legales', icon: '⚖️' },
-    {
-      label: 'Déconnexion',
-      icon: '🚪',
-      action: async () => {
-        await onSignOut();
-        onClose();
-      }
-    }
-  ] satisfies MenuItem[];
-
-const buildMerchantItems = (onSignOut: () => Promise<void> | void, onClose: () => void) =>
-  [
-    { label: 'Mon tableau de bord commerçant', href: '/merchant', icon: '🏪' },
-    { label: 'Mes transactions', href: '/transactions', icon: '🧾' },
-    { label: 'Mon profil', href: '/settings', icon: '👤' },
-    { label: 'Centre d’aide / FAQ', href: '/faq', icon: '❓' },
-    { label: 'Nous contacter', href: '/contact', icon: '✉️' },
+    { label: 'FAQ', href: '/faq', icon: '❓' },
+    { label: 'Contact', href: '/contact', icon: '✉️' },
     { label: 'Mentions légales', href: '/mentions-legales', icon: '⚖️' },
     {
       label: 'Déconnexion',
@@ -76,8 +54,7 @@ export default function AccountMenuOverlay({
 
   if (!isOpen) return null;
 
-  const items =
-    role === 'merchant' ? buildMerchantItems(onSignOut, onClose) : buildClientItems(onSignOut, onClose);
+  const items = buildMenuItems(onSignOut, onClose);
 
   return (
     <div
@@ -87,9 +64,8 @@ export default function AccountMenuOverlay({
         zIndex: 80,
         background: 'rgba(15, 23, 42, 0.4)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16
+        alignItems: 'stretch',
+        justifyContent: 'flex-end'
       }}
     >
       <div
@@ -99,10 +75,14 @@ export default function AccountMenuOverlay({
         aria-labelledby="account-menu-title"
         style={{
           width: '100%',
-          maxWidth: 640,
-          maxHeight: '90vh',
+          maxWidth: 420,
+          height: '100%',
           overflowY: 'auto',
-          position: 'relative'
+          position: 'relative',
+          borderTopRightRadius: 0,
+          borderBottomRightRadius: 0,
+          borderTopLeftRadius: 20,
+          borderBottomLeftRadius: 20
         }}
       >
         <button
@@ -141,7 +121,7 @@ export default function AccountMenuOverlay({
               }}
               style={{
                 width: '100%',
-                padding: '14px 8px',
+                padding: '16px 12px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -152,7 +132,9 @@ export default function AccountMenuOverlay({
               }}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span aria-hidden="true">{item.icon ?? '•'}</span>
+                <span aria-hidden="true" style={{ color: '#f3d9a4' }}>
+                  {item.icon ?? '•'}
+                </span>
                 <span style={{ fontWeight: 600, textTransform: 'uppercase' }}>{item.label}</span>
               </span>
               <span aria-hidden="true">→</span>
