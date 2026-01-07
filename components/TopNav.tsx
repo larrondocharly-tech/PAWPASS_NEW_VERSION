@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import AccountMenuOverlay from '@/components/AccountMenuOverlay';
@@ -76,7 +77,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
   return (
     <div className="nav">
-      <strong>{title}</strong>
+      <Image src="/pawpass-logo.svg" alt="PawPass" width={140} height={70} priority />
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
