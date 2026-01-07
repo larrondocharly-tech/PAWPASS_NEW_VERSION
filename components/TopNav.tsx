@@ -77,7 +77,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
   return (
     <div className="nav">
-      <Image src="/pawpass-logo.svg" alt="PawPass" width={140} height={70} priority />
+      <Image src="/pawpass-logo.jpg" alt="PawPass" width={140} height={70} priority />
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
