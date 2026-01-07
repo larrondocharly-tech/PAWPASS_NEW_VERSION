@@ -1,11 +1,13 @@
 :root {
   color-scheme: light;
-  --primary: #1f6feb;
-  --bg: #f6f7fb;
-  --text: #0f172a;
-  --muted: #64748b;
+  --primary: #5fd3b3;
+  --primary-dark: #2e7d66;
+  --bg: #f9f9f4;
+  --text: #0e3a4a;
+  --muted: #4c6b76;
   --card: #ffffff;
-  --border: #e2e8f0;
+  --border: #e6e7df;
+  --warm: #f3d9a4;
 }
 
 * {
@@ -24,7 +26,7 @@ main {
 }
 
 a {
-  color: inherit;
+  color: var(--primary);
   text-decoration: none;
 }
 
@@ -37,9 +39,9 @@ a {
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 18px;
   padding: 24px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 28px rgba(14, 58, 74, 0.08);
 }
 
 .button {
@@ -47,26 +49,32 @@ a {
   align-items: center;
   justify-content: center;
   padding: 12px 18px;
-  border-radius: 10px;
+  border-radius: 14px;
   border: none;
   background: var(--primary);
-  color: white;
+  color: var(--text);
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 6px 16px rgba(95, 211, 179, 0.35);
 }
 
 .button.secondary {
-  background: #0f172a;
+  background: transparent;
+  border: 1px solid var(--primary-dark);
+  color: var(--text);
+  box-shadow: none;
 }
 
 .input,
 .select {
   width: 100%;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   font-size: 1rem;
   margin-top: 6px;
+  background: #ffffff;
+  color: var(--text);
 }
 
 .label {
@@ -100,7 +108,7 @@ a {
   align-items: center;
   border-radius: 999px;
   padding: 4px 10px;
-  background: #e2e8f0;
+  background: var(--warm);
   font-size: 0.8rem;
   font-weight: 600;
 }
@@ -122,9 +130,42 @@ a {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 32px;
+  background: var(--text);
+  color: #f9f9f4;
+  padding: 12px 16px;
+  border-radius: 16px;
 }
 
 .nav-links {
   display: flex;
   gap: 16px;
+}
+
+.nav-links a {
+  color: #f9f9f4;
+}
+
+.nav-links a:hover,
+.nav-links button:hover {
+  color: var(--primary);
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.site-footer-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+}
+
+@media (min-width: 768px) {
+  .site-footer-inner {
+    flex-direction: row;
+  }
 }
