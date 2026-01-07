@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
+import AccountMenuOverlay from '@/components/AccountMenuOverlay';
 
 interface TopNavProps {
   title?: string;
@@ -27,6 +28,8 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
   const pathname = usePathname();
   const supabase = createClient();
   const [role, setRole] = useState<'client' | 'merchant'>('client');
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     const loadRole = async () => {
@@ -36,8 +39,10 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
       if (!user) {
         setRole('client');
+        setIsAuthenticated(false);
         return;
       }
+      setIsAuthenticated(true);
 
       const { data, error } = await supabase
         .from('profiles')
@@ -47,6 +52,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
       if (error) {
         setRole('client');
+        setIsAuthenticated(true);
         return;
       }
 
@@ -87,10 +93,29 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
             </Link>
           );
         })}
-        <button className="button secondary" type="button" onClick={handleSignOut}>
-            Déconnexion
-        </button>
+        {isAuthenticated && (
+          <>
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => setIsAccountMenuOpen(true)}
+            >
+              Menu
+            </button>
+            <button className="button secondary" type="button" onClick={handleSignOut}>
+              Déconnexion
+            </button>
+          </>
+        )}
       </div>
+      {isAuthenticated && (
+        <AccountMenuOverlay
+          isOpen={isAccountMenuOpen}
+          onClose={() => setIsAccountMenuOpen(false)}
+          role={role}
+          onSignOut={handleSignOut}
+        />
+      )}
     </div>
   );
 }
