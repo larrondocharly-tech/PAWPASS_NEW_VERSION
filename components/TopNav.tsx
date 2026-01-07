@@ -73,6 +73,10 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     }
     return { href: '/transactions', label: item.label };
   });
+
+  if (role === 'admin') {
+    navItems.push({ href: '/admin', label: 'Admin' });
+  }
   const handleSignOut = onSignOut
     ? onSignOut
     : async () => {
