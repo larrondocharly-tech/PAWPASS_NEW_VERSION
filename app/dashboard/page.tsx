@@ -174,8 +174,18 @@ export default function DashboardPage() {
             <p>
               <strong>Total cashback gagné :</strong> {formatCurrency(totals.cashbackTotal)}
             </p>
-            <p>
-              <strong>Total donné aux SPA :</strong> {formatCurrency(totals.donation)}
+            <p
+              style={{
+                fontSize: '1.1rem',
+                fontWeight: 700,
+                color: '#2e7d66',
+                background: 'rgba(95, 211, 179, 0.15)',
+                padding: '4px 10px',
+                borderRadius: 10,
+                display: 'inline-block'
+              }}
+            >
+              Total donné aux SPA : {formatCurrency(totals.donation)}
             </p>
             <p>
               <strong>Transactions réalisées :</strong> {totals.count}
