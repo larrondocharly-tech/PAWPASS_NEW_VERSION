@@ -7,6 +7,8 @@ import { createClient } from '@/lib/supabaseClient';
 import type { MerchantProfile, Spa } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
 import QrScanner from '@/components/QrScanner';
+import DiscountCoupon from '@/components/DiscountCoupon';
+import TopNav from '@/components/TopNav';
 
 const MAX_AMOUNT = 200;
 const RANDOM_RECEIPT_RATE = 0.1;
@@ -129,8 +131,6 @@ export default function ScanPage() {
     createdAt: string;
     expiresAt: string;
   } | null>(null);
-  const [discountTimeLeft, setDiscountTimeLeft] = useState(0);
-  const [couponConfirmed, setCouponConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [transactionSucceeded, setTransactionSucceeded] = useState(false);
@@ -141,12 +141,6 @@ export default function ScanPage() {
     () => Number(reductionAmount.replace(',', '.')),
     [reductionAmount]
   );
-  const amountAfterReduction = useMemo(() => {
-    if (!amountValue || Number.isNaN(amountValue)) return null;
-    if (Number.isNaN(reductionValue)) return amountValue;
-    return Math.max(amountValue - Math.max(0, reductionValue), 0);
-  }, [amountValue, reductionValue]);
-
   const validateMerchant = async (code: string) => {
     setError(null);
     setMerchant(null);
@@ -246,7 +240,6 @@ export default function ScanPage() {
       createdAt: session.created_at,
       expiresAt: session.expires_at
     });
-    setCouponConfirmed(false);
   };
 
   useEffect(() => {
@@ -412,21 +405,6 @@ export default function ScanPage() {
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [expiryAt, merchantValidated]);
-
-  useEffect(() => {
-    if (!discountCoupon?.expiresAt) {
-      setDiscountTimeLeft(0);
-      return;
-    }
-    const expiresAt = new Date(discountCoupon.expiresAt).getTime();
-    const tick = () => {
-      const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
-      setDiscountTimeLeft(remaining);
-    };
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [discountCoupon]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -609,16 +587,14 @@ export default function ScanPage() {
     });
   };
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
   return (
     <div className="container">
-      <div className="nav">
-        <strong>Scanner PawPass</strong>
-        <div className="nav-links">
-          <Link href="/dashboard">Tableau de bord</Link>
-          <Link href="/transactions">Historique</Link>
-          <Link href="/settings">Paramètres</Link>
-        </div>
-      </div>
+      <TopNav title="Scanner PawPass" onSignOut={handleSignOut} />
 
       {showCardModal && (
         <div
@@ -710,32 +686,72 @@ export default function ScanPage() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2>Parcours en 3 étapes</h2>
-          <Link href="/help">Comment ça marche ?</Link>
+          <Link href="/how-it-works">Comment ça marche ?</Link>
         </div>
-        <div className="grid" style={{ gap: 8, marginTop: 12 }}>
-          <div className="badge">1 · Scanner</div>
-          <div className="badge">2 · Montant</div>
-          <div className="badge">3 · Choix</div>
+        <div className="grid grid-2" style={{ gap: 12, marginTop: 16 }}>
+          {[
+            { icon: '📱', title: 'Scanner le QR', text: 'Scanner le QR / entrer le code' },
+            { icon: '💶', title: 'Saisir le montant', text: 'Montant payé ou réduction' },
+            { icon: '🎁', title: 'Choisir', text: 'Cashback, don SPA ou réduction' }
+          ].map((step) => (
+            <div
+              key={step.title}
+              className="card"
+              style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'center' }}
+            >
+              <div style={{ fontSize: '1.6rem' }}>{step.icon}</div>
+              <div>
+                <strong>{step.title}</strong>
+                <p className="helper" style={{ margin: 0 }}>
+                  {step.text}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 20 }}>
           <label className="label">Mode de scan</label>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button
-              className={`button${scanMode === 'after' ? '' : ' secondary'}`}
-              type="button"
-              aria-pressed={scanMode === 'after'}
-              onClick={() => setScanMode('after')}
-            >
-              Après paiement
-            </button>
-            <button
-              className={`button${scanMode === 'before' ? '' : ' secondary'}`}
-              type="button"
-              aria-pressed={scanMode === 'before'}
-              onClick={() => setScanMode('before')}
-            >
-              Avant paiement
-            </button>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {([
+              { key: 'after', label: 'Après paiement', helper: 'Cashback après achat' },
+              { key: 'before', label: 'Avant paiement', helper: 'Réduction immédiate' }
+            ] as const).map((option) => {
+              const active = scanMode === option.key;
+              return (
+                <button
+                  key={option.key}
+                  className={`button${active ? '' : ' secondary'}`}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setScanMode(option.key)}
+                  style={{
+                    border: active ? '2px solid #5fd3b3' : '1px solid #e6e7df',
+                    background: active ? '#dff5ee' : '#ffffff',
+                    color: '#0e3a4a',
+                    boxShadow: active ? '0 0 0 4px rgba(95, 211, 179, 0.25)' : 'none',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: 4,
+                    minWidth: 200
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontWeight: 700
+                    }}
+                  >
+                    <span>{active ? '✅' : '⚪️'}</span>
+                    {option.label}
+                  </span>
+                  <span style={{ display: 'block', fontSize: '0.8rem', opacity: 0.8 }}>
+                    {option.helper}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -761,107 +777,105 @@ export default function ScanPage() {
           <p className="helper">Aucun commerçant chargé.</p>
         )}
 
-        <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
-          <div className="grid grid-2" style={{ marginTop: 16 }}>
-            <QrScanner
-              onResult={(value) => {
-                const parsed = normalizeMerchantInput(value);
-                if (!parsed) {
-                  setError('Commerçant introuvable.');
-                  return;
-                }
-                setMerchantCode(parsed);
-                setTokenInput(parsed);
-                void validateMerchant(parsed);
-              }}
-            />
-            <div className="card">
-              <h3>Entrer le code commerçant</h3>
-              <label className="label" htmlFor="token">
-                Code commerçant
-                <input
-                  id="token"
-                  className="input"
-                  value={tokenInput}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    const normalized = normalizeMerchantInput(value);
-                    setTokenInput(normalized || value.trim());
-                    if (value.includes('m=')) {
-                      if (normalized) {
-                        setMerchantCode(normalized);
-                        void validateMerchant(normalized);
-                      }
-                    }
-                  }}
-                  placeholder="Ex: PP_XXXX"
-                />
-              </label>
-              <button
-                className="button"
-                type="button"
-                onClick={() => {
-                  const parsed = normalizeMerchantInput(tokenInput);
-                  setMerchantCode(parsed);
-                  void validateMerchant(parsed);
-                }}
-                style={{ marginTop: 12 }}
-              >
-                Continuer
-              </button>
-              {merchantCode && (
-                <p className="helper" style={{ marginTop: 8 }}>
-                  Code commerçant détecté : <strong>{merchantCode}</strong>
-                </p>
-              )}
-            </div>
-          </div>
-
-          <h3 style={{ marginTop: 16 }}>Étape 2 · Montant</h3>
-          <label className="label" htmlFor="amount">
-            Montant du ticket
-            <input
-              id="amount"
-              className="input"
-              type="number"
-              step="0.01"
-              min="0"
-              max={MAX_AMOUNT}
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              ref={amountInputRef}
-              required
-            />
-            <p className="helper">Plafond de {MAX_AMOUNT} € par transaction.</p>
-          </label>
-
-          {amountValue > 0 && !Number.isNaN(amountValue) && (
-            <p className="helper">
-              Cashback estimé :{' '}
-              <strong>
-                {formatCurrency((amountValue * DEFAULT_CASHBACK_PERCENT) / 100)}
-              </strong>
-            </p>
-          )}
-
-          {scanMode === 'after' && receiptRequired && (
-            <label className="label" htmlFor="receipt">
-              Ticket requis
+        <div className="grid grid-2" style={{ marginTop: 16 }}>
+          <QrScanner
+            onResult={(value) => {
+              const parsed = normalizeMerchantInput(value);
+              if (!parsed) {
+                setError('Commerçant introuvable.');
+                return;
+              }
+              setMerchantCode(parsed);
+              setTokenInput(parsed);
+              void validateMerchant(parsed);
+            }}
+          />
+          <div className="card">
+            <h3>Entrer le code commerçant</h3>
+            <label className="label" htmlFor="token">
+              Code commerçant
               <input
-                id="receipt"
+                id="token"
                 className="input"
-                type="file"
-                accept="image/*"
-                onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)}
+                value={tokenInput}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const normalized = normalizeMerchantInput(value);
+                  setTokenInput(normalized || value.trim());
+                  if (value.includes('m=')) {
+                    if (normalized) {
+                      setMerchantCode(normalized);
+                      void validateMerchant(normalized);
+                    }
+                  }
+                }}
+                placeholder="Ex: PP_XXXX"
               />
             </label>
-          )}
+            <button
+              className="button"
+              type="button"
+              onClick={() => {
+                const parsed = normalizeMerchantInput(tokenInput);
+                setMerchantCode(parsed);
+                void validateMerchant(parsed);
+              }}
+              style={{ marginTop: 12 }}
+            >
+              Continuer
+            </button>
+            {merchantCode && (
+              <p className="helper" style={{ marginTop: 8 }}>
+                Code commerçant détecté : <strong>{merchantCode}</strong>
+              </p>
+            )}
+          </div>
+        </div>
 
-          {scanMode === 'after' && (
-            <div style={{ marginTop: 16 }}>
-              <label className="label">
-                Souhaitez-vous reverser votre cashback ?
+        {scanMode === 'after' && (
+          <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
+            <h3 style={{ marginTop: 16 }}>Étape 2 · Montant</h3>
+            <label className="label" htmlFor="amount">
+              Montant du ticket
+              <input
+                id="amount"
+                className="input"
+                type="number"
+                step="0.01"
+                min="0"
+                max={MAX_AMOUNT}
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                ref={amountInputRef}
+                required
+              />
+              <p className="helper">Plafond de {MAX_AMOUNT} € par transaction.</p>
+            </label>
+
+            {amountValue > 0 && !Number.isNaN(amountValue) && (
+              <p className="helper">
+                Cashback estimé :{' '}
+                <strong>
+                  {formatCurrency((amountValue * DEFAULT_CASHBACK_PERCENT) / 100)}
+                </strong>
+              </p>
+            )}
+
+            {receiptRequired && (
+              <label className="label" htmlFor="receipt">
+                Ticket requis
+                <input
+                  id="receipt"
+                  className="input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)}
+                />
               </label>
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <label className="label">Souhaitez-vous reverser votre cashback ?</label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="checkbox"
@@ -871,44 +885,44 @@ export default function ScanPage() {
                 Oui, je souhaite donner
               </label>
             </div>
-          )}
 
-          {donateCashback && scanMode === 'after' && (
-            <label className="label" htmlFor="association">
-              SPA / Association
-              <select
-                id="association"
-                className="select"
-                value={spaId}
-                onChange={(event) => setSpaId(event.target.value)}
-                required
-              >
-                <option value="">Sélectionner une SPA</option>
-                {spas.map((spa) => (
-                  <option key={spa.id} value={spa.id}>
-                    {spa.name} {spa.city ? `· ${spa.city}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+            {donateCashback && (
+              <label className="label" htmlFor="association">
+                SPA / Association
+                <select
+                  id="association"
+                  className="select"
+                  value={spaId}
+                  onChange={(event) => setSpaId(event.target.value)}
+                  required
+                >
+                  <option value="">Sélectionner une SPA</option>
+                  {spas.map((spa) => (
+                    <option key={spa.id} value={spa.id}>
+                      {spa.name} {spa.city ? `· ${spa.city}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
-          {donateCashback && scanMode === 'after' && (
-            <label className="label" htmlFor="donationPercent">
-              Pourcentage reversé
-              <select
-                id="donationPercent"
-                className="select"
-                value={donationPercent}
-                onChange={(event) => setDonationPercent(Number(event.target.value) as 50 | 100)}
-              >
-                <option value={50}>50% (recommandé)</option>
-                <option value={100}>100%</option>
-              </select>
-            </label>
-          )}
+            {donateCashback && (
+              <label className="label" htmlFor="donationPercent">
+                Pourcentage reversé
+                <select
+                  id="donationPercent"
+                  className="select"
+                  value={donationPercent}
+                  onChange={(event) =>
+                    setDonationPercent(Number(event.target.value) as 50 | 100)
+                  }
+                >
+                  <option value={50}>50% (recommandé)</option>
+                  <option value={100}>100%</option>
+                </select>
+              </label>
+            )}
 
-          {scanMode === 'after' && (
             <div style={{ marginTop: 16 }}>
               <h3>Étape 3 · Choix</h3>
               <label className="label">Utiliser ma cagnotte</label>
@@ -951,127 +965,45 @@ export default function ScanPage() {
                 </div>
               )}
             </div>
-          )}
+            {error && <p className="error">{error}</p>}
+            {status && <p>{status}</p>}
 
-          {scanMode === 'before' && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <h3>Utiliser mes crédits (avant paiement)</h3>
-              <label className="label" htmlFor="discountAmount">
-                Montant de réduction à utiliser
-                <input
-                  id="discountAmount"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={reductionAmount}
-                  onChange={(event) => setReductionAmount(event.target.value)}
-                />
-              </label>
-              {amountAfterReduction !== null && (
-                <p className="helper">
-                  Total après réduction : <strong>{formatCurrency(amountAfterReduction)}</strong>
-                </p>
-              )}
-              <button className="button" type="button" onClick={handleStartDiscount}>
-                Générer le code
-              </button>
-              {discountCoupon && (
-                <div
-                  className="card"
-                  style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 50,
-                    margin: 0,
-                    borderRadius: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    textAlign: 'center'
-                  }}
-                >
-                  <h3>Vous bénéficiez d’une réduction</h3>
-                  <p style={{ fontSize: '1.8rem', fontWeight: 700 }}>
-                    {formatCurrency(discountCoupon.amount)}
-                  </p>
-                  <p className="helper" style={{ maxWidth: 320 }}>
-                    Vous bénéficiez de {formatCurrency(discountCoupon.amount)} de réduction chez{' '}
-                    <strong>{discountCoupon.merchantName}</strong>.
-                  </p>
-                  <p className="helper">Veuillez valider devant le commerçant.</p>
-                  <p>
-                    <strong>Date :</strong>{' '}
-                    {new Date(discountCoupon.createdAt).toLocaleString('fr-FR')}
-                  </p>
-                  {discountCoupon.token && (
-                    <p style={{ fontSize: '1.6rem', fontWeight: 700 }}>
-                      {discountCoupon.token}
-                    </p>
-                  )}
-                  <p style={{ fontSize: '1.2rem', fontWeight: 700 }}>
-                    Temps restant : {formatTimeLeft(discountTimeLeft)}
-                  </p>
-                  {couponConfirmed ? (
-                    <p className="helper">Validé ✅ Montrez cet écran au commerçant.</p>
-                  ) : (
-                    <p className="helper">Montrez cet écran au commerçant avant la fin du timer.</p>
-                  )}
-                  {discountTimeLeft <= 0 && <p className="error">Coupon expiré.</p>}
-                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
-                    {discountTimeLeft > 0 && (
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => setCouponConfirmed(true)}
-                      >
-                        Valider
-                      </button>
-                    )}
-                    <button
-                      className="button secondary"
-                      type="button"
-                      onClick={() => {
-                        setDiscountCoupon(null);
-                        setCouponConfirmed(false);
-                      }}
-                    >
-                      Fermer
-                    </button>
-                    {discountTimeLeft <= 0 && (
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => {
-                          setDiscountCoupon(null);
-                          setCouponConfirmed(false);
-                          setReductionAmount('5');
-                        }}
-                      >
-                        Générer un nouveau coupon
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {error && <p className="error">{error}</p>}
-          {status && <p>{status}</p>}
-
-          {scanMode === 'after' && (
             <button
               className="button"
               type="submit"
               style={{ marginTop: 16 }}
               disabled={!merchantValidated || timeLeft <= 0 || loading}
             >
-              {loading ? 'Validation...' : 'Valider la transaction'}
+              {loading ? 'Validation...' : 'Valider le cashback'}
             </button>
-          )}
-        </form>
+          </form>
+        )}
+
+        {scanMode === 'before' && (
+          <div className="card" style={{ marginTop: 16 }}>
+            <h3>Étape 2 · Montant de réduction</h3>
+            <p className="helper">
+              Solde disponible : <strong>{formatCurrency(walletBalance)}</strong>
+            </p>
+            <label className="label" htmlFor="discountAmount">
+              Montant de réduction à utiliser
+              <input
+                id="discountAmount"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={reductionAmount}
+                onChange={(event) => setReductionAmount(event.target.value)}
+              />
+            </label>
+            <button className="button" type="button" onClick={handleStartDiscount}>
+              Générer ma réduction
+            </button>
+            {error && <p className="error">{error}</p>}
+            {status && <p>{status}</p>}
+          </div>
+        )}
 
         {successInfo && (
           <div className="card" style={{ marginTop: 16, textAlign: 'center' }}>
@@ -1122,6 +1054,16 @@ export default function ScanPage() {
           </div>
         )}
       </div>
+      {discountCoupon && (
+        <DiscountCoupon
+          coupon={discountCoupon}
+          onClose={() => setDiscountCoupon(null)}
+          onReset={() => {
+            setDiscountCoupon(null);
+            setReductionAmount('5');
+          }}
+        />
+      )}
     </div>
   );
 }
