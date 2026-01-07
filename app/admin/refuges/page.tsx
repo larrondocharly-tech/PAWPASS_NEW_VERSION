@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabaseServer';
 
 type RefugeStat = {
@@ -9,24 +8,10 @@ type RefugeStat = {
   total_cashback_generated: number | null;
 };
 
-const getRoleFromUser = (user: { user_metadata?: Record<string, unknown> } | null) =>
-  (user?.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
-
 const formatAmount = (value: number | null) => `${(value ?? 0).toFixed(2)} €`;
 
 export default async function AdminRefugesPage() {
   const supabase = createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  const role = getRoleFromUser(userData.user ?? null);
-
-  if (!userData.user) {
-    redirect('/login');
-  }
-
-  if (role !== 'admin') {
-    redirect('/dashboard');
-  }
-
   const { data, error } = await supabase
     .from('refuge_stats')
     .select('*')
@@ -34,11 +19,9 @@ export default async function AdminRefugesPage() {
 
   if (error) {
     return (
-      <main className="container" style={{ maxWidth: 1100 }}>
-        <h1>Refuges - Stats</h1>
-        <p className="error" style={{ marginTop: 12 }}>
-          Erreur de chargement des statistiques.
-        </p>
+      <main className="container mx-auto max-w-5xl p-6">
+        <h1 className="text-2xl font-semibold">Refuges - Stats</h1>
+        <p className="mt-3 text-sm text-red-600">Erreur de chargement des statistiques.</p>
       </main>
     );
   }
@@ -46,32 +29,32 @@ export default async function AdminRefugesPage() {
   const rows = (data ?? []) as RefugeStat[];
 
   return (
-    <main className="container" style={{ maxWidth: 1100 }}>
-      <header style={{ marginBottom: 20 }}>
-        <h1>Refuges - Stats</h1>
-        <p className="helper">Classement par chiffre d’affaires total lié.</p>
+    <main className="container mx-auto max-w-5xl p-6">
+      <header className="mb-5">
+        <h1 className="text-2xl font-semibold">Refuges - Stats</h1>
+        <p className="mt-2 text-sm text-slate-600">Classement par chiffre d’affaires total lié.</p>
       </header>
 
       {rows.length === 0 ? (
-        <p className="helper">Aucun refuge trouvé pour l’instant.</p>
+        <p className="text-sm text-slate-600">Aucun refuge trouvé pour l’instant.</p>
       ) : (
-        <div className="card" style={{ overflowX: 'auto' }}>
-          <table className="table-auto" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left text-slate-600">
               <tr>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Email refuge</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Transactions liées</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>CA total lié</th>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Cashback généré</th>
+                <th className="px-4 py-3 font-medium">Email refuge</th>
+                <th className="px-4 py-3 font-medium">Transactions liées</th>
+                <th className="px-4 py-3 font-medium">CA total lié</th>
+                <th className="px-4 py-3 font-medium">Cashback généré</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-200 text-slate-700">
               {rows.map((row) => (
-                <tr key={row.refuge_id} style={{ borderTop: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '8px 12px' }}>{row.refuge_email ?? '—'}</td>
-                  <td style={{ padding: '8px 12px' }}>{row.total_transactions ?? 0}</td>
-                  <td style={{ padding: '8px 12px' }}>{formatAmount(row.total_turnover_linked)}</td>
-                  <td style={{ padding: '8px 12px' }}>{formatAmount(row.total_cashback_generated)}</td>
+                <tr key={row.refuge_id}>
+                  <td className="px-4 py-3">{row.refuge_email ?? '—'}</td>
+                  <td className="px-4 py-3">{row.total_transactions ?? 0}</td>
+                  <td className="px-4 py-3">{formatAmount(row.total_turnover_linked)}</td>
+                  <td className="px-4 py-3">{formatAmount(row.total_cashback_generated)}</td>
                 </tr>
               ))}
             </tbody>
