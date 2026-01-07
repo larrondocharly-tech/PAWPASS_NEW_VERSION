@@ -103,7 +103,12 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
               className="button secondary"
               type="button"
               onClick={() => setIsAccountMenuOpen(true)}
-              style={{ color: '#0e3a4a', fontWeight: 700 }}
+              style={{
+                color: '#f9f9f4',
+                fontWeight: 700,
+                borderColor: '#5fd3b3',
+                background: 'rgba(95, 211, 179, 0.15)'
+              }}
             >
               Menu
             </button>

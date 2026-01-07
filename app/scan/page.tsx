@@ -725,9 +725,10 @@ export default function ScanPage() {
                   aria-pressed={active}
                   onClick={() => setScanMode(option.key)}
                   style={{
-                    border: active ? '2px solid #38bdf8' : '2px solid transparent',
-                    background: active ? '#1f6feb' : '#0f172a',
-                    boxShadow: active ? '0 0 0 4px rgba(56, 189, 248, 0.25)' : 'none',
+                    border: active ? '2px solid #5fd3b3' : '1px solid #e6e7df',
+                    background: active ? '#dff5ee' : '#ffffff',
+                    color: '#0e3a4a',
+                    boxShadow: active ? '0 0 0 4px rgba(95, 211, 179, 0.25)' : 'none',
                     flexDirection: 'column',
                     alignItems: 'flex-start',
                     gap: 4,
