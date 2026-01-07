@@ -1,16 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { createClient } from '@/lib/supabaseClient';
 import type { Spa, TransactionRecord } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
+import TopNav from '@/components/TopNav';
 
 export default function TransactionsPage() {
   const supabase = createClient();
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [spas, setSpas] = useState<Spa[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
 
   useEffect(() => {
     const loadTransactions = async () => {
@@ -52,14 +56,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="container">
-      <div className="nav">
-        <strong>Historique</strong>
-        <div className="nav-links">
-          <Link href="/dashboard">Tableau de bord</Link>
-          <Link href="/scan">Scanner</Link>
-          <Link href="/settings">Paramètres</Link>
-        </div>
-      </div>
+      <TopNav title="Historique" onSignOut={handleSignOut} />
 
       <div className="card">
         <h2>Mes transactions</h2>
