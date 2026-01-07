@@ -12,16 +12,10 @@ interface TopNavProps {
   onSignOut?: () => void;
 }
 
-const baseNavItems = [
-  { key: 'dashboard', label: 'Tableau de bord' },
-  { key: 'scan', label: 'Scanner' },
-  { key: 'history', label: 'Historique' }
-] as const;
-
 export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
   const pathname = usePathname();
   const supabase = createClient();
-  const [role, setRole] = useState<'client' | 'merchant'>('client');
+  const [role, setRole] = useState<'user' | 'merchant' | 'refuge' | 'admin'>('user');
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -32,7 +26,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setRole('client');
+        setRole('user');
         setIsAuthenticated(false);
         return;
       }
@@ -45,29 +39,28 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
         .maybeSingle();
 
       if (error) {
-        setRole('client');
+        setRole('user');
         setIsAuthenticated(true);
         return;
       }
 
-      setRole(data?.role?.toLowerCase() === 'merchant' ? 'merchant' : 'client');
+      const nextRole = data?.role?.toLowerCase();
+      if (nextRole === 'admin' || nextRole === 'merchant' || nextRole === 'refuge') {
+        setRole(nextRole);
+      } else {
+        setRole('user');
+      }
     };
 
     void loadRole();
   }, [supabase]);
 
-  const navItems = baseNavItems.map((item) => {
-    if (item.key === 'dashboard') {
-      return {
-        href: role === 'merchant' ? '/merchant' : '/dashboard',
-        label: item.label
-      };
-    }
-    if (item.key === 'scan') {
-      return { href: '/scan', label: item.label };
-    }
-    return { href: '/transactions', label: item.label };
-  });
+  const tabs = [
+    { label: 'Tableau de bord', href: '/dashboard' },
+    { label: 'Scanner', href: '/scan' },
+    { label: 'Historique', href: '/transactions' },
+    { label: 'Admin', href: '/admin' }
+  ];
   const handleSignOut = onSignOut
     ? onSignOut
     : async () => {
@@ -77,9 +70,9 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
   return (
     <div className="nav">
-      <Image src="/pawpass-logo.svg" alt="PawPass" width={140} height={70} priority />
+      <Image src="/pawpass-logo.jpg" alt="PawPass" width={140} height={70} priority />
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
-        {navItems.map((item) => {
+        {tabs.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link

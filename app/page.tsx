@@ -15,7 +15,7 @@ export default function LandingPage() {
           padding: '12px 0 24px'
         }}
       >
-        <Image src="/pawpass-logo.svg" alt="PawPass" width={160} height={80} priority />
+        <Image src="/pawpass-logo.jpg" alt="PawPass" width={160} height={80} priority />
         <nav style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <a href="#avantages">Avantages</a>
           <a href="#comment-ca-marche">Comment ça marche ?</a>
