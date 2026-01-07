@@ -17,7 +17,36 @@ interface AccountMenuOverlayProps {
   onSignOut: () => Promise<void> | void;
 }
 
-const buildMenuItems = (onSignOut: () => Promise<void> | void, onClose: () => void) =>
+const buildMenuItems = (
+  role: 'client' | 'merchant',
+  onSignOut: () => Promise<void> | void,
+  onClose: () => void
+) => {
+  const items: MenuItem[] = [
+    { label: 'Comment ça marche ?', href: '/how-it-works', icon: '🧭' },
+    { label: 'FAQ', href: '/faq', icon: '❓' },
+    { label: 'Contact', href: '/contact', icon: '✉️' },
+    { label: 'Mentions légales', href: '/mentions-legales', icon: '⚖️' }
+  ];
+
+  if (role === 'client') {
+    items.unshift(
+      { label: 'Commerçants partenaires', href: '/partners', icon: '🏪' },
+      { label: 'Parrainer un ami', href: '/referral', icon: '🤝' }
+    );
+  }
+
+  items.push({
+    label: 'Déconnexion',
+    icon: '🚪',
+    action: async () => {
+      await onSignOut();
+      onClose();
+    }
+  });
+
+  return items;
+};
   [
     { label: 'Comment ça marche ?', href: '/how-it-works', icon: '🧭' },
     { label: 'FAQ', href: '/faq', icon: '❓' },
@@ -54,7 +83,7 @@ export default function AccountMenuOverlay({
 
   if (!isOpen) return null;
 
-  const items = buildMenuItems(onSignOut, onClose);
+  const items = buildMenuItems(role, onSignOut, onClose);
 
   return (
     <div
