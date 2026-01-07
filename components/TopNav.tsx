@@ -61,7 +61,10 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     void loadRole();
   }, [supabase]);
 
-  const navItems = baseNavItems.map((item) => {
+  const navItems = [
+    ...baseNavItems,
+    ...(role === 'admin' ? [{ key: 'admin', label: 'Admin' }] : [])
+  ].map((item) => {
     if (item.key === 'dashboard') {
       return {
         href: role === 'merchant' ? '/merchant' : '/dashboard',
@@ -70,6 +73,9 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     }
     if (item.key === 'scan') {
       return { href: '/scan', label: item.label };
+    }
+    if (item.key === 'admin') {
+      return { href: '/admin', label: item.label };
     }
     return { href: '/transactions', label: item.label };
   });
