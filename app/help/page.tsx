@@ -1,37 +1,58 @@
+'use client';
+
 import Link from 'next/link';
+import { createClient } from '@/lib/supabaseClient';
+import TopNav from '@/components/TopNav';
 
 export default function HelpPage() {
+  const supabase = createClient();
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
   return (
     <div className="container">
-      <div className="nav">
-        <strong>Comment ça marche ?</strong>
-        <div className="nav-links">
-          <Link href="/dashboard">Tableau de bord</Link>
-          <Link href="/scan">Scanner</Link>
-        </div>
-      </div>
+      <TopNav title="Comment fonctionne PawPass ?" onSignOut={handleSignOut} />
 
       <div className="grid grid-2">
         <div className="card">
-          <h2>Recevoir du cashback (après paiement)</h2>
-          <ul>
-            <li>Payez normalement chez le commerçant.</li>
-            <li>Scannez le QR après paiement et saisissez le montant.</li>
-            <li>Ticket obligatoire au-delà de 50€.</li>
-            <li>Choisissez : garder votre cashback ou le reverser.</li>
-            <li>Anti-triche : 2h entre deux achats chez le même commerçant.</li>
-          </ul>
+          <h2>Après paiement</h2>
+          <p className="helper">💳 Cashback après l’achat</p>
+          <ol>
+            <li>Vous payez normalement chez le commerçant.</li>
+            <li>Vous scannez le QR PawPass.</li>
+            <li>Vous saisissez le montant.</li>
+            <li>Vous recevez du cashback en crédits PawPass.</li>
+          </ol>
         </div>
+
         <div className="card">
-          <h2>Utiliser mes crédits (avant paiement)</h2>
-          <ul>
-            <li>Scannez le QR avant de payer.</li>
-            <li>Choisissez le montant à utiliser.</li>
-            <li>Un écran “Montrez au commerçant” s’affiche.</li>
-            <li>Timer 3 minutes pour validation commerçant.</li>
-            <li>Le commerçant approuve puis consomme la réduction.</li>
-          </ul>
+          <h2>Avant paiement</h2>
+          <p className="helper">🎟️ Réduction immédiate</p>
+          <ol>
+            <li>Vous scannez le QR avant de payer.</li>
+            <li>Vous choisissez combien utiliser de votre cagnotte.</li>
+            <li>Un écran de réduction s’affiche avec un timer.</li>
+            <li>Vous montrez l’écran au commerçant, qui applique la remise.</li>
+          </ol>
         </div>
+
+        <div className="card">
+          <h2>Dons aux SPA</h2>
+          <p className="helper">🐾 Soutenir les associations</p>
+          <p>
+            Vous pouvez choisir de donner une partie ou la totalité de vos crédits à une SPA
+            partenaire. PawPass collecte les crédits et les reverse aux associations dans un second
+            temps.
+          </p>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <Link className="button" href="/scan">
+          Revenir au scan
+        </Link>
       </div>
     </div>
   );
