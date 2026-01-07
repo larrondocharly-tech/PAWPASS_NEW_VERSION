@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { createClient } from '@/lib/supabaseClient';
 import type { Profile, Spa } from '@/lib/types';
+import TopNav from '@/components/TopNav';
 
 export default function SettingsPage() {
   const supabase = createClient();
@@ -13,7 +13,6 @@ export default function SettingsPage() {
   const [spaId, setSpaId] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const role = profile?.role?.toLowerCase();
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -118,23 +117,7 @@ export default function SettingsPage() {
 
   return (
     <div className="container">
-      <div className="nav">
-        <strong>Paramètres</strong>
-        <div className="nav-links">
-          {role === 'merchant' ? (
-            <>
-              <Link href="/merchant">Mon QR</Link>
-              <Link href="/settings">Paramètres</Link>
-            </>
-          ) : (
-            <>
-              <Link href="/dashboard">Tableau de bord</Link>
-              <Link href="/scan">Scanner</Link>
-              <Link href="/transactions">Historique</Link>
-            </>
-          )}
-        </div>
-      </div>
+      <TopNav title="Paramètres" onSignOut={handleSignOut} />
 
       <div className="card">
         <h2>Mon profil</h2>
@@ -180,9 +163,6 @@ export default function SettingsPage() {
             <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
               <button className="button" type="submit">
                 Enregistrer
-              </button>
-              <button className="button secondary" type="button" onClick={handleSignOut}>
-                Déconnexion
               </button>
             </div>
           </form>

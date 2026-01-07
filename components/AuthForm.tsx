@@ -18,6 +18,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('user');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +79,21 @@ export default function AuthForm({ mode }: AuthFormProps) {
         setError('Impossible de mettre à jour le rôle.');
         setLoading(false);
         return;
+      }
+
+      const trimmedReferral = referralCode.trim();
+      if (trimmedReferral) {
+        const { error: referralError } = await supabase
+          .from('profiles')
+          .update({ referral_code_used: trimmedReferral })
+          .eq('id', session.user.id);
+
+        if (referralError) {
+          console.error('referral_code_used update error', referralError);
+          setError('Impossible d’enregistrer le code de parrainage.');
+          setLoading(false);
+          return;
+        }
       }
 
       console.log('RPC set_my_role done', normalizedRole);
@@ -143,6 +159,19 @@ export default function AuthForm({ mode }: AuthFormProps) {
           required
         />
       </label>
+      {mode === 'register' && (
+        <label className="label" htmlFor="referralCode">
+          Code de parrainage (optionnel)
+          <input
+            id="referralCode"
+            className="input"
+            type="text"
+            value={referralCode}
+            onChange={(event) => setReferralCode(event.target.value)}
+            placeholder="Ex : PAWPASS-ABCD1234"
+          />
+        </label>
+      )}
       {mode === 'register' && (
         <label className="label" htmlFor="role">
           Rôle
