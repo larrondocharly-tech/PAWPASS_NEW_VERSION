@@ -6,6 +6,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import type { Profile } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
+import TopNav from '@/components/TopNav';
+
+interface TransactionSummary {
+  id: string;
+  merchant_id: string | null;
+  amount: number;
+  cashback_total: number | null;
+  donation_amount: number | null;
+  wallet_spent: number | null;
+  created_at: string;
+}
 
 export default function DashboardPage() {
   const supabase = createClient();
@@ -14,10 +25,8 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState(0);
-  const [donationTransactions, setDonationTransactions] = useState<
-    { donation_amount: number | null }[]
-  >([]);
-  const [walletEarns, setWalletEarns] = useState<{ amount: number }[]>([]);
+  const [transactions, setTransactions] = useState<TransactionSummary[]>([]);
+  const [merchantMap, setMerchantMap] = useState<Record<string, string>>({});
   const [thanksMessage, setThanksMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,30 +68,38 @@ export default function DashboardPage() {
         setWalletBalance(Number(walletData?.balance ?? 0));
       }
 
-      const { data: donationData, error: donationError } = await supabase
+      const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
-        .select('donation_amount')
-        .eq('user_id', user.id);
-
-      if (donationError) {
-        setError(donationError.message);
-        return;
-      }
-
-      setDonationTransactions(donationData ?? []);
-
-      const { data: earnData, error: earnError } = await supabase
-        .from('wallet_transactions')
-        .select('amount')
+        .select('id,merchant_id,amount,cashback_total,donation_amount,wallet_spent,created_at')
         .eq('user_id', user.id)
-        .eq('type', 'EARN');
+        .order('created_at', { ascending: false });
 
-      if (earnError) {
-        setError(earnError.message);
+      if (transactionError) {
+        setError(transactionError.message);
         return;
       }
 
-      setWalletEarns(earnData ?? []);
+      const rows = transactionData ?? [];
+      setTransactions(rows);
+
+      const merchantIds = Array.from(
+        new Set(rows.map((transaction) => transaction.merchant_id).filter(Boolean))
+      ) as string[];
+
+      if (merchantIds.length > 0) {
+        const { data: merchantData, error: merchantError } = await supabase
+          .from('profiles')
+          .select('id,merchant_code')
+          .in('id', merchantIds);
+
+        if (!merchantError) {
+          const map = (merchantData ?? []).reduce<Record<string, string>>((acc, merchant) => {
+            acc[merchant.id] = merchant.merchant_code ?? merchant.id;
+            return acc;
+          }, {});
+          setMerchantMap(map);
+        }
+      }
     };
 
     void loadData();
@@ -107,19 +124,25 @@ export default function DashboardPage() {
   }, [router, searchParams]);
 
   const totals = useMemo(() => {
-    const donation = donationTransactions.reduce(
+    const donation = transactions.reduce(
       (sum, transaction) => sum + (transaction.donation_amount ?? 0),
       0
     );
-    const cashbackTotal = walletEarns.reduce((sum, entry) => sum + (entry.amount ?? 0), 0);
+    const cashbackTotal = transactions.reduce(
+      (sum, transaction) => sum + (transaction.cashback_total ?? 0),
+      0
+    );
     return {
       donation,
       cashbackTotal,
-      cashbackToUser: walletBalance
+      cashbackToUser: walletBalance,
+      count: transactions.length
     };
-  }, [donationTransactions, walletBalance, walletEarns]);
+  }, [transactions, walletBalance]);
   const progress = Math.min((walletBalance / 5) * 100, 100);
   const missing = Math.max(5 - walletBalance, 0);
+
+  const recentTransactions = useMemo(() => transactions.slice(0, 6), [transactions]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -128,17 +151,7 @@ export default function DashboardPage() {
 
   return (
     <div className="container">
-      <div className="nav">
-        <strong>PawPass</strong>
-        <div className="nav-links">
-          <Link href="/scan">Scanner</Link>
-          <Link href="/transactions">Historique</Link>
-          <Link href="/settings">Paramètres</Link>
-          <button className="button secondary" type="button" onClick={handleSignOut}>
-            Déconnexion
-          </button>
-        </div>
-      </div>
+      <TopNav title="PawPass" onSignOut={handleSignOut} />
 
       {thanksMessage && (
         <div className="card" style={{ marginBottom: 24, borderColor: '#86efac' }}>
@@ -152,16 +165,32 @@ export default function DashboardPage() {
           <p className="helper">Scannez un QR commerçant pour enregistrer vos achats.</p>
         </div>
         <div className="card">
-          <h3>Ma cagnotte solidaire</h3>
-          <p>
-            <strong>Cagnotte versée :</strong> {formatCurrency(totals.donation)}
+          <h3>Ma cagnotte PawPass</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 700, margin: '8px 0' }}>
+            {formatCurrency(totals.cashbackToUser)}
           </p>
-          <p>
-            <strong>Total cashback gagné :</strong> {formatCurrency(totals.cashbackTotal)}
-          </p>
-          <p>
-            <strong>Solde disponible :</strong> {formatCurrency(totals.cashbackToUser)}
-          </p>
+          <p className="helper">Solde disponible pour vos réductions.</p>
+          <div className="grid" style={{ gap: 8, marginTop: 16 }}>
+            <p>
+              <strong>Total cashback gagné :</strong> {formatCurrency(totals.cashbackTotal)}
+            </p>
+            <p
+              style={{
+                fontSize: '1.1rem',
+                fontWeight: 700,
+                color: '#2e7d66',
+                background: 'rgba(95, 211, 179, 0.15)',
+                padding: '4px 10px',
+                borderRadius: 10,
+                display: 'inline-block'
+              }}
+            >
+              Total donné aux SPA : {formatCurrency(totals.donation)}
+            </p>
+            <p>
+              <strong>Transactions réalisées :</strong> {totals.count}
+            </p>
+          </div>
         </div>
         <div className="card">
           <h3>Réductions disponibles</h3>
@@ -219,6 +248,54 @@ export default function DashboardPage() {
             </li>
           </ul>
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 24 }}>
+        <h3>Dernières transactions</h3>
+        {recentTransactions.length === 0 ? (
+          <p className="helper">Aucune transaction pour le moment.</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Commerce</th>
+                <th>Type</th>
+                <th>Montant</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentTransactions.map((transaction) => {
+                const isReduction = (transaction.wallet_spent ?? 0) > 0;
+                const isDonation = !isReduction && (transaction.donation_amount ?? 0) > 0;
+                const typeLabel = isReduction
+                  ? 'Réduction'
+                  : isDonation
+                  ? 'Don SPA'
+                  : 'Cashback';
+                const amountValue = isReduction
+                  ? transaction.wallet_spent ?? 0
+                  : isDonation
+                  ? transaction.donation_amount ?? 0
+                  : transaction.cashback_total ?? 0;
+                return (
+                  <tr key={transaction.id}>
+                    <td>{new Date(transaction.created_at).toLocaleDateString('fr-FR')}</td>
+                    <td>
+                      {transaction.merchant_id
+                        ? merchantMap[transaction.merchant_id] ?? transaction.merchant_id
+                        : '—'}
+                    </td>
+                    <td>
+                      <span className="badge">{typeLabel}</span>
+                    </td>
+                    <td>{formatCurrency(amountValue)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {error && <p className="error">{error}</p>}
