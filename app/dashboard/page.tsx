@@ -6,6 +6,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import type { Profile } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
+import TopNav from '@/components/TopNav';
+
+interface TransactionSummary {
+  id: string;
+  merchant_id: string | null;
+  amount: number;
+  cashback_total: number | null;
+  donation_amount: number | null;
+  wallet_spent: number | null;
+  created_at: string;
+}
 
 interface TransactionSummary {
   id: string;
@@ -150,17 +161,7 @@ export default function DashboardPage() {
 
   return (
     <div className="container">
-      <div className="nav">
-        <strong>PawPass</strong>
-        <div className="nav-links">
-          <Link href="/scan">Scanner</Link>
-          <Link href="/transactions">Historique</Link>
-          <Link href="/settings">Paramètres</Link>
-          <button className="button secondary" type="button" onClick={handleSignOut}>
-            Déconnexion
-          </button>
-        </div>
-      </div>
+      <TopNav title="PawPass" onSignOut={handleSignOut} />
 
       {thanksMessage && (
         <div className="card" style={{ marginBottom: 24, borderColor: '#86efac' }}>

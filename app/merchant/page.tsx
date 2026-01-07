@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import QRCodeCard from '@/components/QRCodeCard';
 import type { MerchantProfile } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
+import TopNav from '@/components/TopNav';
 
 interface TransactionLite {
   amount: number;
@@ -179,16 +179,7 @@ export default function MerchantPage() {
 
   return (
     <div className="container">
-      <div className="nav">
-        <strong>Mon QR commerçant</strong>
-        <div className="nav-links">
-          <Link href="/merchant">Mon QR</Link>
-          <Link href="/settings">Paramètres</Link>
-          <button className="button secondary" type="button" onClick={handleSignOut}>
-            Déconnexion
-          </button>
-        </div>
-      </div>
+      <TopNav title="Mon QR commerçant" onSignOut={handleSignOut} />
 
       {merchant ? (
         <div className="grid grid-2">

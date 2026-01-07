@@ -1,17 +1,19 @@
 'use client';
 
 import Link from 'next/link';
+import { createClient } from '@/lib/supabaseClient';
+import TopNav from '@/components/TopNav';
 
 export default function HelpPage() {
+  const supabase = createClient();
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
   return (
     <div className="container">
-      <div className="nav">
-        <strong>Comment fonctionne PawPass ?</strong>
-        <div className="nav-links">
-          <Link href="/scan">Scanner</Link>
-          <Link href="/dashboard">Tableau de bord</Link>
-        </div>
-      </div>
+      <TopNav title="Comment fonctionne PawPass ?" onSignOut={handleSignOut} />
 
       <div className="grid grid-2">
         <div className="card">
@@ -45,6 +47,22 @@ export default function HelpPage() {
             temps.
           </p>
         </div>
+
+        <div className="card">
+          <h2>Dons aux SPA</h2>
+          <p className="helper">🐾 Soutenir les associations</p>
+          <p>
+            Vous pouvez choisir de donner une partie ou la totalité de vos crédits à une SPA
+            partenaire. PawPass collecte les crédits et les reverse aux associations dans un second
+            temps.
+          </p>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <Link className="button" href="/scan">
+          Revenir au scan
+        </Link>
       </div>
 
       <div style={{ marginTop: 24 }}>

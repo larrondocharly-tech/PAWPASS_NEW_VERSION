@@ -8,6 +8,7 @@ import type { MerchantProfile, Spa } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
 import QrScanner from '@/components/QrScanner';
 import DiscountCoupon from '@/components/DiscountCoupon';
+import TopNav from '@/components/TopNav';
 
 const MAX_AMOUNT = 200;
 const RANDOM_RECEIPT_RATE = 0.1;
@@ -586,16 +587,14 @@ export default function ScanPage() {
     });
   };
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
   return (
     <div className="container">
-      <div className="nav">
-        <strong>Scanner PawPass</strong>
-        <div className="nav-links">
-          <Link href="/dashboard">Tableau de bord</Link>
-          <Link href="/transactions">Historique</Link>
-          <Link href="/settings">Paramètres</Link>
-        </div>
-      </div>
+      <TopNav title="Scanner PawPass" onSignOut={handleSignOut} />
 
       {showCardModal && (
         <div
@@ -687,7 +686,7 @@ export default function ScanPage() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2>Parcours en 3 étapes</h2>
-          <Link href="/help">Comment ça marche ?</Link>
+          <Link href="/how-it-works">Comment ça marche ?</Link>
         </div>
         <div className="grid grid-2" style={{ gap: 12, marginTop: 16 }}>
           {[
