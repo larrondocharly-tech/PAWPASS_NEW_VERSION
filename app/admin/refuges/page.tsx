@@ -6,6 +6,7 @@ type RefugeStat = {
   total_transactions: number | null;
   total_turnover_linked: number | null;
   total_cashback_generated: number | null;
+  total_donations: number | null;
 };
 
 const formatAmount = (value: number | null) => `${(value ?? 0).toFixed(2)} €`;
@@ -46,6 +47,7 @@ export default async function AdminRefugesPage() {
                 <th className="px-4 py-3 font-medium">Transactions liées</th>
                 <th className="px-4 py-3 font-medium">CA total lié</th>
                 <th className="px-4 py-3 font-medium">Cashback généré</th>
+                <th className="px-4 py-3 font-medium">Total dons</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-700">
@@ -55,6 +57,7 @@ export default async function AdminRefugesPage() {
                   <td className="px-4 py-3">{row.total_transactions ?? 0}</td>
                   <td className="px-4 py-3">{formatAmount(row.total_turnover_linked)}</td>
                   <td className="px-4 py-3">{formatAmount(row.total_cashback_generated)}</td>
+                  <td className="px-4 py-3">{formatAmount(row.total_donations)}</td>
                 </tr>
               ))}
             </tbody>
