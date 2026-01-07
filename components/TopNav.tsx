@@ -21,7 +21,7 @@ const baseNavItems = [
 export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
   const pathname = usePathname();
   const supabase = createClient();
-  const [role, setRole] = useState<'client' | 'merchant'>('client');
+  const [role, setRole] = useState<'user' | 'merchant' | 'refuge' | 'admin'>('user');
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -32,7 +32,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setRole('client');
+        setRole('user');
         setIsAuthenticated(false);
         return;
       }
@@ -45,12 +45,17 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
         .maybeSingle();
 
       if (error) {
-        setRole('client');
+        setRole('user');
         setIsAuthenticated(true);
         return;
       }
 
-      setRole(data?.role?.toLowerCase() === 'merchant' ? 'merchant' : 'client');
+      const nextRole = data?.role?.toLowerCase();
+      if (nextRole === 'admin' || nextRole === 'merchant' || nextRole === 'refuge') {
+        setRole(nextRole);
+      } else {
+        setRole('user');
+      }
     };
 
     void loadRole();
@@ -68,6 +73,10 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     }
     return { href: '/transactions', label: item.label };
   });
+
+  if (role === 'admin') {
+    navItems.push({ href: '/admin', label: 'Admin' });
+  }
   const handleSignOut = onSignOut
     ? onSignOut
     : async () => {
@@ -77,7 +86,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
   return (
     <div className="nav">
-      <Image src="/pawpass-logo.svg" alt="PawPass" width={140} height={70} priority />
+      <Image src="/pawpass-logo.jpg" alt="PawPass" width={140} height={70} priority />
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
