@@ -4,6 +4,12 @@ import Link from 'next/link';
 import TopNav from '@/components/TopNav';
 
 export default function HelpPage() {
+  const supabase = createClient();
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
   return (
     <div className="container">
       <TopNav title="Comment fonctionne PawPass ?" />
