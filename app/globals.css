@@ -128,3 +128,23 @@ a {
   display: flex;
   gap: 16px;
 }
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+.site-footer-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+}
+
+@media (min-width: 768px) {
+  .site-footer-inner {
+    flex-direction: row;
+  }
+}
