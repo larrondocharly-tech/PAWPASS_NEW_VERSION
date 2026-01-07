@@ -13,16 +13,10 @@ interface TopNavProps {
 
 const clientNavItems = [
   { href: '/dashboard', label: 'Tableau de bord' },
-  { href: '/scan', label: 'Scanner' },
-  { href: '/transactions', label: 'Historique' },
-  { href: '/how-it-works', label: 'Comment ça marche ?' },
-  { href: '/settings', label: 'Paramètres' }
+  { href: '/scan', label: 'Scanner' }
 ];
 
-const merchantNavItems = [
-  { href: '/merchant', label: 'Mon espace' },
-  { href: '/settings', label: 'Paramètres' }
-];
+const merchantNavItems = [{ href: '/merchant', label: 'Tableau de bord' }];
 
 export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
   const pathname = usePathname();
@@ -75,7 +69,12 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
       <strong>{title}</strong>
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive =
+            role === 'merchant'
+              ? pathname.startsWith('/merchant')
+              : item.href === '/dashboard'
+              ? pathname.startsWith('/dashboard')
+              : pathname.startsWith('/scan');
           return (
             <Link
               key={item.href}
@@ -101,9 +100,6 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
               onClick={() => setIsAccountMenuOpen(true)}
             >
               Menu
-            </button>
-            <button className="button secondary" type="button" onClick={handleSignOut}>
-              Déconnexion
             </button>
           </>
         )}
