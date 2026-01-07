@@ -97,6 +97,21 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
             </Link>
           );
         })}
+        {role === 'admin' && (
+          <Link
+            href="/admin"
+            style={{
+              fontWeight: pathname.startsWith('/admin') ? 700 : 500,
+              color: pathname.startsWith('/admin') ? '#0e3a4a' : 'inherit',
+              background: pathname.startsWith('/admin') ? '#f3d9a4' : 'transparent',
+              padding: '6px 12px',
+              borderRadius: 10
+            }}
+            aria-current={pathname.startsWith('/admin') ? 'page' : undefined}
+          >
+            Admin
+          </Link>
+        )}
         {isAuthenticated && (
           <>
             <button
