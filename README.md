@@ -1,4 +1,4 @@
-# PawPass
+# PawPassp
 
 Application Next.js (App Router) pour un cashback solidaire avec Supabase (Auth + Postgres + RLS).
 
