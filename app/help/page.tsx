@@ -47,6 +47,22 @@ export default function HelpPage() {
             temps.
           </p>
         </div>
+
+        <div className="card">
+          <h2>Dons aux SPA</h2>
+          <p className="helper">🐾 Soutenir les associations</p>
+          <p>
+            Vous pouvez choisir de donner une partie ou la totalité de vos crédits à une SPA
+            partenaire. PawPass collecte les crédits et les reverse aux associations dans un second
+            temps.
+          </p>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <Link className="button" href="/scan">
+          Revenir au scan
+        </Link>
       </div>
 
       <div style={{ marginTop: 24 }}>
