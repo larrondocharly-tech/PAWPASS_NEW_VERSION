@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import TopNav from '@/components/TopNav';
+import { createClient } from '@/lib/supabaseClient';
 
 export default function HelpPage() {
   const supabase = createClient();
