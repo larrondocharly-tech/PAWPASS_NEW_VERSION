@@ -7,7 +7,7 @@ interface MenuItem {
   label: string;
   href?: string;
   icon?: string;
-  action?: () => void;
+  action?: () => void | Promise<void>;
 }
 
 interface AccountMenuOverlayProps {
@@ -21,7 +21,7 @@ const buildMenuItems = (
   role: 'client' | 'merchant',
   onSignOut: () => Promise<void> | void,
   onClose: () => void
-) => {
+): MenuItem[] => {
   const items: MenuItem[] = [
     { label: 'Comment ça marche ?', href: '/how-it-works', icon: '🧭' },
     { label: 'FAQ', href: '/faq', icon: '❓' },
@@ -47,20 +47,6 @@ const buildMenuItems = (
 
   return items;
 };
-  [
-    { label: 'Comment ça marche ?', href: '/how-it-works', icon: '🧭' },
-    { label: 'FAQ', href: '/faq', icon: '❓' },
-    { label: 'Contact', href: '/contact', icon: '✉️' },
-    { label: 'Mentions légales', href: '/mentions-legales', icon: '⚖️' },
-    {
-      label: 'Déconnexion',
-      icon: '🚪',
-      action: async () => {
-        await onSignOut();
-        onClose();
-      }
-    }
-  ] satisfies MenuItem[];
 
 export default function AccountMenuOverlay({
   isOpen,
@@ -72,11 +58,13 @@ export default function AccountMenuOverlay({
 
   useEffect(() => {
     if (!isOpen) return;
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
@@ -130,9 +118,11 @@ export default function AccountMenuOverlay({
         >
           ✕
         </button>
+
         <h2 id="account-menu-title" style={{ textAlign: 'center', marginBottom: 24 }}>
           Mon compte
         </h2>
+
         <div style={{ borderTop: '1px solid #e2e8f0' }}>
           {items.map((item) => (
             <button
@@ -164,7 +154,9 @@ export default function AccountMenuOverlay({
                 <span aria-hidden="true" style={{ color: '#f3d9a4' }}>
                   {item.icon ?? '•'}
                 </span>
-                <span style={{ fontWeight: 600, textTransform: 'uppercase' }}>{item.label}</span>
+                <span style={{ fontWeight: 600, textTransform: 'uppercase' }}>
+                  {item.label}
+                </span>
               </span>
               <span aria-hidden="true">→</span>
             </button>
