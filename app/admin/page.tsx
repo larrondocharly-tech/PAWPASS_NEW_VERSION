@@ -11,9 +11,10 @@ interface TransactionRow {
   donation_amount: number | null;
   created_at: string;
   spa_id: string | null;
+  // IMPORTANT : Supabase renvoie un TABLEAU d'associations
   spa?: {
     name: string | null;
-  } | null;
+  }[] | null;
 }
 
 interface SpaSummary {
@@ -55,12 +56,18 @@ const requireAdmin = async () => {
 export default async function AdminPage() {
   const supabase = await requireAdmin();
 
-  const { data: transactionData, error: transactionError } = await supabase
+  const {
+    data: transactionData,
+    error: transactionError
+  } = await supabase
     .from('transactions')
-    .select('id,amount,cashback_amount,donation_amount,created_at,spa_id,spa:associations(name)')
+    .select(
+      'id,amount,cashback_amount,donation_amount,created_at,spa_id,spa:associations(name)'
+    )
     .order('created_at', { ascending: false });
 
-  const transactions = transactionData ?? [];
+  // On force ici le type attendu pour que Typescript arrête de gueuler
+  const transactions: TransactionRow[] = (transactionData ?? []) as TransactionRow[];
   const summariesMap = new Map<string, SpaSummary>();
 
   transactions.forEach((transaction) => {
@@ -91,7 +98,10 @@ export default async function AdminPage() {
     summary.totalCashback += getCashbackValue(transaction);
   });
 
-  const summaries = Array.from(summariesMap.values()).sort((a, b) => a.spaName.localeCompare(b.spaName));
+  const summaries = Array.from(summariesMap.values()).sort((a, b) =>
+    a.spaName.localeCompare(b.spaName)
+  );
+
   const grandTotalDonation = transactions.reduce(
     (sum, transaction) => sum + Number(transaction.donation_amount ?? 0),
     0
@@ -108,7 +118,9 @@ export default async function AdminPage() {
 
       <div className="card" style={{ marginBottom: 24 }}>
         <h3>Total des dons (toutes SPA)</h3>
-        <p style={{ fontSize: '1.5rem', fontWeight: 700 }}>{formatCurrency(grandTotalDonation)}</p>
+        <p style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+          {formatCurrency(grandTotalDonation)}
+        </p>
       </div>
 
       <div className="card">
@@ -143,15 +155,23 @@ export default async function AdminPage() {
                   <tr>
                     <td colSpan={5}>
                       <details style={{ padding: '12px 0' }}>
-                        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+                        <summary
+                          style={{ cursor: 'pointer', fontWeight: 600 }}
+                        >
                           Voir les transactions
                         </summary>
                         {summary.transactions.length === 0 ? (
-                          <p className="helper" style={{ marginTop: 12 }}>
+                          <p
+                            className="helper"
+                            style={{ marginTop: 12 }}
+                          >
                             Aucune transaction pour cette SPA.
                           </p>
                         ) : (
-                          <table className="table" style={{ marginTop: 12 }}>
+                          <table
+                            className="table"
+                            style={{ marginTop: 12 }}
+                          >
                             <thead>
                               <tr>
                                 <th>Date</th>
@@ -163,10 +183,24 @@ export default async function AdminPage() {
                             <tbody>
                               {summary.transactions.map((transaction) => (
                                 <tr key={transaction.id}>
-                                  <td>{new Date(transaction.created_at).toLocaleString('fr-FR')}</td>
-                                  <td>{formatCurrency(transaction.amount)}</td>
-                                  <td>{formatCurrency(getCashbackValue(transaction))}</td>
-                                  <td>{formatCurrency(transaction.donation_amount ?? 0)}</td>
+                                  <td>
+                                    {new Date(
+                                      transaction.created_at
+                                    ).toLocaleString('fr-FR')}
+                                  </td>
+                                  <td>
+                                    {formatCurrency(transaction.amount)}
+                                  </td>
+                                  <td>
+                                    {formatCurrency(
+                                      getCashbackValue(transaction)
+                                    )}
+                                  </td>
+                                  <td>
+                                    {formatCurrency(
+                                      transaction.donation_amount ?? 0
+                                    )}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
