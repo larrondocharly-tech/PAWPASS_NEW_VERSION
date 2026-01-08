@@ -144,6 +144,24 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
           setInfoMessage(
             'Votre demande de partenariat a bien été envoyée. Elle est en attente de validation.'
           );
+          setLoading(false);
+          return;
+        }
+
+        const { error: applicationError } = await supabase.from('merchant_applications').insert({
+          user_id: session.user.id,
+          business_name: trimmedBusinessName,
+          city: trimmedBusinessCity,
+          address: trimmedBusinessAddress || null,
+          phone: trimmedBusinessPhone || null,
+          message: trimmedMerchantMessage || null,
+          status: 'pending',
+        });
+
+        if (existingApplication) {
+          setInfoMessage(
+            'Votre demande de partenariat a bien été envoyée. Elle est en attente de validation.'
+          );
         } else {
           const { error: applicationError } = await supabase.from('merchant_applications').insert({
             user_id: session.user.id,
@@ -163,10 +181,8 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
         }
       }
 
-      // 6) Appliquer un cashback en attente (flux "scan sans compte")
       if (pendingCashback && pendingCashback.amount > 0) {
         const { merchantCode, amount, spaId, donationPercent } = pendingCashback;
-
         const { error: cashbackError } = await supabase.rpc('apply_cashback_transaction', {
           p_merchant_code: merchantCode,
           p_amount: amount,
@@ -174,12 +190,10 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
           p_use_wallet: false,
           p_wallet_spent: 0,
           p_donation_percent: donationPercent ?? 0,
-          p_receipt_image_url: null
         });
 
         if (cashbackError) {
           console.error('apply_cashback_transaction error', cashbackError);
-          // on ne bloque pas l'inscription si ça échoue
         }
       }
 
