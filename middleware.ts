@@ -11,8 +11,22 @@ const protectedPaths = [
   '/refuge'
 ];
 
-const getRoleFromSession = (user: { user_metadata?: Record<string, unknown> } | null) =>
-  (user?.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
+const getRoleFromSession = async (
+  supabase: ReturnType<typeof createServerClient>,
+  user: { id: string; user_metadata?: Record<string, unknown> } | null
+) => {
+  const metadataRole = (user?.user_metadata?.role as string | undefined)?.toLowerCase();
+  if (metadataRole) {
+    return metadataRole;
+  }
+
+  if (!user) {
+    return 'user';
+  }
+
+  const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  return data?.role?.toLowerCase() ?? 'user';
+};
 
 const canAccessPath = (pathname: string, role: string) => {
   if (pathname.startsWith('/admin')) {
@@ -70,7 +84,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const role = getRoleFromSession(data.session.user);
+  const role = await getRoleFromSession(supabase, data.session.user);
   const pathname = request.nextUrl.pathname;
 
   // Redirect authenticated users who try to access a role-protected route they don't own.

@@ -36,6 +36,8 @@ export default function AdminPage() {
   const router = useRouter();
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [selectedSpaId, setSelectedSpaId] = useState<string | null>(null);
+  const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,18 +45,22 @@ export default function AdminPage() {
     const loadAdminData = async () => {
       setIsLoading(true);
       setError(null);
+      setHasCheckedAccess(false);
+      setIsAuthorized(false);
 
       const {
         data: { user }
       } = await supabase.auth.getUser();
 
       if (!user) {
+        setHasCheckedAccess(true);
         router.replace('/login');
         return;
       }
 
       const metadataRole = String(user.user_metadata?.role ?? '').toLowerCase();
       if (metadataRole && metadataRole !== 'admin') {
+        setHasCheckedAccess(true);
         router.replace('/dashboard');
         return;
       }
@@ -68,15 +74,20 @@ export default function AdminPage() {
 
         if (profileError) {
           setError(profileError.message);
+          setHasCheckedAccess(true);
           setIsLoading(false);
           return;
         }
 
         if (profile?.role?.toLowerCase() !== 'admin') {
+          setHasCheckedAccess(true);
           router.replace('/dashboard');
           return;
         }
       }
+
+      setHasCheckedAccess(true);
+      setIsAuthorized(true);
 
       const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
@@ -150,6 +161,18 @@ export default function AdminPage() {
     <div className="container">
       <TopNav title="Admin PawPass" onSignOut={handleSignOut} />
 
+      {!hasCheckedAccess ? (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <p className="helper">Chargement...</p>
+        </div>
+      ) : !isAuthorized ? (
+        error ? (
+          <div className="card" style={{ marginBottom: 24 }}>
+            <p className="error">{error}</p>
+          </div>
+        ) : null
+      ) : (
+      <>
       <div className="card" style={{ marginBottom: 24 }}>
         <h2>Tableau de bord admin – Transactions par SPA</h2>
         <p className="helper">Vision globale des dons et cashbacks enregistrés.</p>
@@ -243,6 +266,8 @@ export default function AdminPage() {
           </table>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
