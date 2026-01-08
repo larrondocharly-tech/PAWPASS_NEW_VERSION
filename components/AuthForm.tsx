@@ -5,17 +5,19 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import Loader from './Loader';
 
-interface AuthFormProps {
-  mode: 'login' | 'register';
-  pendingCashback?: {
-    merchantCode: string;
-    amount: number;
-    spaId: string | null;
-    donationPercent: number;
-  } | null;
+interface PendingCashback {
+  merchantCode: string;
+  amount: number;
+  spaId: string | null;
+  donationPercent: number;
 }
 
-export default function AuthForm({ mode }: AuthFormProps) {
+interface AuthFormProps {
+  mode: 'login' | 'register';
+  pendingCashback?: PendingCashback | null;
+}
+
+export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
   const router = useRouter();
   const supabase = createClient();
   const [email, setEmail] = useState('');
@@ -151,15 +153,32 @@ export default function AuthForm({ mode }: AuthFormProps) {
           status: 'pending',
         });
 
-        if (applicationError) {
-          setError(applicationError.message);
+        if (existingApplication) {
+          setInfoMessage(
+            'Votre demande de partenariat a bien été envoyée. Elle est en attente de validation.'
+          );
           setLoading(false);
           return;
+        }
+
+      if (pendingCashback && pendingCashback.amount > 0) {
+        const { merchantCode, amount, spaId, donationPercent } = pendingCashback;
+        const { error: cashbackError } = await supabase.rpc('apply_cashback_transaction', {
+          p_merchant_code: merchantCode,
+          p_amount: amount,
+          p_spa_id: spaId,
+          p_use_wallet: false,
+          p_wallet_spent: 0,
+          p_donation_percent: donationPercent ?? 0
+        });
+
+        if (cashbackError) {
+          console.error('apply_cashback_transaction error', cashbackError);
         }
       }
 
       setLoading(false);
-      router.push('/login');
+      router.push('/dashboard');
       return;
     }
 
