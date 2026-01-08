@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import Loader from './Loader';
@@ -20,6 +21,7 @@ interface AuthFormProps {
 export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
   const router = useRouter();
   const supabase = createClient();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [referralCode, setReferralCode] = useState('');
@@ -54,14 +56,15 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
         return;
       }
 
+      // 1) Création du user
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            role: normalizedRole,
-          },
-        },
+            role: normalizedRole
+          }
+        }
       });
 
       if (signUpError) {
@@ -70,11 +73,12 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
         return;
       }
 
+      // 2) S'assurer d'avoir une session
       let session = data.session ?? null;
       if (!session) {
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
-          password,
+          password
         });
 
         if (signInError) {
@@ -92,9 +96,9 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
         return;
       }
 
-      // Si tu utilises toujours la RPC set_my_role, on la garde
+      // 3) RPC set_my_role (si toujours utilisée)
       const { error: roleError } = await supabase.rpc('set_my_role', {
-        p_role: normalizedRole,
+        p_role: normalizedRole
       });
 
       if (roleError) {
@@ -104,7 +108,7 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
         return;
       }
 
-      // Code parrainage
+      // 4) Code parrainage
       const trimmedReferral = referralCode.trim();
       if (trimmedReferral) {
         const { error: referralError } = await supabase
@@ -120,7 +124,7 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
         }
       }
 
-      // Demande commerçant
+      // 5) Demande commerçant
       if (wantsMerchantAccount) {
         const { data: existingApplication, error: existingApplicationError } = await supabase
           .from('merchant_applications')
@@ -136,44 +140,45 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
         }
 
         if (existingApplication) {
+          // Une demande est déjà en attente -> info neutre, pas une erreur bloquante
           setInfoMessage(
             'Votre demande de partenariat a bien été envoyée. Elle est en attente de validation.'
           );
-          setLoading(false);
-          return;
+        } else {
+          const { error: applicationError } = await supabase.from('merchant_applications').insert({
+            user_id: session.user.id,
+            business_name: trimmedBusinessName,
+            city: trimmedBusinessCity,
+            address: trimmedBusinessAddress || null,
+            phone: trimmedBusinessPhone || null,
+            message: trimmedMerchantMessage || null,
+            status: 'pending'
+          });
+
+          if (applicationError) {
+            setError(applicationError.message);
+            setLoading(false);
+            return;
+          }
         }
+      }
 
-        const { error: applicationError } = await supabase.from('merchant_applications').insert({
-          user_id: session.user.id,
-          business_name: trimmedBusinessName,
-          city: trimmedBusinessCity,
-          address: trimmedBusinessAddress || null,
-          phone: trimmedBusinessPhone || null,
-          message: trimmedMerchantMessage || null,
-          status: 'pending',
-        });
-
-        if (existingApplication) {
-          setInfoMessage(
-            'Votre demande de partenariat a bien été envoyée. Elle est en attente de validation.'
-          );
-          setLoading(false);
-          return;
-        }
-
+      // 6) Appliquer un cashback en attente éventuel (flux "scan sans compte")
       if (pendingCashback && pendingCashback.amount > 0) {
         const { merchantCode, amount, spaId, donationPercent } = pendingCashback;
+
         const { error: cashbackError } = await supabase.rpc('apply_cashback_transaction', {
           p_merchant_code: merchantCode,
           p_amount: amount,
           p_spa_id: spaId,
           p_use_wallet: false,
           p_wallet_spent: 0,
-          p_donation_percent: donationPercent ?? 0,
+          p_donation_percent: donationPercent ?? 0
         });
 
         if (cashbackError) {
           console.error('apply_cashback_transaction error', cashbackError);
+          // on ne bloque pas l'inscription si ça échoue
         }
       }
 
@@ -185,7 +190,7 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
     // 🔹 CONNEXION
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
-      password,
+      password
     });
 
     if (signInError) {
@@ -285,6 +290,7 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
           Je souhaite devenir partenaire commerçant
         </label>
       )}
+
       {mode === 'register' && wantsMerchantAccount && (
         <>
           <label className="label" htmlFor="businessName">
@@ -341,6 +347,7 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
           </label>
         </>
       )}
+
       {error && <p className="error">{error}</p>}
       {infoMessage && <p className="helper">{infoMessage}</p>}
 
@@ -353,6 +360,12 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
           'Créer le compte'
         )}
       </button>
+
+      {mode === 'login' && (
+        <p style={{ marginTop: 16 }}>
+          Pas encore de compte ? <Link href="/register">S’inscrire</Link>
+        </p>
+      )}
     </form>
   );
 }
