@@ -55,6 +55,27 @@ export default function LandingPage() {
               Voir comment ça marche
             </a>
           </div>
+          <div style={{ marginTop: 12 }}>
+            <Link
+              className="button"
+              href="/scan"
+              style={{
+                backgroundColor: '#00c896',
+                borderColor: '#00c896',
+                boxShadow: '0 0 0 4px rgba(0, 200, 150, 0.25)',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              📱 Scanner pour la première fois
+            </Link>
+            <p className="helper" style={{ marginTop: 4 }}>
+              Pas encore de compte ? Scannez un commerçant, validez votre achat et créez votre
+              compte après.
+            </p>
+          </div>
           <p className="helper" style={{ marginTop: 12 }}>
             Pas de synchronisation bancaire, uniquement des crédits PawPass.
           </p>

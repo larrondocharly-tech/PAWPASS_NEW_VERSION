@@ -5,11 +5,19 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import Loader from './Loader';
 
-interface AuthFormProps {
-  mode: 'login' | 'register';
+interface PendingCashback {
+  merchantCode: string;
+  amount: number;
+  spaId: string | null;
+  donationPercent: number;
 }
 
-export default function AuthForm({ mode }: AuthFormProps) {
+interface AuthFormProps {
+  mode: 'login' | 'register';
+  pendingCashback?: PendingCashback | null;
+}
+
+export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
   const router = useRouter();
   const supabase = createClient();
   const [email, setEmail] = useState('');
@@ -23,10 +31,12 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [merchantMessage, setMerchantMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+    setInfoMessage(null);
     setLoading(true);
 
     // 🔹 INSCRIPTION
@@ -112,6 +122,27 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
       // Demande commerçant
       if (wantsMerchantAccount) {
+        const { data: existingApplication, error: existingApplicationError } = await supabase
+          .from('merchant_applications')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (existingApplicationError) {
+          setError(existingApplicationError.message);
+          setLoading(false);
+          return;
+        }
+
+        if (existingApplication) {
+          setInfoMessage(
+            'Votre demande de partenariat a bien été envoyée. Elle est en attente de validation.'
+          );
+          setLoading(false);
+          return;
+        }
+
         const { error: applicationError } = await supabase.from('merchant_applications').insert({
           user_id: session.user.id,
           business_name: trimmedBusinessName,
@@ -129,44 +160,24 @@ export default function AuthForm({ mode }: AuthFormProps) {
         }
       }
 
-      if (wantsMerchantAccount) {
-        const { error: applicationError } = await supabase.from('merchant_applications').insert({
-          user_id: session.user.id,
-          business_name: trimmedBusinessName,
-          city: trimmedBusinessCity,
-          address: trimmedBusinessAddress || null,
-          phone: trimmedBusinessPhone || null,
-          message: trimmedMerchantMessage || null,
-          status: 'pending'
+      if (pendingCashback && pendingCashback.amount > 0) {
+        const { merchantCode, amount, spaId, donationPercent } = pendingCashback;
+        const { error: cashbackError } = await supabase.rpc('apply_cashback_transaction', {
+          p_merchant_code: merchantCode,
+          p_amount: amount,
+          p_spa_id: spaId,
+          p_use_wallet: false,
+          p_wallet_spent: 0,
+          p_donation_percent: donationPercent ?? 0,
         });
 
-        if (applicationError) {
-          setError(applicationError.message);
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (wantsMerchantAccount) {
-        const { error: applicationError } = await supabase.from('merchant_applications').insert({
-          user_id: session.user.id,
-          business_name: trimmedBusinessName,
-          city: trimmedBusinessCity,
-          address: trimmedBusinessAddress || null,
-          phone: trimmedBusinessPhone || null,
-          message: trimmedMerchantMessage || null,
-          status: 'pending'
-        });
-
-        if (applicationError) {
-          setError(applicationError.message);
-          setLoading(false);
-          return;
+        if (cashbackError) {
+          console.error('apply_cashback_transaction error', cashbackError);
         }
       }
 
       setLoading(false);
-      router.push('/login');
+      router.push('/dashboard');
       return;
     }
 
@@ -330,6 +341,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         </>
       )}
       {error && <p className="error">{error}</p>}
+      {infoMessage && <p className="helper">{infoMessage}</p>}
 
       <button className="button" type="submit" disabled={loading}>
         {loading ? (
