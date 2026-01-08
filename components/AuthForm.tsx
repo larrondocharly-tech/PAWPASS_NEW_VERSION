@@ -30,6 +30,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setError(null);
     setLoading(true);
 
+<<<<<<< Updated upstream
+    // -----------------------
+    // INSCRIPTION
+    // -----------------------
     if (mode === 'register') {
       const normalizedRole = role === 'merchant' ? 'merchant' : 'user';
       const isMerchant = normalizedRole === 'merchant';
@@ -42,7 +46,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
         setLoading(false);
         return;
       }
+
       console.log('REGISTER role', role, 'normalized', normalizedRole);
+
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -52,65 +58,72 @@ export default function AuthForm({ mode }: AuthFormProps) {
           }
         }
       });
+=======
+    // 🔹 INSCRIPTION
+    if (mode === 'register') {
+      try {
+        const normalizedRole = role === 'merchant' ? 'merchant' : 'user';
+        const trimmedReferral = referralCode.trim() || null;
+>>>>>>> Stashed changes
 
-      if (signUpError) {
-        setError(signUpError.message);
-        setLoading(false);
-        return;
-      }
+        console.log('REGISTER role', role, 'normalized', normalizedRole);
 
-      console.log('signup user_metadata:', data.user?.user_metadata);
-
-      let session = data.session ?? null;
-      if (!session) {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        // 1) Création du compte auth
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email,
-          password
+          password,
+          options: {
+            data: {
+              role: normalizedRole,
+            },
+          },
         });
 
-        if (signInError) {
-          setError(signInError.message);
+        console.log('signUp data:', data, 'error:', signUpError);
+
+        if (signUpError) {
+          // Message plus clair si email déjà utilisé
+          if (signUpError.message.includes('Database error saving new user')) {
+            setError("Cet email est déjà utilisé ou une erreur est survenue lors de la création du compte.");
+          } else {
+            setError(signUpError.message);
+          }
           setLoading(false);
           return;
         }
 
-        session = signInData.session;
-      }
+        const user = data.user;
+        if (!user) {
+          setError('Impossible de créer le compte utilisateur.');
+          setLoading(false);
+          return;
+        }
 
-      if (!session) {
-        setError('Impossible de démarrer une session.');
-        setLoading(false);
-        return;
-      }
-
-      const { error: roleError } = await supabase.rpc('set_my_role', {
-        p_role: normalizedRole
-      });
-
-      if (roleError) {
-        console.error('set_my_role error', roleError);
-        setError('Impossible de mettre à jour le rôle.');
-        setLoading(false);
-        return;
-      }
-
-      const trimmedReferral = referralCode.trim();
-      if (trimmedReferral) {
-        const { error: referralError } = await supabase
+        // 2) Création / mise à jour du profil dans public.profiles
+        const { error: profileError } = await supabase
           .from('profiles')
-          .update({ referral_code_used: trimmedReferral })
-          .eq('id', session.user.id);
+          .upsert(
+            {
+              id: user.id,
+              role: normalizedRole,
+              referral_code_used: trimmedReferral,
+              created_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          );
 
-        if (referralError) {
-          console.error('referral_code_used update error', referralError);
-          setError('Impossible d’enregistrer le code de parrainage.');
+        console.log('profile upsert error:', profileError);
+
+        if (profileError) {
+          setError("Le compte a été créé mais le profil n'a pas pu être enregistré.");
           setLoading(false);
           return;
         }
-      }
 
+<<<<<<< Updated upstream
       console.log('RPC set_my_role done', normalizedRole);
 
+      // Création / mise à jour de l'entrée merchants
       if (normalizedRole === 'merchant') {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -130,6 +143,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           merchantCode = `PP_${session.user.id.slice(0, 8)}_${Math.random()
             .toString(36)
             .slice(2, 8)}`.toUpperCase();
+
           const { error: merchantCodeError } = await supabase
             .from('profiles')
             .update({ merchant_code: merchantCode })
@@ -192,9 +206,26 @@ export default function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
+    // -----------------------
+    // CONNEXION
+    // -----------------------
+=======
+        setLoading(false);
+        router.push('/login');
+        return;
+      } catch (e: any) {
+        console.error('Unexpected register error:', e);
+        setError('Erreur inattendue lors de la création du compte.');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // 🔹 CONNEXION
+>>>>>>> Stashed changes
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
-      password
+      password,
     });
 
     if (signInError) {
@@ -211,14 +242,26 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
 
     setLoading(false);
-    const role =
+
+<<<<<<< Updated upstream
+    const userRole =
       (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
 
-    if (role === 'admin') {
+    if (userRole === 'admin') {
       router.push('/admin');
-    } else if (role === 'merchant') {
+    } else if (userRole === 'merchant') {
       router.push('/merchant');
-    } else if (role === 'refuge') {
+    } else if (userRole === 'refuge') {
+=======
+    const sessionRole =
+      (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
+
+    if (sessionRole === 'admin') {
+      router.push('/admin');
+    } else if (sessionRole === 'merchant') {
+      router.push('/merchant');
+    } else if (sessionRole === 'refuge') {
+>>>>>>> Stashed changes
       router.push('/refuge');
     } else {
       router.push('/dashboard');
@@ -250,6 +293,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           required
         />
       </label>
+
       {mode === 'register' && (
         <label className="label" htmlFor="referralCode">
           Code de parrainage (optionnel)
@@ -263,6 +307,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           />
         </label>
       )}
+
       {mode === 'register' && (
         <label className="label" htmlFor="role">
           Rôle
@@ -281,6 +326,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           <p className="helper">Le rôle est enregistré dans public.profiles.role.</p>
         </label>
       )}
+
       {mode === 'register' && role === 'merchant' && (
         <>
           <label className="label" htmlFor="merchantName">
@@ -317,9 +363,17 @@ export default function AuthForm({ mode }: AuthFormProps) {
           </label>
         </>
       )}
+
       {error && <p className="error">{error}</p>}
+
       <button className="button" type="submit" disabled={loading}>
-        {loading ? <Loader label="Chargement..." /> : mode === 'login' ? 'Se connecter' : 'Créer le compte'}
+        {loading ? (
+          <Loader label="Chargement..." />
+        ) : mode === 'login' ? (
+          'Se connecter'
+        ) : (
+          'Créer le compte'
+        )}
       </button>
     </form>
   );
