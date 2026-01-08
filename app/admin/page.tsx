@@ -65,7 +65,9 @@ export default async function AdminPage() {
 
   transactions.forEach((transaction) => {
     const spaKey = transaction.spa_id ?? 'sans-spa';
-    const spaName = transaction.spa?.name ?? (transaction.spa_id ? 'Association inconnue' : 'Sans SPA');
+    const spaName =
+      transaction.spa?.[0]?.name ??
+      (transaction.spa_id ? 'Association inconnue' : 'Sans SPA');
 
     if (!summariesMap.has(spaKey)) {
       summariesMap.set(spaKey, {
