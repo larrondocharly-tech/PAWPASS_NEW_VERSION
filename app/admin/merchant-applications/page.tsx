@@ -17,260 +17,222 @@ interface MerchantApplication {
   created_at: string;
 }
 
-const buildMerchantToken = (userId: string) => {
-  const prefix = userId.replace(/-/g, '').slice(0, 8);
-  const random = Math.random().toString(36).slice(2, 8);
-  return `PP_${prefix}_${random}`.toUpperCase();
-};
-
-export default function AdminMerchantApplicationsPage() {
-  const supabase = createClient();
+export default function MerchantApplicationsPage() {
   const router = useRouter();
-  const [applications, setApplications] = useState<MerchantApplication[]>([]);
-  const [adminId, setAdminId] = useState<string | null>(null);
-  const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [actionId, setActionId] = useState<string | null>(null);
+  const supabase = createClient();
+  const [apps, setApps] = useState<MerchantApplication[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const fetchApplications = async () => {
-    const { data, error: fetchError } = await supabase
-      .from('merchant_applications')
-      .select('id,user_id,business_name,city,address,phone,message,status,created_at')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true });
-
-    if (fetchError) {
-      console.error(fetchError);
-      setError(fetchError.message);
-      return;
-    }
-
-    setApplications(data ?? []);
-  };
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadAdminData = async () => {
-      setIsLoading(true);
+    const load = async () => {
+      setLoading(true);
       setError(null);
-      setHasCheckedAccess(false);
-      setIsAuthorized(false);
 
+      // Vérifier que l'utilisateur est connecté
       const {
-        data: { user }
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (!user) {
-        setHasCheckedAccess(true);
+      if (!session) {
         router.replace('/login');
         return;
       }
 
+      // Vérifier que c'est bien un admin
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', user.id)
+        .eq('id', session.user.id)
         .maybeSingle();
 
       if (profileError) {
         setError(profileError.message);
-        setHasCheckedAccess(true);
-        setIsLoading(false);
+        setLoading(false);
         return;
       }
 
-      if (profile?.role?.toLowerCase() !== 'admin') {
-        setHasCheckedAccess(true);
+      if (!profile || profile.role?.toLowerCase() !== 'admin') {
         router.replace('/dashboard');
         return;
       }
 
-      setAdminId(user.id);
-      setHasCheckedAccess(true);
-      setIsAuthorized(true);
+      // Charger les demandes en attente
+      const { data, error } = await supabase
+        .from('merchant_applications')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
 
-      await fetchApplications();
-      setIsLoading(false);
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      setApps(data ?? []);
+      setLoading(false);
     };
 
-    void loadAdminData();
+    void load();
   }, [router, supabase]);
 
-  const handleApprove = async (applicationId: string) => {
+  const handleApprove = async (application: MerchantApplication) => {
+    setActionLoadingId(application.id);
     setError(null);
-    setActionId(applicationId);
 
-    const { data: application, error: applicationError } = await supabase
-      .from('merchant_applications')
-      .select('id,user_id,business_name,city,address')
-      .eq('id', applicationId)
-      .single();
+    try {
+      // Générer un QR token pour le commerce
+      const qrToken = `PP_${application.user_id.slice(0, 8)}_${Math.random()
+        .toString(36)
+        .slice(2, 8)}`.toUpperCase();
 
-    if (applicationError || !application) {
-      setError(applicationError?.message ?? 'Demande introuvable.');
-      setActionId(null);
-      return;
+      // 1) Créer le commerce
+      const { data: merchantData, error: merchantError } = await supabase
+        .from('merchants')
+        .insert({
+          name: application.business_name,
+          city: application.city,
+          address: application.address,
+          qr_token: qrToken,
+          is_active: true,
+        })
+        .select('id, qr_token')
+        .single();
+
+      if (merchantError) {
+        throw merchantError;
+      }
+
+      const merchantId = merchantData.id;
+
+      // 2) Mettre à jour le profil utilisateur
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          role: 'merchant',
+          merchant_id: merchantId,
+          merchant_code: merchantData.qr_token,
+        })
+        .eq('id', application.user_id);
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      // 3) Mettre à jour la demande
+      const { error: appError } = await supabase
+        .from('merchant_applications')
+        .update({
+          status: 'approved',
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', application.id);
+
+      if (appError) {
+        throw appError;
+      }
+
+      // 4) Retirer la demande de la liste côté UI
+      setApps((prev) => prev.filter((a) => a.id !== application.id));
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message ?? "Erreur lors de l'approbation.");
+    } finally {
+      setActionLoadingId(null);
     }
-
-    const qrToken = buildMerchantToken(application.user_id);
-    const { data: merchant, error: merchantError } = await supabase
-      .from('merchants')
-      .insert({
-        name: application.business_name,
-        city: application.city,
-        address: application.address,
-        qr_token: qrToken,
-        is_active: true
-      })
-      .select('id,qr_token')
-      .single();
-
-    if (merchantError || !merchant) {
-      setError(merchantError?.message ?? 'Impossible de créer le commerçant.');
-      setActionId(null);
-      return;
-    }
-
-    const { error: profileUpdateError } = await supabase
-      .from('profiles')
-      .update({
-        role: 'merchant',
-        merchant_id: merchant.id,
-        merchant_code: merchant.qr_token
-      })
-      .eq('id', application.user_id);
-
-    if (profileUpdateError) {
-      setError(profileUpdateError.message);
-      setActionId(null);
-      return;
-    }
-
-    const { error: updateApplicationError } = await supabase
-      .from('merchant_applications')
-      .update({
-        status: 'approved',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: adminId
-      })
-      .eq('id', applicationId);
-
-    if (updateApplicationError) {
-      setError(updateApplicationError.message);
-      setActionId(null);
-      return;
-    }
-
-    await fetchApplications();
-    setActionId(null);
   };
 
-  const handleReject = async (applicationId: string) => {
+  const handleReject = async (application: MerchantApplication) => {
+    setActionLoadingId(application.id);
     setError(null);
-    setActionId(applicationId);
 
-    const { error: updateError } = await supabase
-      .from('merchant_applications')
-      .update({
-        status: 'rejected',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: adminId
-      })
-      .eq('id', applicationId);
+    try {
+      const { error: appError } = await supabase
+        .from('merchant_applications')
+        .update({
+          status: 'rejected',
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', application.id);
 
-    if (updateError) {
-      setError(updateError.message);
-      setActionId(null);
-      return;
+      if (appError) {
+        throw appError;
+      }
+
+      setApps((prev) => prev.filter((a) => a.id !== application.id));
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message ?? 'Erreur lors du refus.');
+    } finally {
+      setActionLoadingId(null);
     }
-
-    await fetchApplications();
-    setActionId(null);
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
   };
 
   return (
     <div className="container">
-      <TopNav title="Admin PawPass" onSignOut={handleSignOut} />
+      <TopNav title="Demandes commerçants" />
 
-      {!hasCheckedAccess ? (
-        <div className="card" style={{ marginBottom: 24 }}>
-          <p className="helper">Chargement...</p>
-        </div>
-      ) : !isAuthorized ? (
-        error ? (
-          <div className="card" style={{ marginBottom: 24 }}>
-            <p className="error">{error}</p>
-          </div>
-        ) : null
-      ) : (
-        <>
-          <div className="card" style={{ marginBottom: 24 }}>
-            <h2>Demandes commerçants</h2>
-            <p className="helper">Validez ou refusez les demandes en attente.</p>
-          </div>
+      <div className="card" style={{ marginTop: 24 }}>
+        <h2>Demandes de partenariats commerçants</h2>
 
-          <div className="card">
-            <h3>Demandes en attente</h3>
-            {isLoading ? (
-              <p className="helper">Chargement...</p>
-            ) : applications.length === 0 ? (
-              <p className="helper">Aucune demande en attente.</p>
-            ) : (
-              <div style={{ display: 'grid', gap: 16 }}>
-                {applications.map((application) => (
-                  <div key={application.id} className="card" style={{ padding: 16 }}>
-                    <h4 style={{ marginTop: 0 }}>{application.business_name}</h4>
-                    <p className="helper" style={{ marginTop: 4 }}>
-                      {application.city}
-                    </p>
-                    {application.address && (
-                      <p className="helper" style={{ marginTop: 4, fontSize: '0.9rem' }}>
-                        {application.address}
-                      </p>
-                    )}
-                    {application.phone && (
-                      <p className="helper" style={{ marginTop: 4 }}>
-                        Téléphone : {application.phone}
-                      </p>
-                    )}
-                    {application.message && (
-                      <p style={{ marginTop: 8 }}>{application.message}</p>
-                    )}
-                    <p className="helper" style={{ marginTop: 8 }}>
-                      Demande créée le {new Date(application.created_at).toLocaleString('fr-FR')}
-                    </p>
-                    {error && <p className="error">{error}</p>}
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => void handleApprove(application.id)}
-                        disabled={actionId === application.id}
-                      >
-                        {actionId === application.id ? 'Validation...' : 'Accepter'}
-                      </button>
-                      <button
-                        className="button secondary"
-                        type="button"
-                        onClick={() => void handleReject(application.id)}
-                        disabled={actionId === application.id}
-                      >
-                        {actionId === application.id ? 'Mise à jour...' : 'Refuser'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+        {loading && <p className="helper">Chargement des demandes…</p>}
+        {error && <p className="error">{error}</p>}
+
+        {!loading && apps.length === 0 && !error && (
+          <p className="helper">Aucune demande en attente.</p>
+        )}
+
+        {!loading && apps.length > 0 && (
+          <div className="list" style={{ marginTop: 16 }}>
+            {apps.map((app) => (
+              <div key={app.id} className="card" style={{ marginBottom: 12 }}>
+                <p>
+                  <strong>Commerce :</strong> {app.business_name} ({app.city})
+                </p>
+                {app.address && (
+                  <p>
+                    <strong>Adresse :</strong> {app.address}
+                  </p>
+                )}
+                {app.phone && (
+                  <p>
+                    <strong>Téléphone :</strong> {app.phone}
+                  </p>
+                )}
+                {app.message && (
+                  <p>
+                    <strong>Message :</strong> {app.message}
+                  </p>
+                )}
+                <p className="helper">
+                  Demande créée le {new Date(app.created_at).toLocaleString()}
+                </p>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={actionLoadingId === app.id}
+                    onClick={() => void handleApprove(app)}
+                  >
+                    {actionLoadingId === app.id ? 'Validation…' : 'Accepter'}
+                  </button>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={actionLoadingId === app.id}
+                    onClick={() => void handleReject(app)}
+                  >
+                    {actionLoadingId === app.id ? 'Traitement…' : 'Refuser'}
+                  </button>
+                </div>
               </div>
-            )}
+            ))}
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

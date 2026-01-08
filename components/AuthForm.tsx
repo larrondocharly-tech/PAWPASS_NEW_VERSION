@@ -32,6 +32,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
     // 🔹 INSCRIPTION
     if (mode === 'register') {
       const normalizedRole = 'user';
+
       const trimmedBusinessName = businessName.trim();
       const trimmedBusinessCity = businessCity.trim();
       const trimmedBusinessAddress = businessAddress.trim();
@@ -49,75 +50,69 @@ export default function AuthForm({ mode }: AuthFormProps) {
         password,
         options: {
           data: {
-            role: normalizedRole
-          }
-        }
+            role: normalizedRole,
+          },
+        },
       });
 
-        const trimmedMerchantName = merchantName.trim();
-        const trimmedMerchantCity = merchantCity.trim();
-        const trimmedMerchantAddress = merchantAddress.trim();
+      if (signUpError) {
+        setError(signUpError.message);
+        setLoading(false);
+        return;
+      }
 
-        const isMerchant = normalizedRole === 'merchant';
-
-        if (isMerchant && (!trimmedMerchantName || !trimmedMerchantCity)) {
-          setError('Veuillez renseigner le nom et la ville du commerce.');
-          setLoading(false);
-          return;
-        }
-
+      // On récupère / crée une session pour pouvoir manipuler le profil
       let session = data.session ?? null;
       if (!session) {
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
-          options: {
-            data: {
-              role: normalizedRole,
-            },
-          },
         });
 
-        console.log('signUp data:', data, 'error:', signUpError);
-
-        if (signUpError) {
-          if (signUpError.message.includes('Database error saving new user')) {
-            setError(
-              "Cet email est déjà utilisé ou une erreur est survenue lors de la création du compte."
-            );
-          } else {
-            setError(signUpError.message);
-          }
+        if (signInError) {
+          setError(signInError.message);
           setLoading(false);
           return;
         }
 
-        const user = data.user;
-        if (!user) {
-          setError('Impossible de créer le compte utilisateur.');
+        session = signInData.session;
+      }
+
+      if (!session) {
+        setError('Impossible de démarrer une session.');
+        setLoading(false);
+        return;
+      }
+
+      // Si tu utilises toujours la RPC set_my_role, on la garde
+      const { error: roleError } = await supabase.rpc('set_my_role', {
+        p_role: normalizedRole,
+      });
+
+      if (roleError) {
+        console.error('set_my_role error', roleError);
+        setError('Impossible de mettre à jour le rôle.');
+        setLoading(false);
+        return;
+      }
+
+      // Code parrainage
+      const trimmedReferral = referralCode.trim();
+      if (trimmedReferral) {
+        const { error: referralError } = await supabase
+          .from('profiles')
+          .update({ referral_code_used: trimmedReferral })
+          .eq('id', session.user.id);
+
+        if (referralError) {
+          console.error('referral_code_used update error', referralError);
+          setError("Impossible d’enregistrer le code de parrainage.");
           setLoading(false);
           return;
         }
+      }
 
-        // 2) Création / mise à jour du profil
-        const { error: profileError } = await supabase.from('profiles').upsert(
-          {
-            id: user.id,
-            role: normalizedRole,
-            referral_code_used: trimmedReferral,
-            created_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        );
-
-        console.log('profile upsert error:', profileError);
-
-        if (profileError) {
-          setError("Le compte a été créé mais le profil n'a pas pu être enregistré.");
-          setLoading(false);
-          return;
-        }
-
+      // Demande commerçant
       if (wantsMerchantAccount) {
         const { error: applicationError } = await supabase.from('merchant_applications').insert({
           user_id: session.user.id,
@@ -126,7 +121,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           address: trimmedBusinessAddress || null,
           phone: trimmedBusinessPhone || null,
           message: trimmedMerchantMessage || null,
-          status: 'pending'
+          status: 'pending',
         });
 
         if (applicationError) {
@@ -162,7 +157,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role,merchant_id,merchant_code')
+      .select('role, merchant_id, merchant_code')
       .eq('id', nextSession.user.id)
       .maybeSingle();
 
@@ -173,24 +168,19 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
 
     setLoading(false);
+
     const role = profile?.role?.toLowerCase() ?? 'user';
 
-    // Priorité au rôle stocké dans user_metadata (admin, etc.)
-    if (sessionRole === 'admin') {
+    if (role === 'admin') {
       router.push('/admin');
     } else if (role === 'merchant') {
-      if (profile?.merchant_id) {
-        router.push('/merchant');
-      } else {
-        router.push('/dashboard');
-      }
+      // Tous les merchants vont sur /merchant (la page gère le reste)
+      router.push('/merchant');
     } else if (role === 'refuge') {
       router.push('/refuge');
-      return;
+    } else {
+      router.push('/dashboard');
     }
-
-    // Par défaut : client
-    router.push('/dashboard');
   };
 
   return (
@@ -247,6 +237,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           Je souhaite devenir partenaire commerçant
         </label>
       )}
+
       {mode === 'register' && wantsMerchantAccount && (
         <>
           <label className="label" htmlFor="businessName">
@@ -260,6 +251,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               required
             />
           </label>
+
           <label className="label" htmlFor="businessCity">
             Ville du commerce
             <input
@@ -271,6 +263,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               required
             />
           </label>
+
           <label className="label" htmlFor="businessAddress">
             Adresse (optionnelle)
             <input
@@ -281,6 +274,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               onChange={(event) => setBusinessAddress(event.target.value)}
             />
           </label>
+
           <label className="label" htmlFor="businessPhone">
             Téléphone (optionnel)
             <input
@@ -291,6 +285,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               onChange={(event) => setBusinessPhone(event.target.value)}
             />
           </label>
+
           <label className="label" htmlFor="merchantMessage">
             Message (optionnel)
             <textarea
@@ -303,6 +298,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           </label>
         </>
       )}
+
       {error && <p className="error">{error}</p>}
 
       <button className="button" type="submit" disabled={loading}>
