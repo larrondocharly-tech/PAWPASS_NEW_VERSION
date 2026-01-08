@@ -73,7 +73,13 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     }
     return { href: '/transactions', label: item.label };
   });
-  const adminNavItems = role === 'admin' ? [{ href: '/admin/spas', label: 'Gérer les SPA' }] : [];
+  const adminNavItems =
+    role === 'admin'
+      ? [
+          { href: '/admin/spas', label: 'Gérer les SPA' },
+          { href: '/admin/merchants', label: 'Gérer les commerces' }
+        ]
+      : [];
   const handleSignOut = onSignOut
     ? onSignOut
     : async () => {
