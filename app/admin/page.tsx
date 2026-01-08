@@ -9,12 +9,11 @@ import TopNav from '@/components/TopNav';
 interface TransactionRow {
   id: string;
   amount: number;
-  cashback_amount?: number | null;
-  cashback_total?: number | null;
+  cashback_amount: number | null;
   donation_amount: number | null;
   created_at: string;
   spa_id: string | null;
-  association?: {
+  spa?: {
     name: string | null;
   } | null;
 }
@@ -30,7 +29,7 @@ interface SpaSummary {
 }
 
 const getCashbackValue = (transaction: TransactionRow) =>
-  Number(transaction.cashback_amount ?? transaction.cashback_total ?? 0);
+  Number(transaction.cashback_amount ?? 0);
 
 export default function AdminPage() {
   const supabase = createClient();
@@ -54,27 +53,35 @@ export default function AdminPage() {
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id,role')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        setError(profileError.message);
-        setIsLoading(false);
+      const metadataRole = String(user.user_metadata?.role ?? '').toLowerCase();
+      if (metadataRole && metadataRole !== 'admin') {
+        router.replace('/dashboard');
         return;
       }
 
-      if (profile?.role?.toLowerCase() !== 'admin') {
-        router.replace('/dashboard');
-        return;
+      if (!metadataRole) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id,role')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError) {
+          setError(profileError.message);
+          setIsLoading(false);
+          return;
+        }
+
+        if (profile?.role?.toLowerCase() !== 'admin') {
+          router.replace('/dashboard');
+          return;
+        }
       }
 
       const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
         .select(
-          'id,amount,cashback_amount,cashback_total,donation_amount,created_at,spa_id,association:associations(name)'
+          'id,amount,cashback_amount,donation_amount,created_at,spa_id,spa:associations(name)'
         )
         .order('created_at', { ascending: false });
 
@@ -96,8 +103,7 @@ export default function AdminPage() {
 
     transactions.forEach((transaction) => {
       const spaKey = transaction.spa_id ?? 'sans-spa';
-      const spaName =
-        transaction.association?.name ?? (transaction.spa_id ? 'Association inconnue' : 'Sans SPA');
+      const spaName = transaction.spa?.name ?? (transaction.spa_id ? 'Association inconnue' : 'Sans SPA');
 
       if (!map.has(spaKey)) {
         map.set(spaKey, {
