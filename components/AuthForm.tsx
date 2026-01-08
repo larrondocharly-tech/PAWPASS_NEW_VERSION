@@ -32,7 +32,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
     // 🔹 INSCRIPTION
     if (mode === 'register') {
       const normalizedRole = 'user';
-
       const trimmedBusinessName = businessName.trim();
       const trimmedBusinessCity = businessCity.trim();
       const trimmedBusinessAddress = businessAddress.trim();
@@ -61,7 +60,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
         return;
       }
 
-      // On récupère / crée une session pour pouvoir manipuler le profil
       let session = data.session ?? null;
       if (!session) {
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -149,6 +147,24 @@ export default function AuthForm({ mode }: AuthFormProps) {
         }
       }
 
+      if (wantsMerchantAccount) {
+        const { error: applicationError } = await supabase.from('merchant_applications').insert({
+          user_id: session.user.id,
+          business_name: trimmedBusinessName,
+          city: trimmedBusinessCity,
+          address: trimmedBusinessAddress || null,
+          phone: trimmedBusinessPhone || null,
+          message: trimmedMerchantMessage || null,
+          status: 'pending'
+        });
+
+        if (applicationError) {
+          setError(applicationError.message);
+          setLoading(false);
+          return;
+        }
+      }
+
       setLoading(false);
       router.push('/login');
       return;
@@ -175,7 +191,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, merchant_id, merchant_code')
+      .select('role,merchant_id,merchant_code')
       .eq('id', nextSession.user.id)
       .maybeSingle();
 
@@ -186,14 +202,16 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
 
     setLoading(false);
-
     const role = profile?.role?.toLowerCase() ?? 'user';
 
     if (role === 'admin') {
       router.push('/admin');
     } else if (role === 'merchant') {
-      // Tous les merchants vont sur /merchant (la page gère le reste)
-      router.push('/merchant');
+      if (profile?.merchant_id) {
+        router.push('/merchant');
+      } else {
+        router.push('/dashboard');
+      }
     } else if (role === 'refuge') {
       router.push('/refuge');
     } else {
@@ -255,7 +273,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
           Je souhaite devenir partenaire commerçant
         </label>
       )}
-
       {mode === 'register' && wantsMerchantAccount && (
         <>
           <label className="label" htmlFor="businessName">
@@ -269,7 +286,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
               required
             />
           </label>
-
           <label className="label" htmlFor="businessCity">
             Ville du commerce
             <input
@@ -281,7 +297,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
               required
             />
           </label>
-
           <label className="label" htmlFor="businessAddress">
             Adresse (optionnelle)
             <input
@@ -292,7 +307,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
               onChange={(event) => setBusinessAddress(event.target.value)}
             />
           </label>
-
           <label className="label" htmlFor="businessPhone">
             Téléphone (optionnel)
             <input
@@ -303,7 +317,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
               onChange={(event) => setBusinessPhone(event.target.value)}
             />
           </label>
-
           <label className="label" htmlFor="merchantMessage">
             Message (optionnel)
             <textarea
@@ -316,7 +329,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
           </label>
         </>
       )}
-
       {error && <p className="error">{error}</p>}
 
       <button className="button" type="submit" disabled={loading}>

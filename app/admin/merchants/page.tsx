@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 
@@ -23,6 +24,7 @@ const formatCashbackPercent = (rate: number | null) => {
 export default function AdminMerchantsPage() {
   const supabase = createClient();
   const router = useRouter();
+  const pathname = usePathname();
   const [merchants, setMerchants] = useState<MerchantRow[]>([]);
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
@@ -220,6 +222,9 @@ export default function AdminMerchantsPage() {
     window.location.href = '/login';
   };
 
+  const isMerchantsActive = pathname.startsWith('/admin/merchants');
+  const isApplicationsActive = pathname.startsWith('/admin/merchant-applications');
+
   return (
     <div className="container">
       <TopNav title="Admin PawPass" onSignOut={handleSignOut} />
@@ -236,6 +241,17 @@ export default function AdminMerchantsPage() {
         ) : null
       ) : (
         <>
+          <div className="card" style={{ marginBottom: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Link className={isMerchantsActive ? 'button' : 'button secondary'} href="/admin/merchants">
+              Tous les commerces
+            </Link>
+            <Link
+              className={isApplicationsActive ? 'button' : 'button secondary'}
+              href="/admin/merchant-applications"
+            >
+              Nouveaux commerçants
+            </Link>
+          </div>
           <div className="card" style={{ marginBottom: 24 }}>
             <h2>Gestion des commerçants</h2>
             <p className="helper">Ajoutez, modifiez ou désactivez les commerces partenaires.</p>
