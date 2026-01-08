@@ -153,12 +153,13 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
           status: 'pending',
         });
 
-        if (applicationError) {
-          setError(applicationError.message);
+        if (existingApplication) {
+          setInfoMessage(
+            'Votre demande de partenariat a bien été envoyée. Elle est en attente de validation.'
+          );
           setLoading(false);
           return;
         }
-      }
 
       if (pendingCashback && pendingCashback.amount > 0) {
         const { merchantCode, amount, spaId, donationPercent } = pendingCashback;
