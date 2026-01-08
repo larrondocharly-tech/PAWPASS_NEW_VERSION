@@ -29,6 +29,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setError(null);
     setLoading(true);
 
+    // 🔹 INSCRIPTION
     if (mode === 'register') {
       const normalizedRole = 'user';
       const trimmedBusinessName = businessName.trim();
@@ -53,55 +54,75 @@ export default function AuthForm({ mode }: AuthFormProps) {
         }
       });
 
-      if (signUpError) {
-        setError(signUpError.message);
-        setLoading(false);
-        return;
-      }
+        const trimmedMerchantName = merchantName.trim();
+        const trimmedMerchantCity = merchantCity.trim();
+        const trimmedMerchantAddress = merchantAddress.trim();
 
       let session = data.session ?? null;
       if (!session) {
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
-          password
+          password,
+          options: {
+            data: {
+              role: normalizedRole,
+            },
+          },
         });
 
-        if (signInError) {
-          setError(signInError.message);
+        console.log('signUp data:', data, 'error:', signUpError);
+
+        if (signUpError) {
+          if (signUpError.message.includes('Database error saving new user')) {
+            setError(
+              "Cet email est déjà utilisé ou une erreur est survenue lors de la création du compte."
+            );
+          } else {
+            setError(signUpError.message);
+          }
           setLoading(false);
           return;
         }
 
-        session = signInData.session;
-      }
+        const user = data.user;
+        if (!user) {
+          setError('Impossible de créer le compte utilisateur.');
+          setLoading(false);
+          return;
+        }
 
-      if (!session) {
-        setError('Impossible de démarrer une session.');
-        setLoading(false);
-        return;
-      }
+        // 2) Création / mise à jour du profil
+        const { error: profileError } = await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            role: normalizedRole,
+            referral_code_used: trimmedReferral,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
 
-      const { error: roleError } = await supabase.rpc('set_my_role', {
-        p_role: normalizedRole
-      });
+        console.log('profile upsert error:', profileError);
 
-      if (roleError) {
-        console.error('set_my_role error', roleError);
-        setError('Impossible de mettre à jour le rôle.');
-        setLoading(false);
-        return;
-      }
+        if (profileError) {
+          setError("Le compte a été créé mais le profil n'a pas pu être enregistré.");
+          setLoading(false);
+          return;
+        }
 
-      const trimmedReferral = referralCode.trim();
-      if (trimmedReferral) {
-        const { error: referralError } = await supabase
-          .from('profiles')
-          .update({ referral_code_used: trimmedReferral })
-          .eq('id', session.user.id);
+      if (wantsMerchantAccount) {
+        const { error: applicationError } = await supabase.from('merchant_applications').insert({
+          user_id: session.user.id,
+          business_name: trimmedBusinessName,
+          city: trimmedBusinessCity,
+          address: trimmedBusinessAddress || null,
+          phone: trimmedBusinessPhone || null,
+          message: trimmedMerchantMessage || null,
+          status: 'pending'
+        });
 
-        if (referralError) {
-          console.error('referral_code_used update error', referralError);
-          setError('Impossible d’enregistrer le code de parrainage.');
+        if (applicationError) {
+          setError(applicationError.message);
           setLoading(false);
           return;
         }
@@ -130,9 +151,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
+    // 🔹 CONNEXION
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
-      password
+      password,
     });
 
     if (signInError) {
@@ -163,7 +185,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setLoading(false);
     const role = profile?.role?.toLowerCase() ?? 'user';
 
-    if (role === 'admin') {
+    // Priorité au rôle stocké dans user_metadata (admin, etc.)
+    if (sessionRole === 'admin') {
       router.push('/admin');
     } else if (role === 'merchant') {
       if (profile?.merchant_id) {
@@ -173,14 +196,17 @@ export default function AuthForm({ mode }: AuthFormProps) {
       }
     } else if (role === 'refuge') {
       router.push('/refuge');
-    } else {
-      router.push('/dashboard');
+      return;
     }
+
+    // Par défaut : client
+    router.push('/dashboard');
   };
 
   return (
     <form className="card" onSubmit={handleSubmit}>
       <h2>{mode === 'login' ? 'Connexion' : 'Créer un compte'}</h2>
+
       <label className="label" htmlFor="email">
         Email
         <input
@@ -192,6 +218,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           required
         />
       </label>
+
       <label className="label" htmlFor="password">
         Mot de passe
         <input
@@ -203,6 +230,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           required
         />
       </label>
+
       {mode === 'register' && (
         <label className="label" htmlFor="referralCode">
           Code de parrainage (optionnel)
@@ -216,6 +244,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           />
         </label>
       )}
+
       {mode === 'register' && (
         <label className="label" htmlFor="merchantOptIn">
           <input
@@ -285,8 +314,15 @@ export default function AuthForm({ mode }: AuthFormProps) {
         </>
       )}
       {error && <p className="error">{error}</p>}
+
       <button className="button" type="submit" disabled={loading}>
-        {loading ? <Loader label="Chargement..." /> : mode === 'login' ? 'Se connecter' : 'Créer le compte'}
+        {loading ? (
+          <Loader label="Chargement..." />
+        ) : mode === 'login' ? (
+          'Se connecter'
+        ) : (
+          'Créer le compte'
+        )}
       </button>
     </form>
   );
