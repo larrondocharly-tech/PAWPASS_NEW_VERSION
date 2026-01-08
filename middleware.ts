@@ -11,49 +11,8 @@ const protectedPaths = [
   '/refuge'
 ];
 
-const getRoleFromSession = async (
-  supabase: ReturnType<typeof createServerClient>,
-  user: { id: string; user_metadata?: Record<string, unknown> } | null
-) => {
-  const metadataRole = (user?.user_metadata?.role as string | undefined)?.toLowerCase();
-  if (metadataRole) {
-    return metadataRole;
-  }
-
-  if (!user) {
-    return 'user';
-  }
-
-  const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  return data?.role?.toLowerCase() ?? 'user';
-};
-
-const canAccessPath = (pathname: string, role: string) => {
-  if (pathname.startsWith('/admin')) {
-    return role === 'admin';
-  }
-  if (pathname.startsWith('/merchant')) {
-    return role === 'merchant' || role === 'admin';
-  }
-  if (pathname.startsWith('/refuge')) {
-    return role === 'refuge' || role === 'admin';
-  }
-  if (
-    ['/dashboard', '/settings', '/scan', '/transactions'].some((path) => pathname.startsWith(path))
-  ) {
-    return true;
-  }
-  return true;
-};
-
-export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({
-    request: {
-      headers: request.headers
-    }
-  });
-
-  const supabase = createServerClient(
+const createMiddlewareClient = (request: NextRequest, response: NextResponse) =>
+  createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
     {
@@ -70,6 +29,45 @@ export async function middleware(request: NextRequest) {
       }
     }
   );
+
+const getRoleFromSession = async (
+  supabase: ReturnType<typeof createServerClient>,
+  user: { id: string } | null
+) => {
+  if (!user) {
+    return 'user';
+  }
+
+  const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  return data?.role?.toLowerCase() ?? 'user';
+};
+
+const canAccessPath = (pathname: string, role: string) => {
+  if (pathname.startsWith('/admin')) {
+    return role === 'admin';
+  }
+  if (pathname.startsWith('/merchant')) {
+    return role === 'merchant' || role === 'admin';
+  }
+  if (pathname.startsWith('/refuge')) {
+    return role === 'admin';
+  }
+  if (
+    ['/dashboard', '/settings', '/scan', '/transactions'].some((path) => pathname.startsWith(path))
+  ) {
+    return true;
+  }
+  return true;
+};
+
+export async function middleware(request: NextRequest) {
+  const response = NextResponse.next({
+    request: {
+      headers: request.headers
+    }
+  });
+
+  const supabase = createMiddlewareClient(request, response);
 
   const { data } = await supabase.auth.getSession();
   const isProtected = protectedPaths.some((path) => request.nextUrl.pathname.startsWith(path));
