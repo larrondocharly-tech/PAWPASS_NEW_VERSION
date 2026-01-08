@@ -3,25 +3,24 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
-import type { UserRole } from '@/lib/types';
 import Loader from './Loader';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
 }
 
-const roleOptions: UserRole[] = ['user', 'merchant'];
-
 export default function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
   const supabase = createClient();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('user');
   const [referralCode, setReferralCode] = useState('');
-  const [merchantName, setMerchantName] = useState('');
-  const [merchantCity, setMerchantCity] = useState('');
-  const [merchantAddress, setMerchantAddress] = useState('');
+  const [wantsMerchantAccount, setWantsMerchantAccount] = useState(false);
+  const [businessName, setBusinessName] = useState('');
+  const [businessCity, setBusinessCity] = useState('');
+  const [businessAddress, setBusinessAddress] = useState('');
+  const [businessPhone, setBusinessPhone] = useState('');
+  const [merchantMessage, setMerchantMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,9 +31,28 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     // 🔹 INSCRIPTION
     if (mode === 'register') {
-      try {
-        const normalizedRole = role === 'merchant' ? 'merchant' : 'user';
-        const trimmedReferral = referralCode.trim() || null;
+      const normalizedRole = 'user';
+      const trimmedBusinessName = businessName.trim();
+      const trimmedBusinessCity = businessCity.trim();
+      const trimmedBusinessAddress = businessAddress.trim();
+      const trimmedBusinessPhone = businessPhone.trim();
+      const trimmedMerchantMessage = merchantMessage.trim();
+
+      if (wantsMerchantAccount && (!trimmedBusinessName || !trimmedBusinessCity)) {
+        setError('Veuillez renseigner le nom et la ville du commerce.');
+        setLoading(false);
+        return;
+      }
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            role: normalizedRole
+          }
+        }
+      });
 
         const trimmedMerchantName = merchantName.trim();
         const trimmedMerchantCity = merchantCity.trim();
@@ -48,10 +66,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
           return;
         }
 
-        console.log('REGISTER role', role, 'normalized', normalizedRole);
-
-        // 1) Création du compte auth
-        const { data, error: signUpError } = await supabase.auth.signUp({
+      let session = data.session ?? null;
+      if (!session) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
           options: {
@@ -101,93 +118,27 @@ export default function AuthForm({ mode }: AuthFormProps) {
           return;
         }
 
-        // 3) Si commerçant : génération / récupération du code + enregistrement du commerce
-        if (normalizedRole === 'merchant') {
-          const { data: profileData, error: profileFetchError } = await supabase
-            .from('profiles')
-            .select('merchant_code')
-            .eq('id', user.id)
-            .maybeSingle();
+      if (wantsMerchantAccount) {
+        const { error: applicationError } = await supabase.from('merchant_applications').insert({
+          user_id: session.user.id,
+          business_name: trimmedBusinessName,
+          city: trimmedBusinessCity,
+          address: trimmedBusinessAddress || null,
+          phone: trimmedBusinessPhone || null,
+          message: trimmedMerchantMessage || null,
+          status: 'pending'
+        });
 
-          if (profileFetchError) {
-            setError(profileFetchError.message);
-            setLoading(false);
-            return;
-          }
-
-          let merchantCode = profileData?.merchant_code ?? null;
-
-          if (!merchantCode) {
-            merchantCode = `PP_${user.id.slice(0, 8)}_${Math.random()
-              .toString(36)
-              .slice(2, 8)}`.toUpperCase();
-
-            const { error: merchantCodeError } = await supabase
-              .from('profiles')
-              .update({ merchant_code: merchantCode })
-              .eq('id', user.id);
-
-            if (merchantCodeError) {
-              setError(merchantCodeError.message);
-              setLoading(false);
-              return;
-            }
-          }
-
-          const { data: existingMerchant, error: existingError } = await supabase
-            .from('merchants')
-            .select('id')
-            .eq('qr_token', merchantCode)
-            .maybeSingle();
-
-          if (existingError) {
-            setError(existingError.message);
-            setLoading(false);
-            return;
-          }
-
-          if (existingMerchant) {
-            const { error: merchantUpdateError } = await supabase
-              .from('merchants')
-              .update({
-                name: trimmedMerchantName,
-                city: trimmedMerchantCity,
-                address: trimmedMerchantAddress || null,
-              })
-              .eq('qr_token', merchantCode);
-
-            if (merchantUpdateError) {
-              setError(merchantUpdateError.message);
-              setLoading(false);
-              return;
-            }
-          } else {
-            const { error: merchantInsertError } = await supabase.from('merchants').insert({
-              id: crypto.randomUUID(),
-              name: trimmedMerchantName,
-              city: trimmedMerchantCity,
-              address: trimmedMerchantAddress || null,
-              qr_token: merchantCode,
-              is_active: true,
-            });
-
-            if (merchantInsertError) {
-              setError(merchantInsertError.message);
-              setLoading(false);
-              return;
-            }
-          }
+        if (applicationError) {
+          setError(applicationError.message);
+          setLoading(false);
+          return;
         }
-
-        setLoading(false);
-        router.push('/login');
-        return;
-      } catch (e: any) {
-        console.error('Unexpected register error:', e);
-        setError('Erreur inattendue lors de la création du compte.');
-        setLoading(false);
-        return;
       }
+
+      setLoading(false);
+      router.push('/login');
+      return;
     }
 
     // 🔹 CONNEXION
@@ -211,7 +162,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, merchant_id, merchant_code')
+      .select('role,merchant_id,merchant_code')
       .eq('id', nextSession.user.id)
       .maybeSingle();
 
@@ -222,25 +173,18 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
 
     setLoading(false);
-
-    const sessionRole =
-      (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
-    const profileRole = profile?.role?.toLowerCase() ?? 'user';
+    const role = profile?.role?.toLowerCase() ?? 'user';
 
     // Priorité au rôle stocké dans user_metadata (admin, etc.)
     if (sessionRole === 'admin') {
       router.push('/admin');
-      return;
-    }
-
-    // Tous les commerçants vont sur /merchant
-    if (sessionRole === 'merchant' || profileRole === 'merchant') {
-      router.push('/merchant');
-      return;
-    }
-
-    // Refuges
-    if (sessionRole === 'refuge' || profileRole === 'refuge') {
+    } else if (role === 'merchant') {
+      if (profile?.merchant_id) {
+        router.push('/merchant');
+      } else {
+        router.push('/dashboard');
+      }
+    } else if (role === 'refuge') {
       router.push('/refuge');
       return;
     }
@@ -292,63 +236,73 @@ export default function AuthForm({ mode }: AuthFormProps) {
       )}
 
       {mode === 'register' && (
-        <label className="label" htmlFor="role">
-          Rôle
-          <select
-            id="role"
-            className="select"
-            value={role}
-            onChange={(event) => setRole(event.target.value as UserRole)}
-          >
-            {roleOptions.map((option) => (
-              <option key={option} value={option}>
-                {option === 'user' ? 'Client' : 'Commerçant'}
-              </option>
-            ))}
-          </select>
-          <p className="helper">Le rôle est enregistré dans public.profiles.role.</p>
+        <label className="label" htmlFor="merchantOptIn">
+          <input
+            id="merchantOptIn"
+            type="checkbox"
+            checked={wantsMerchantAccount}
+            onChange={(event) => setWantsMerchantAccount(event.target.checked)}
+            style={{ marginRight: 8 }}
+          />
+          Je souhaite devenir partenaire commerçant
         </label>
       )}
-
-      {mode === 'register' && role === 'merchant' && (
+      {mode === 'register' && wantsMerchantAccount && (
         <>
-          <label className="label" htmlFor="merchantName">
+          <label className="label" htmlFor="businessName">
             Nom du commerce
             <input
-              id="merchantName"
+              id="businessName"
               className="input"
               type="text"
-              value={merchantName}
-              onChange={(event) => setMerchantName(event.target.value)}
+              value={businessName}
+              onChange={(event) => setBusinessName(event.target.value)}
               required
             />
           </label>
-
-          <label className="label" htmlFor="merchantCity">
-            Ville
+          <label className="label" htmlFor="businessCity">
+            Ville du commerce
             <input
-              id="merchantCity"
+              id="businessCity"
               className="input"
               type="text"
-              value={merchantCity}
-              onChange={(event) => setMerchantCity(event.target.value)}
+              value={businessCity}
+              onChange={(event) => setBusinessCity(event.target.value)}
               required
             />
           </label>
-
-          <label className="label" htmlFor="merchantAddress">
+          <label className="label" htmlFor="businessAddress">
             Adresse (optionnelle)
             <input
-              id="merchantAddress"
+              id="businessAddress"
               className="input"
               type="text"
-              value={merchantAddress}
-              onChange={(event) => setMerchantAddress(event.target.value)}
+              value={businessAddress}
+              onChange={(event) => setBusinessAddress(event.target.value)}
+            />
+          </label>
+          <label className="label" htmlFor="businessPhone">
+            Téléphone (optionnel)
+            <input
+              id="businessPhone"
+              className="input"
+              type="text"
+              value={businessPhone}
+              onChange={(event) => setBusinessPhone(event.target.value)}
+            />
+          </label>
+          <label className="label" htmlFor="merchantMessage">
+            Message (optionnel)
+            <textarea
+              id="merchantMessage"
+              className="input"
+              rows={4}
+              value={merchantMessage}
+              onChange={(event) => setMerchantMessage(event.target.value)}
             />
           </label>
         </>
       )}
-
       {error && <p className="error">{error}</p>}
 
       <button className="button" type="submit" disabled={loading}>
