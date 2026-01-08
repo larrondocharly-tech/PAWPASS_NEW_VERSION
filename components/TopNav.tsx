@@ -22,6 +22,8 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
   const pathname = usePathname();
   const supabase = createClient();
   const [role, setRole] = useState<'user' | 'merchant' | 'admin'>('user');
+  const [merchantId, setMerchantId] = useState<string | null>(null);
+  const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -33,6 +35,8 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
       if (!user) {
         setRole('user');
+        setMerchantId(null);
+        setMerchantCode(null);
         setIsAuthenticated(false);
         return;
       }
@@ -40,12 +44,14 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role,merchant_id,merchant_code')
         .eq('id', user.id)
         .maybeSingle();
 
       if (error) {
         setRole('user');
+        setMerchantId(null);
+        setMerchantCode(null);
         setIsAuthenticated(true);
         return;
       }
@@ -56,23 +62,31 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
       } else {
         setRole('user');
       }
+      setMerchantId(data?.merchant_id ?? null);
+      setMerchantCode(data?.merchant_code ?? null);
     };
 
     void loadRole();
   }, [supabase]);
 
-  const navItems = baseNavItems.map((item) => {
-    if (item.key === 'dashboard') {
-      return {
-        href: role === 'merchant' ? '/merchant' : '/dashboard',
-        label: item.label
-      };
-    }
-    if (item.key === 'scan') {
-      return { href: '/scan', label: item.label };
-    }
-    return { href: '/transactions', label: item.label };
-  });
+  const navItems =
+    role === 'merchant' && merchantId
+      ? [
+          { href: '/merchant', label: 'Dashboard commerçant' },
+          { href: '/merchant/transactions', label: 'Transactions' }
+        ]
+      : baseNavItems.map((item) => {
+          if (item.key === 'dashboard') {
+            return {
+              href: '/dashboard',
+              label: item.label
+            };
+          }
+          if (item.key === 'scan') {
+            return { href: '/scan', label: item.label };
+          }
+          return { href: '/transactions', label: item.label };
+        });
   const adminNavItems =
     role === 'admin'
       ? [

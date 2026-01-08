@@ -32,34 +32,34 @@ export default function MerchantPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setError('Session expirée.');
+        router.replace('/login');
         return;
       }
 
-      const { data: merchantData, error: merchantError } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id,role,merchant_code')
+        .select('id,role,merchant_code,merchant_id')
         .eq('id', user.id)
         .single();
 
-      if (merchantError) {
-        setError(merchantError.message);
+      if (profileError) {
+        setError(profileError.message);
         return;
       }
 
-      if (!merchantData) {
+      if (!profileData) {
         setError('Profil introuvable.');
         return;
       }
 
-      if (merchantData.role?.toUpperCase() !== 'MERCHANT') {
+      if (profileData.role?.toLowerCase() !== 'merchant' || !profileData.merchant_id) {
         router.replace('/dashboard');
         return;
       }
 
-      let updatedMerchant = merchantData;
+      let updatedMerchant = profileData;
 
-      if (!merchantData.merchant_code) {
+      if (!profileData.merchant_code) {
         const generatedToken = `PP_${user.id.slice(0, 8)}_${Math.random()
           .toString(36)
           .slice(2, 8)}`.toUpperCase();
@@ -77,7 +77,7 @@ export default function MerchantPage() {
 
       const { data: refreshed, error: refreshError } = await supabase
         .from('profiles')
-        .select('id,role,merchant_code')
+        .select('id,role,merchant_code,merchant_id')
         .eq('id', user.id)
         .single();
 
@@ -92,7 +92,7 @@ export default function MerchantPage() {
       const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
         .select('amount,cashback_total,created_at')
-        .eq('merchant_id', merchantData.id);
+        .eq('merchant_id', profileData.merchant_id);
 
       if (transactionError) {
         setError(transactionError.message);

@@ -11,6 +11,7 @@ export interface MerchantProfile {
   id: string;
   role: UserRole;
   merchant_code: string | null;
+  merchant_id: string | null;
 }
 
 export interface Spa {

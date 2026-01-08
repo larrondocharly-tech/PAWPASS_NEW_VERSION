@@ -210,14 +210,29 @@ export default function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role,merchant_id,merchant_code')
+      .eq('id', nextSession.user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      setError(profileError.message);
+      setLoading(false);
+      return;
+    }
+
     setLoading(false);
-    const role =
-      (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
+    const role = profile?.role?.toLowerCase() ?? 'user';
 
     if (role === 'admin') {
       router.push('/admin');
     } else if (role === 'merchant') {
-      router.push('/merchant');
+      if (profile?.merchant_id) {
+        router.push('/merchant');
+      } else {
+        router.push('/dashboard');
+      }
     } else if (role === 'refuge') {
       router.push('/refuge');
     } else {
