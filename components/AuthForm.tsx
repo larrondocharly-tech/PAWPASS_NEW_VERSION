@@ -169,7 +169,7 @@ export default function AuthForm({ mode, pendingCashback }: AuthFormProps) {
           p_spa_id: spaId,
           p_use_wallet: false,
           p_wallet_spent: 0,
-          p_donation_percent: donationPercent ?? 0
+          p_donation_percent: donationPercent ?? 0,
         });
 
         if (cashbackError) {
