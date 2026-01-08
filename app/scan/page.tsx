@@ -158,7 +158,7 @@ export default function ScanPage() {
 
     const { data, error: merchantError } = await supabase
       .from('profiles')
-      .select('id,role,merchant_code')
+      .select('id,role,merchant_code,merchant_id')
       .eq('merchant_code', code)
       .limit(1)
       .maybeSingle();
