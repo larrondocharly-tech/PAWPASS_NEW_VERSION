@@ -21,7 +21,7 @@ const baseNavItems = [
 export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
   const pathname = usePathname();
   const supabase = createClient();
-  const [role, setRole] = useState<'client' | 'merchant'>('client');
+  const [role, setRole] = useState<'user' | 'merchant' | 'admin'>('user');
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -32,7 +32,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setRole('client');
+        setRole('user');
         setIsAuthenticated(false);
         return;
       }
@@ -45,12 +45,17 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
         .maybeSingle();
 
       if (error) {
-        setRole('client');
+        setRole('user');
         setIsAuthenticated(true);
         return;
       }
 
-      setRole(data?.role?.toLowerCase() === 'merchant' ? 'merchant' : 'client');
+      const normalizedRole = data?.role?.toLowerCase();
+      if (normalizedRole === 'admin' || normalizedRole === 'merchant' || normalizedRole === 'user') {
+        setRole(normalizedRole);
+      } else {
+        setRole('user');
+      }
     };
 
     void loadRole();
@@ -68,6 +73,13 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     }
     return { href: '/transactions', label: item.label };
   });
+  const adminNavItems =
+    role === 'admin'
+      ? [
+          { href: '/admin/spas', label: 'Gérer les SPA' },
+          { href: '/admin/merchants', label: 'Gérer les commerces' }
+        ]
+      : [];
   const handleSignOut = onSignOut
     ? onSignOut
     : async () => {
@@ -79,7 +91,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     <div className="nav">
       <Image src="/pawpass-logo.jpg" alt="PawPass" width={140} height={70} priority />
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
-        {navItems.map((item) => {
+        {[...navItems, ...adminNavItems].map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link
@@ -120,7 +132,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
         <AccountMenuOverlay
           isOpen={isAccountMenuOpen}
           onClose={() => setIsAccountMenuOpen(false)}
-          role={role}
+          role={role === 'merchant' ? 'merchant' : 'client'}
           onSignOut={handleSignOut}
         />
       )}
