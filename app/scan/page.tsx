@@ -42,11 +42,11 @@ const formatTimeLeft = (seconds: number) => {
 
 const COOLDOWN_SECONDS = 7200;
 const COOLDOWN_MS = COOLDOWN_SECONDS * 1000;
-const cooldownKey = (code: string) => `pawpass:cooldown:${code}`;
+const cooldownKey = (code: string, userId: string) => `pawpass:cooldown:${userId}:${code}`;
 
-const readCooldownSeconds = (code: string) => {
+const readCooldownSeconds = (code: string, userId: string) => {
   try {
-    const raw = localStorage.getItem(cooldownKey(code));
+    const raw = localStorage.getItem(cooldownKey(code, userId));
     if (!raw) return null;
     const last = Number(raw);
     if (Number.isNaN(last)) return null;
@@ -437,20 +437,20 @@ export default function ScanPage() {
       return;
     }
 
-    const cooldownSeconds = readCooldownSeconds(merchantCode);
-    if (cooldownSeconds !== null) {
-      setError(
-        `Anti-triche : vous pourrez refaire un achat dans ${formatCooldown(cooldownSeconds)}.`
-      );
-      return;
-    }
-
     const {
       data: { user }
     } = await supabase.auth.getUser();
 
     if (!user) {
       setError('Session expirée.');
+      return;
+    }
+
+    const cooldownSeconds = readCooldownSeconds(merchantCode, user.id);
+    if (cooldownSeconds !== null) {
+      setError(
+        `Anti-triche : vous pourrez refaire un achat dans ${formatCooldown(cooldownSeconds)}.`
+      );
       return;
     }
 
@@ -549,7 +549,7 @@ export default function ScanPage() {
     }
 
     try {
-      localStorage.setItem(cooldownKey(merchantCode), String(Date.now()));
+      localStorage.setItem(cooldownKey(merchantCode, user.id), String(Date.now()));
     } catch {
       // ignore storage errors
     }
