@@ -3,7 +3,6 @@ import { createServerClient } from '@supabase/ssr';
 
 const protectedPaths = [
   '/dashboard',
-  '/scan',
   '/transactions',
   '/merchant',
   '/settings',
@@ -52,9 +51,7 @@ const canAccessPath = (pathname: string, role: string) => {
   if (pathname.startsWith('/refuge')) {
     return role === 'admin';
   }
-  if (
-    ['/dashboard', '/settings', '/scan', '/transactions'].some((path) => pathname.startsWith(path))
-  ) {
+  if (['/dashboard', '/settings', '/transactions'].some((path) => pathname.startsWith(path))) {
     return true;
   }
   return true;
@@ -96,7 +93,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/dashboard/:path*',
-    '/scan/:path*',
     '/transactions/:path*',
     '/merchant/:path*',
     '/settings/:path*',
