@@ -68,6 +68,9 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     }
     return { href: '/transactions', label: item.label };
   });
+  const adminNavItems = pathname.startsWith('/admin')
+    ? [{ href: '/admin/spas', label: 'Gérer les SPA' }]
+    : [];
   const handleSignOut = onSignOut
     ? onSignOut
     : async () => {
@@ -79,7 +82,7 @@ export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
     <div className="nav">
       <Image src="/pawpass-logo.jpg" alt="PawPass" width={140} height={70} priority />
       <div className="nav-links" style={{ flexWrap: 'wrap' }}>
-        {navItems.map((item) => {
+        {[...navItems, ...adminNavItems].map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link
