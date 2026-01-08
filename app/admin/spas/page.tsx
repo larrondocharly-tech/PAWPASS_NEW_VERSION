@@ -1,8 +1,6 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabaseClient';
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
+import { createClient } from '@/lib/supabaseServer';
 import TopNav from '@/components/TopNav';
 
 interface SpaRow {
@@ -12,230 +10,135 @@ interface SpaRow {
   created_at: string;
 }
 
-export default function AdminSpasPage() {
+const requireAdmin = async () => {
   const supabase = createClient();
-  const router = useRouter();
-  const [spas, setSpas] = useState<SpaRow[]>([]);
-  const [name, setName] = useState('');
-  const [city, setCity] = useState('');
-  const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  const fetchSpas = async () => {
-    const { data, error: spaError } = await supabase
-      .from('spas')
-      .select('id,name,city,created_at')
-      .order('created_at', { ascending: false });
+  if (!user) {
+    redirect('/login');
+  }
 
-    if (spaError) {
-      setError(spaError.message);
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (profile?.role?.toLowerCase() !== 'admin') {
+    redirect('/dashboard');
+  }
+
+  return supabase;
+};
+
+const fetchSpas = async (supabase: ReturnType<typeof createClient>) => {
+  const { data, error } = await supabase
+    .from('spas')
+    .select('id,name,city,created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return { data: [], error: error.message };
+  }
+
+  return { data: data ?? [], error: null };
+};
+
+export default async function AdminSpasPage() {
+  const supabase = await requireAdmin();
+  const { data: spas, error } = await fetchSpas(supabase);
+
+  const addSpa = async (formData: FormData) => {
+    'use server';
+    const serverSupabase = await requireAdmin();
+    const name = String(formData.get('name') ?? '').trim();
+    const city = String(formData.get('city') ?? '').trim();
+
+    if (!name || !city) {
       return;
     }
 
-    setSpas(data ?? []);
+    await serverSupabase.from('spas').insert({ name, city });
+    revalidatePath('/admin/spas');
   };
 
-  useEffect(() => {
-    const loadAdminData = async () => {
-      setIsLoading(true);
-      setError(null);
-      setHasCheckedAccess(false);
-      setIsAuthorized(false);
+  const deleteSpa = async (formData: FormData) => {
+    'use server';
+    const serverSupabase = await requireAdmin();
+    const id = String(formData.get('id') ?? '');
 
-      const {
-        data: { user }
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setHasCheckedAccess(true);
-        router.replace('/login');
-        return;
-      }
-
-      const metadataRole = String(user.user_metadata?.role ?? '').toLowerCase();
-      if (metadataRole && metadataRole !== 'admin') {
-        setHasCheckedAccess(true);
-        router.replace('/dashboard');
-        return;
-      }
-
-      if (!metadataRole) {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id,role')
-          .eq('id', user.id)
-          .single();
-
-        if (profileError) {
-          setError(profileError.message);
-          setHasCheckedAccess(true);
-          setIsLoading(false);
-          return;
-        }
-
-        if (profile?.role?.toLowerCase() !== 'admin') {
-          setHasCheckedAccess(true);
-          router.replace('/dashboard');
-          return;
-        }
-      }
-
-      setHasCheckedAccess(true);
-      setIsAuthorized(true);
-
-      await fetchSpas();
-      setIsLoading(false);
-    };
-
-    void loadAdminData();
-  }, [router, supabase]);
-
-  const handleAddSpa = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-
-    const trimmedName = name.trim();
-    const trimmedCity = city.trim();
-
-    if (!trimmedName || !trimmedCity) {
-      setError('Veuillez renseigner un nom et une ville.');
+    if (!id) {
       return;
     }
 
-    setIsSaving(true);
-    const { error: insertError } = await supabase
-      .from('spas')
-      .insert({ name: trimmedName, city: trimmedCity });
-
-    if (insertError) {
-      setError(insertError.message);
-      setIsSaving(false);
-      return;
-    }
-
-    setName('');
-    setCity('');
-    await fetchSpas();
-    setIsSaving(false);
-  };
-
-  const handleDeleteSpa = async (spaId: string) => {
-    setError(null);
-    setDeletingId(spaId);
-    const { error: deleteError } = await supabase.from('spas').delete().eq('id', spaId);
-
-    if (deleteError) {
-      setError(deleteError.message);
-      setDeletingId(null);
-      return;
-    }
-
-    await fetchSpas();
-    setDeletingId(null);
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
+    await serverSupabase.from('spas').delete().eq('id', id);
+    revalidatePath('/admin/spas');
   };
 
   return (
     <div className="container">
-      <TopNav title="Admin PawPass" onSignOut={handleSignOut} />
+      <TopNav title="Admin PawPass" />
 
-      {!hasCheckedAccess ? (
-        <div className="card" style={{ marginBottom: 24 }}>
-          <p className="helper">Chargement...</p>
-        </div>
-      ) : !isAuthorized ? (
-        error ? (
-          <div className="card" style={{ marginBottom: 24 }}>
-            <p className="error">{error}</p>
-          </div>
-        ) : null
-      ) : (
-        <>
-          <div className="card" style={{ marginBottom: 24 }}>
-            <h2>Gestion des SPA</h2>
-            <p className="helper">Ajoutez, mettez à jour ou supprimez les SPA partenaires.</p>
-          </div>
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h2>Gestion des SPA</h2>
+        <p className="helper">Ajoutez, mettez à jour ou supprimez les SPA partenaires.</p>
+      </div>
 
-          <div className="card" style={{ marginBottom: 24 }}>
-            <h3>Ajouter une SPA</h3>
-            <form onSubmit={handleAddSpa}>
-              <label className="label" htmlFor="spaName">
-                Nom
-                <input
-                  id="spaName"
-                  className="input"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  required
-                />
-              </label>
-              <label className="label" htmlFor="spaCity">
-                Ville
-                <input
-                  id="spaCity"
-                  className="input"
-                  value={city}
-                  onChange={(event) => setCity(event.target.value)}
-                  required
-                />
-              </label>
-              {error && <p className="error">{error}</p>}
-              <button className="button" type="submit" disabled={isSaving} style={{ marginTop: 12 }}>
-                {isSaving ? 'Ajout en cours...' : 'Ajouter la SPA'}
-              </button>
-            </form>
-          </div>
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h3>Ajouter une SPA</h3>
+        <form action={addSpa}>
+          <label className="label" htmlFor="spaName">
+            Nom
+            <input id="spaName" className="input" name="name" required />
+          </label>
+          <label className="label" htmlFor="spaCity">
+            Ville
+            <input id="spaCity" className="input" name="city" required />
+          </label>
+          <button className="button" type="submit" style={{ marginTop: 12 }}>
+            Ajouter la SPA
+          </button>
+        </form>
+      </div>
 
-          <div className="card">
-            <h3>Liste des SPA</h3>
-            {isLoading ? (
-              <p className="helper">Chargement...</p>
-            ) : error ? (
-              <p className="error">{error}</p>
-            ) : spas.length === 0 ? (
-              <p className="helper">Aucune SPA trouvée.</p>
-            ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Nom</th>
-                    <th>Ville</th>
-                    <th>Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {spas.map((spa) => (
-                    <tr key={spa.id}>
-                      <td>{spa.name ?? '—'}</td>
-                      <td>{spa.city ?? '—'}</td>
-                      <td>{new Date(spa.created_at).toLocaleString('fr-FR')}</td>
-                      <td>
-                        <button
-                          className="button secondary"
-                          type="button"
-                          onClick={() => void handleDeleteSpa(spa.id)}
-                          disabled={deletingId === spa.id}
-                        >
-                          {deletingId === spa.id ? 'Suppression...' : 'Supprimer'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </>
-      )}
+      <div className="card">
+        <h3>Liste des SPA</h3>
+        {error ? (
+          <p className="error">{error}</p>
+        ) : spas.length === 0 ? (
+          <p className="helper">Aucune SPA trouvée.</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Ville</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {spas.map((spa) => (
+                <tr key={spa.id}>
+                  <td>{spa.name ?? '—'}</td>
+                  <td>{spa.city ?? '—'}</td>
+                  <td>{new Date(spa.created_at).toLocaleString('fr-FR')}</td>
+                  <td>
+                    <form action={deleteSpa}>
+                      <input type="hidden" name="id" value={spa.id} />
+                      <button className="button secondary" type="submit">
+                        Supprimer
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
