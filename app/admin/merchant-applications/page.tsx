@@ -13,7 +13,6 @@ interface MerchantApplication {
   address: string | null;
   phone: string | null;
   message: string | null;
-  status: string;
   created_at: string;
 }
 

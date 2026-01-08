@@ -131,6 +131,24 @@ export default function AuthForm({ mode }: AuthFormProps) {
         }
       }
 
+      if (wantsMerchantAccount) {
+        const { error: applicationError } = await supabase.from('merchant_applications').insert({
+          user_id: session.user.id,
+          business_name: trimmedBusinessName,
+          city: trimmedBusinessCity,
+          address: trimmedBusinessAddress || null,
+          phone: trimmedBusinessPhone || null,
+          message: trimmedMerchantMessage || null,
+          status: 'pending'
+        });
+
+        if (applicationError) {
+          setError(applicationError.message);
+          setLoading(false);
+          return;
+        }
+      }
+
       setLoading(false);
       router.push('/login');
       return;
