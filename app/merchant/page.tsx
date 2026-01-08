@@ -28,7 +28,7 @@ export default function MerchantPage() {
   useEffect(() => {
     const loadMerchant = async () => {
       const {
-        data: { user }
+        data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
@@ -38,7 +38,7 @@ export default function MerchantPage() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id,role,merchant_code,merchant_id')
+        .select('id, role, merchant_code, merchant_id')
         .eq('id', user.id)
         .single();
 
@@ -52,17 +52,20 @@ export default function MerchantPage() {
         return;
       }
 
-      if (profileData.role?.toLowerCase() !== 'merchant' || !profileData.merchant_id) {
+      // ✅ On vérifie SEULEMENT que c'est bien un commerçant
+      if (profileData.role?.toLowerCase() !== 'merchant') {
         router.replace('/dashboard');
         return;
       }
 
       let updatedMerchant = profileData;
 
+      // Génération du merchant_code si manquant
       if (!profileData.merchant_code) {
         const generatedToken = `PP_${user.id.slice(0, 8)}_${Math.random()
           .toString(36)
           .slice(2, 8)}`.toUpperCase();
+
         const { error: updateError } = await supabase
           .from('profiles')
           .update({ merchant_code: generatedToken })
@@ -77,7 +80,7 @@ export default function MerchantPage() {
 
       const { data: refreshed, error: refreshError } = await supabase
         .from('profiles')
-        .select('id,role,merchant_code,merchant_id')
+        .select('id, role, merchant_code, merchant_id')
         .eq('id', user.id)
         .single();
 
@@ -89,10 +92,16 @@ export default function MerchantPage() {
       updatedMerchant = refreshed;
       setMerchant(updatedMerchant);
 
+      // Si aucun merchant_id encore lié, on ne charge juste pas de transactions
+      if (!updatedMerchant.merchant_id) {
+        setTransactions([]);
+        return;
+      }
+
       const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
-        .select('amount,cashback_total,created_at')
-        .eq('merchant_id', profileData.merchant_id);
+        .select('amount, cashback_total, created_at')
+        .eq('merchant_id', updatedMerchant.merchant_id);
 
       if (transactionError) {
         setError(transactionError.message);
@@ -103,7 +112,8 @@ export default function MerchantPage() {
     };
 
     void loadMerchant();
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
   useEffect(() => {
     if (!merchant?.merchant_code) {
@@ -141,13 +151,14 @@ export default function MerchantPage() {
     );
     const monthlyRevenueEstimate =
       CASHBACK_RATE > 0 ? monthlyCashback / CASHBACK_RATE : monthlyCashback;
+
     return {
       totalVolume,
       totalCashback,
       count: transactions.length,
       monthlyCount: monthly.length,
       monthlyCashback,
-      monthlyRevenueEstimate
+      monthlyRevenueEstimate,
     };
   }, [transactions]);
 
@@ -175,7 +186,6 @@ export default function MerchantPage() {
     await supabase.auth.signOut();
     window.location.href = '/login';
   };
-
 
   return (
     <div className="container">
