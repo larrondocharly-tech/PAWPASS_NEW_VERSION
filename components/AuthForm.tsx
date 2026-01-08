@@ -7,6 +7,12 @@ import Loader from './Loader';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
+  pendingCashback?: {
+    merchantCode: string;
+    amount: number;
+    spaId: string | null;
+    donationPercent: number;
+  } | null;
 }
 
 export default function AuthForm({ mode }: AuthFormProps) {
@@ -23,10 +29,12 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [merchantMessage, setMerchantMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+    setInfoMessage(null);
     setLoading(true);
 
     // 🔹 INSCRIPTION
@@ -112,6 +120,27 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
       // Demande commerçant
       if (wantsMerchantAccount) {
+        const { data: existingApplication, error: existingApplicationError } = await supabase
+          .from('merchant_applications')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (existingApplicationError) {
+          setError(existingApplicationError.message);
+          setLoading(false);
+          return;
+        }
+
+        if (existingApplication) {
+          setInfoMessage(
+            'Votre demande de partenariat a bien été envoyée. Elle est en attente de validation.'
+          );
+          setLoading(false);
+          return;
+        }
+
         const { error: applicationError } = await supabase.from('merchant_applications').insert({
           user_id: session.user.id,
           business_name: trimmedBusinessName,
@@ -120,42 +149,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
           phone: trimmedBusinessPhone || null,
           message: trimmedMerchantMessage || null,
           status: 'pending',
-        });
-
-        if (applicationError) {
-          setError(applicationError.message);
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (wantsMerchantAccount) {
-        const { error: applicationError } = await supabase.from('merchant_applications').insert({
-          user_id: session.user.id,
-          business_name: trimmedBusinessName,
-          city: trimmedBusinessCity,
-          address: trimmedBusinessAddress || null,
-          phone: trimmedBusinessPhone || null,
-          message: trimmedMerchantMessage || null,
-          status: 'pending'
-        });
-
-        if (applicationError) {
-          setError(applicationError.message);
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (wantsMerchantAccount) {
-        const { error: applicationError } = await supabase.from('merchant_applications').insert({
-          user_id: session.user.id,
-          business_name: trimmedBusinessName,
-          city: trimmedBusinessCity,
-          address: trimmedBusinessAddress || null,
-          phone: trimmedBusinessPhone || null,
-          message: trimmedMerchantMessage || null,
-          status: 'pending'
         });
 
         if (applicationError) {
@@ -330,6 +323,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         </>
       )}
       {error && <p className="error">{error}</p>}
+      {infoMessage && <p className="helper">{infoMessage}</p>}
 
       <button className="button" type="submit" disabled={loading}>
         {loading ? (
