@@ -233,20 +233,19 @@ export default function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
+    // Tous les commerçants vont sur /merchant
     if (sessionRole === 'merchant' || profileRole === 'merchant') {
-      if (profile?.merchant_id) {
-        router.push('/merchant');
-      } else {
-        router.push('/dashboard');
-      }
+      router.push('/merchant');
       return;
     }
 
+    // Refuges
     if (sessionRole === 'refuge' || profileRole === 'refuge') {
       router.push('/refuge');
       return;
     }
 
+    // Par défaut : client
     router.push('/dashboard');
   };
 
