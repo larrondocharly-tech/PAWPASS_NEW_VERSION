@@ -7,6 +7,12 @@ import Loader from './Loader';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
+  pendingCashback?: {
+    merchantCode: string;
+    amount: number;
+    spaId: string | null;
+    donationPercent: number;
+  } | null;
 }
 
 export default function AuthForm({ mode }: AuthFormProps) {
