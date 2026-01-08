@@ -437,23 +437,6 @@ export default function ScanPage() {
       return;
     }
 
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setError('Session expirée.');
-      return;
-    }
-
-    const cooldownSeconds = readCooldownSeconds(merchantCode, user.id);
-    if (cooldownSeconds !== null) {
-      setError(
-        `Anti-triche : vous pourrez refaire un achat dans ${formatCooldown(cooldownSeconds)}.`
-      );
-      return;
-    }
-
     if (!amountValue || Number.isNaN(amountValue) || amountValue <= 0) {
       setError('Montant invalide.');
       return;
@@ -495,6 +478,29 @@ export default function ScanPage() {
 
     if (scanMode === 'after' && receiptRequired && !receiptFile) {
       setError('Le ticket est requis pour cette transaction.');
+      return;
+    }
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      const params = new URLSearchParams({
+        pendingMerchantCode: merchantCode,
+        pendingAmount: String(amountValue),
+        pendingSpaId: donateCashback ? spaId : '',
+        pendingDonationPercent: donateCashback ? String(donationPercent) : '0'
+      });
+      router.push(`/register?${params.toString()}`);
+      return;
+    }
+
+    const cooldownSeconds = readCooldownSeconds(merchantCode, user.id);
+    if (cooldownSeconds !== null) {
+      setError(
+        `Anti-triche : vous pourrez refaire un achat dans ${formatCooldown(cooldownSeconds)}.`
+      );
       return;
     }
 
