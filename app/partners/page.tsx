@@ -8,9 +8,7 @@ interface MerchantPartner {
   id: string;
   name?: string | null;
   city?: string | null;
-  description?: string | null;
-  category?: string | null;
-  is_active?: boolean | null;
+  address?: string | null;
 }
 
 export default function PartnersPage() {
@@ -25,7 +23,11 @@ export default function PartnersPage() {
       setError(null);
       setLoading(true);
 
-      const { data, error: fetchError } = await supabase.from('merchants').select('*');
+      const { data, error: fetchError } = await supabase
+        .from('merchants')
+        .select('id,name,city,address')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
 
       if (fetchError) {
         setError(fetchError.message);
@@ -34,9 +36,7 @@ export default function PartnersPage() {
         return;
       }
 
-      const rows = (data as MerchantPartner[]) ?? [];
-      const filtered = rows.filter((row) => row.is_active !== false);
-      setPartners(filtered);
+      setPartners((data as MerchantPartner[]) ?? []);
       setLoading(false);
     };
 
@@ -102,9 +102,11 @@ export default function PartnersPage() {
             <p className="helper" style={{ marginTop: 4 }}>
               {partner.city ?? 'Ville non renseignée'}
             </p>
-            <p style={{ marginTop: 12 }}>
-              {partner.description ?? partner.category ?? 'Commerce partenaire PawPass.'}
-            </p>
+            {partner.address && (
+              <p className="helper" style={{ marginTop: 6, fontSize: '0.9rem' }}>
+                {partner.address}
+              </p>
+            )}
           </div>
         ))}
       </section>
