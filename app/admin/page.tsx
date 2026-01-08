@@ -101,6 +101,7 @@ export default function AdminPage() {
   const summaries = useMemo(() => {
     const map = new Map<string, SpaSummary>();
 
+    // Groupement par SPA + calculs des totaux par SPA.
     transactions.forEach((transaction) => {
       const spaKey = transaction.spa_id ?? 'sans-spa';
       const spaName = transaction.spa?.name ?? (transaction.spa_id ? 'Association inconnue' : 'Sans SPA');
@@ -130,6 +131,12 @@ export default function AdminPage() {
     return Array.from(map.values()).sort((a, b) => a.spaName.localeCompare(b.spaName));
   }, [transactions]);
 
+  // Total global des dons (toutes SPA confondues).
+  const grandTotalDonation = useMemo(
+    () => transactions.reduce((sum, transaction) => sum + Number(transaction.donation_amount ?? 0), 0),
+    [transactions]
+  );
+
   const handleToggleSpa = (spaId: string) => {
     setSelectedSpaId((current) => (current === spaId ? null : spaId));
   };
@@ -146,6 +153,17 @@ export default function AdminPage() {
       <div className="card" style={{ marginBottom: 24 }}>
         <h2>Tableau de bord admin – Transactions par SPA</h2>
         <p className="helper">Vision globale des dons et cashbacks enregistrés.</p>
+      </div>
+
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h3>Total des dons (toutes SPA)</h3>
+        {isLoading ? (
+          <p className="helper">Chargement...</p>
+        ) : (
+          <p style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+            {formatCurrency(grandTotalDonation)}
+          </p>
+        )}
       </div>
 
       <div className="card">
