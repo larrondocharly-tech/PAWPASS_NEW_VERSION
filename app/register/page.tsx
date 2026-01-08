@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import AuthForm from '@/components/AuthForm';
 
+export const dynamic = 'force-dynamic';
+
 export default function RegisterPage() {
   const searchParams = useSearchParams();
   const pendingMerchantCode = searchParams.get('pendingMerchantCode');

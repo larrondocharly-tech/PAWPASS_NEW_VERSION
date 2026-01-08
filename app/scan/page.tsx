@@ -10,6 +10,8 @@ import QrScanner from '@/components/QrScanner';
 import DiscountCoupon from '@/components/DiscountCoupon';
 import TopNav from '@/components/TopNav';
 
+export const dynamic = 'force-dynamic';
+
 const MAX_AMOUNT = 200;
 const RANDOM_RECEIPT_RATE = 0.1;
 const DEFAULT_CASHBACK_PERCENT = 5;
