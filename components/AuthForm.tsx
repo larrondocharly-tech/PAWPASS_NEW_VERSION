@@ -58,14 +58,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
         const trimmedMerchantCity = merchantCity.trim();
         const trimmedMerchantAddress = merchantAddress.trim();
 
-        const isMerchant = normalizedRole === 'merchant';
-
-        if (isMerchant && (!trimmedMerchantName || !trimmedMerchantCity)) {
-          setError('Veuillez renseigner le nom et la ville du commerce.');
-          setLoading(false);
-          return;
-        }
-
       let session = data.session ?? null;
       if (!session) {
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -117,6 +109,24 @@ export default function AuthForm({ mode }: AuthFormProps) {
           setLoading(false);
           return;
         }
+
+      if (wantsMerchantAccount) {
+        const { error: applicationError } = await supabase.from('merchant_applications').insert({
+          user_id: session.user.id,
+          business_name: trimmedBusinessName,
+          city: trimmedBusinessCity,
+          address: trimmedBusinessAddress || null,
+          phone: trimmedBusinessPhone || null,
+          message: trimmedMerchantMessage || null,
+          status: 'pending'
+        });
+
+        if (applicationError) {
+          setError(applicationError.message);
+          setLoading(false);
+          return;
+        }
+      }
 
       if (wantsMerchantAccount) {
         const { error: applicationError } = await supabase.from('merchant_applications').insert({
