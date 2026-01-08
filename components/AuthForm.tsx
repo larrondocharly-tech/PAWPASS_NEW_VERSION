@@ -30,10 +30,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setError(null);
     setLoading(true);
 
-<<<<<<< Updated upstream
-    // -----------------------
-    // INSCRIPTION
-    // -----------------------
     if (mode === 'register') {
       const normalizedRole = role === 'merchant' ? 'merchant' : 'user';
       const isMerchant = normalizedRole === 'merchant';
@@ -64,7 +60,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       try {
         const normalizedRole = role === 'merchant' ? 'merchant' : 'user';
         const trimmedReferral = referralCode.trim() || null;
->>>>>>> Stashed changes
+
 
         console.log('REGISTER role', role, 'normalized', normalizedRole);
 
@@ -120,10 +116,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
           return;
         }
 
-<<<<<<< Updated upstream
       console.log('RPC set_my_role done', normalizedRole);
 
-      // Création / mise à jour de l'entrée merchants
       if (normalizedRole === 'merchant') {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -222,7 +216,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
 
     // 🔹 CONNEXION
->>>>>>> Stashed changes
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -254,22 +247,20 @@ export default function AuthForm({ mode }: AuthFormProps) {
     }
 
     setLoading(false);
-<<<<<<< HEAD
 
-<<<<<<< Updated upstream
     const userRole =
       (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
-=======
+
     const role = profile?.role?.toLowerCase() ?? 'user';
->>>>>>> a0f8a7852c8d9fd6f61842fe2134481f84f803f4
+
 
     if (userRole === 'admin') {
       router.push('/admin');
-<<<<<<< HEAD
+
     } else if (userRole === 'merchant') {
       router.push('/merchant');
     } else if (userRole === 'refuge') {
-=======
+
     const sessionRole =
       (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
 
@@ -278,8 +269,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
     } else if (sessionRole === 'merchant') {
       router.push('/merchant');
     } else if (sessionRole === 'refuge') {
->>>>>>> Stashed changes
-=======
+
     } else if (role === 'merchant') {
       if (profile?.merchant_id) {
         router.push('/merchant');
@@ -287,7 +277,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
         router.push('/dashboard');
       }
     } else if (role === 'refuge') {
->>>>>>> a0f8a7852c8d9fd6f61842fe2134481f84f803f4
       router.push('/refuge');
     } else {
       router.push('/dashboard');
