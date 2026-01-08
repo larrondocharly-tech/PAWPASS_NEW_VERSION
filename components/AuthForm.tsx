@@ -241,14 +241,31 @@ export default function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role,merchant_id,merchant_code')
+      .eq('id', nextSession.user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      setError(profileError.message);
+      setLoading(false);
+      return;
+    }
+
     setLoading(false);
+<<<<<<< HEAD
 
 <<<<<<< Updated upstream
     const userRole =
       (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
+=======
+    const role = profile?.role?.toLowerCase() ?? 'user';
+>>>>>>> a0f8a7852c8d9fd6f61842fe2134481f84f803f4
 
     if (userRole === 'admin') {
       router.push('/admin');
+<<<<<<< HEAD
     } else if (userRole === 'merchant') {
       router.push('/merchant');
     } else if (userRole === 'refuge') {
@@ -262,6 +279,15 @@ export default function AuthForm({ mode }: AuthFormProps) {
       router.push('/merchant');
     } else if (sessionRole === 'refuge') {
 >>>>>>> Stashed changes
+=======
+    } else if (role === 'merchant') {
+      if (profile?.merchant_id) {
+        router.push('/merchant');
+      } else {
+        router.push('/dashboard');
+      }
+    } else if (role === 'refuge') {
+>>>>>>> a0f8a7852c8d9fd6f61842fe2134481f84f803f4
       router.push('/refuge');
     } else {
       router.push('/dashboard');
