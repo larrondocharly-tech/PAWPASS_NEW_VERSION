@@ -30,37 +30,23 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setError(null);
     setLoading(true);
 
-    if (mode === 'register') {
-      const normalizedRole = role === 'merchant' ? 'merchant' : 'user';
-      const isMerchant = normalizedRole === 'merchant';
-      const trimmedMerchantName = merchantName.trim();
-      const trimmedMerchantCity = merchantCity.trim();
-      const trimmedMerchantAddress = merchantAddress.trim();
-
-      if (isMerchant && (!trimmedMerchantName || !trimmedMerchantCity)) {
-        setError('Veuillez renseigner le nom et la ville du commerce.');
-        setLoading(false);
-        return;
-      }
-
-      console.log('REGISTER role', role, 'normalized', normalizedRole);
-
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            role: normalizedRole
-          }
-        }
-      });
-=======
     // 🔹 INSCRIPTION
     if (mode === 'register') {
       try {
         const normalizedRole = role === 'merchant' ? 'merchant' : 'user';
         const trimmedReferral = referralCode.trim() || null;
 
+        const trimmedMerchantName = merchantName.trim();
+        const trimmedMerchantCity = merchantCity.trim();
+        const trimmedMerchantAddress = merchantAddress.trim();
+
+        const isMerchant = normalizedRole === 'merchant';
+
+        if (isMerchant && (!trimmedMerchantName || !trimmedMerchantCity)) {
+          setError('Veuillez renseigner le nom et la ville du commerce.');
+          setLoading(false);
+          return;
+        }
 
         console.log('REGISTER role', role, 'normalized', normalizedRole);
 
@@ -78,9 +64,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
         console.log('signUp data:', data, 'error:', signUpError);
 
         if (signUpError) {
-          // Message plus clair si email déjà utilisé
           if (signUpError.message.includes('Database error saving new user')) {
-            setError("Cet email est déjà utilisé ou une erreur est survenue lors de la création du compte.");
+            setError(
+              "Cet email est déjà utilisé ou une erreur est survenue lors de la création du compte."
+            );
           } else {
             setError(signUpError.message);
           }
@@ -95,18 +82,16 @@ export default function AuthForm({ mode }: AuthFormProps) {
           return;
         }
 
-        // 2) Création / mise à jour du profil dans public.profiles
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert(
-            {
-              id: user.id,
-              role: normalizedRole,
-              referral_code_used: trimmedReferral,
-              created_at: new Date().toISOString(),
-            },
-            { onConflict: 'id' }
-          );
+        // 2) Création / mise à jour du profil
+        const { error: profileError } = await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            role: normalizedRole,
+            referral_code_used: trimmedReferral,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
 
         console.log('profile upsert error:', profileError);
 
@@ -116,94 +101,84 @@ export default function AuthForm({ mode }: AuthFormProps) {
           return;
         }
 
-      console.log('RPC set_my_role done', normalizedRole);
-
-      if (normalizedRole === 'merchant') {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('merchant_code')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profileError) {
-          setError(profileError.message);
-          setLoading(false);
-          return;
-        }
-
-        let merchantCode = profileData?.merchant_code ?? null;
-
-        if (!merchantCode) {
-          merchantCode = `PP_${session.user.id.slice(0, 8)}_${Math.random()
-            .toString(36)
-            .slice(2, 8)}`.toUpperCase();
-
-          const { error: merchantCodeError } = await supabase
+        // 3) Si commerçant : génération / récupération du code + enregistrement du commerce
+        if (normalizedRole === 'merchant') {
+          const { data: profileData, error: profileFetchError } = await supabase
             .from('profiles')
-            .update({ merchant_code: merchantCode })
-            .eq('id', session.user.id);
+            .select('merchant_code')
+            .eq('id', user.id)
+            .maybeSingle();
 
-          if (merchantCodeError) {
-            setError(merchantCodeError.message);
+          if (profileFetchError) {
+            setError(profileFetchError.message);
             setLoading(false);
             return;
           }
-        }
 
-        const { data: existingMerchant, error: existingError } = await supabase
-          .from('merchants')
-          .select('id')
-          .eq('qr_token', merchantCode)
-          .maybeSingle();
+          let merchantCode = profileData?.merchant_code ?? null;
 
-        if (existingError) {
-          setError(existingError.message);
-          setLoading(false);
-          return;
-        }
+          if (!merchantCode) {
+            merchantCode = `PP_${user.id.slice(0, 8)}_${Math.random()
+              .toString(36)
+              .slice(2, 8)}`.toUpperCase();
 
-        if (existingMerchant) {
-          const { error: merchantUpdateError } = await supabase
+            const { error: merchantCodeError } = await supabase
+              .from('profiles')
+              .update({ merchant_code: merchantCode })
+              .eq('id', user.id);
+
+            if (merchantCodeError) {
+              setError(merchantCodeError.message);
+              setLoading(false);
+              return;
+            }
+          }
+
+          const { data: existingMerchant, error: existingError } = await supabase
             .from('merchants')
-            .update({
+            .select('id')
+            .eq('qr_token', merchantCode)
+            .maybeSingle();
+
+          if (existingError) {
+            setError(existingError.message);
+            setLoading(false);
+            return;
+          }
+
+          if (existingMerchant) {
+            const { error: merchantUpdateError } = await supabase
+              .from('merchants')
+              .update({
+                name: trimmedMerchantName,
+                city: trimmedMerchantCity,
+                address: trimmedMerchantAddress || null,
+              })
+              .eq('qr_token', merchantCode);
+
+            if (merchantUpdateError) {
+              setError(merchantUpdateError.message);
+              setLoading(false);
+              return;
+            }
+          } else {
+            const { error: merchantInsertError } = await supabase.from('merchants').insert({
+              id: crypto.randomUUID(),
               name: trimmedMerchantName,
               city: trimmedMerchantCity,
-              address: trimmedMerchantAddress || null
-            })
-            .eq('qr_token', merchantCode);
+              address: trimmedMerchantAddress || null,
+              qr_token: merchantCode,
+              is_active: true,
+            });
 
-          if (merchantUpdateError) {
-            setError(merchantUpdateError.message);
-            setLoading(false);
-            return;
-          }
-        } else {
-          const { error: merchantInsertError } = await supabase.from('merchants').insert({
-            id: crypto.randomUUID(),
-            name: trimmedMerchantName,
-            city: trimmedMerchantCity,
-            address: trimmedMerchantAddress || null,
-            qr_token: merchantCode,
-            is_active: true
-          });
-
-          if (merchantInsertError) {
-            setError(merchantInsertError.message);
-            setLoading(false);
-            return;
+            if (merchantInsertError) {
+              setError(merchantInsertError.message);
+              setLoading(false);
+              return;
+            }
           }
         }
-      }
 
-      setLoading(false);
-      router.push('/login');
-      return;
-    }
-
-    // -----------------------
-    // CONNEXION
-    // -----------------------
-=======
         setLoading(false);
         router.push('/login');
         return;
@@ -236,7 +211,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role,merchant_id,merchant_code')
+      .select('role, merchant_id, merchant_code')
       .eq('id', nextSession.user.id)
       .maybeSingle();
 
@@ -248,44 +223,37 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     setLoading(false);
 
-    const userRole =
-      (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
-
-    const role = profile?.role?.toLowerCase() ?? 'user';
-
-
-    if (userRole === 'admin') {
-      router.push('/admin');
-
-    } else if (userRole === 'merchant') {
-      router.push('/merchant');
-    } else if (userRole === 'refuge') {
-
     const sessionRole =
       (nextSession.user.user_metadata?.role as string | undefined)?.toLowerCase() ?? 'user';
+    const profileRole = profile?.role?.toLowerCase() ?? 'user';
 
+    // Priorité au rôle stocké dans user_metadata (admin, etc.)
     if (sessionRole === 'admin') {
       router.push('/admin');
-    } else if (sessionRole === 'merchant') {
-      router.push('/merchant');
-    } else if (sessionRole === 'refuge') {
+      return;
+    }
 
-    } else if (role === 'merchant') {
+    if (sessionRole === 'merchant' || profileRole === 'merchant') {
       if (profile?.merchant_id) {
         router.push('/merchant');
       } else {
         router.push('/dashboard');
       }
-    } else if (role === 'refuge') {
-      router.push('/refuge');
-    } else {
-      router.push('/dashboard');
+      return;
     }
+
+    if (sessionRole === 'refuge' || profileRole === 'refuge') {
+      router.push('/refuge');
+      return;
+    }
+
+    router.push('/dashboard');
   };
 
   return (
     <form className="card" onSubmit={handleSubmit}>
       <h2>{mode === 'login' ? 'Connexion' : 'Créer un compte'}</h2>
+
       <label className="label" htmlFor="email">
         Email
         <input
@@ -297,6 +265,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           required
         />
       </label>
+
       <label className="label" htmlFor="password">
         Mot de passe
         <input
@@ -355,6 +324,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               required
             />
           </label>
+
           <label className="label" htmlFor="merchantCity">
             Ville
             <input
@@ -366,6 +336,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               required
             />
           </label>
+
           <label className="label" htmlFor="merchantAddress">
             Adresse (optionnelle)
             <input
