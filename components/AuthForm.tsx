@@ -29,6 +29,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setError(null);
     setLoading(true);
 
+    // 🔹 INSCRIPTION
     if (mode === 'register') {
       const normalizedRole = 'user';
       const trimmedBusinessName = businessName.trim();
@@ -48,9 +49,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
         password,
         options: {
           data: {
-            role: normalizedRole
-          }
-        }
+            role: normalizedRole,
+          },
+        },
       });
 
       if (signUpError) {
@@ -63,7 +64,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       if (!session) {
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
-          password
+          password,
         });
 
         if (signInError) {
@@ -81,8 +82,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
         return;
       }
 
+      // Si tu utilises toujours la RPC set_my_role, on la garde
       const { error: roleError } = await supabase.rpc('set_my_role', {
-        p_role: normalizedRole
+        p_role: normalizedRole,
       });
 
       if (roleError) {
@@ -92,6 +94,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         return;
       }
 
+      // Code parrainage
       const trimmedReferral = referralCode.trim();
       if (trimmedReferral) {
         const { error: referralError } = await supabase
@@ -101,7 +104,44 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
         if (referralError) {
           console.error('referral_code_used update error', referralError);
-          setError('Impossible d’enregistrer le code de parrainage.');
+          setError("Impossible d’enregistrer le code de parrainage.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Demande commerçant
+      if (wantsMerchantAccount) {
+        const { error: applicationError } = await supabase.from('merchant_applications').insert({
+          user_id: session.user.id,
+          business_name: trimmedBusinessName,
+          city: trimmedBusinessCity,
+          address: trimmedBusinessAddress || null,
+          phone: trimmedBusinessPhone || null,
+          message: trimmedMerchantMessage || null,
+          status: 'pending',
+        });
+
+        if (applicationError) {
+          setError(applicationError.message);
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (wantsMerchantAccount) {
+        const { error: applicationError } = await supabase.from('merchant_applications').insert({
+          user_id: session.user.id,
+          business_name: trimmedBusinessName,
+          city: trimmedBusinessCity,
+          address: trimmedBusinessAddress || null,
+          phone: trimmedBusinessPhone || null,
+          message: trimmedMerchantMessage || null,
+          status: 'pending'
+        });
+
+        if (applicationError) {
+          setError(applicationError.message);
           setLoading(false);
           return;
         }
@@ -130,9 +170,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
+    // 🔹 CONNEXION
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
-      password
+      password,
     });
 
     if (signInError) {
@@ -181,6 +222,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
   return (
     <form className="card" onSubmit={handleSubmit}>
       <h2>{mode === 'login' ? 'Connexion' : 'Créer un compte'}</h2>
+
       <label className="label" htmlFor="email">
         Email
         <input
@@ -192,6 +234,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           required
         />
       </label>
+
       <label className="label" htmlFor="password">
         Mot de passe
         <input
@@ -203,6 +246,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           required
         />
       </label>
+
       {mode === 'register' && (
         <label className="label" htmlFor="referralCode">
           Code de parrainage (optionnel)
@@ -216,6 +260,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           />
         </label>
       )}
+
       {mode === 'register' && (
         <label className="label" htmlFor="merchantOptIn">
           <input
@@ -285,8 +330,15 @@ export default function AuthForm({ mode }: AuthFormProps) {
         </>
       )}
       {error && <p className="error">{error}</p>}
+
       <button className="button" type="submit" disabled={loading}>
-        {loading ? <Loader label="Chargement..." /> : mode === 'login' ? 'Se connecter' : 'Créer le compte'}
+        {loading ? (
+          <Loader label="Chargement..." />
+        ) : mode === 'login' ? (
+          'Se connecter'
+        ) : (
+          'Créer le compte'
+        )}
       </button>
     </form>
   );
