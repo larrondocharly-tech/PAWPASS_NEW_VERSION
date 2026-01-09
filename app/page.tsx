@@ -1,6 +1,12 @@
-// Landing publique PawPass (accessible sans connexion)
+"use client";
+
 import Link from 'next/link';
 import Image from 'next/image';
+export const dynamic = "force-dynamic";
+
+
+
+// Landing publique PawPass (accessible sans connexion)
 
 export default function LandingPage() {
   return (
