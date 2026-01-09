@@ -30,7 +30,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
           email,
-          password,
+          password
         });
 
         if (error) {
@@ -43,7 +43,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       } else {
         const { error } = await supabase.auth.signUp({
           email,
-          password,
+          password
         });
 
         if (error) {
@@ -61,52 +61,52 @@ export default function AuthForm({ mode }: AuthFormProps) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mt-6 bg-white shadow-md rounded-xl p-6 space-y-4 max-w-md"
-    >
-      <div className="space-y-1">
-        <label className="block text-sm font-medium text-slate-700">
-          Email
-        </label>
+    <form onSubmit={handleSubmit} style={{ marginTop: '24px' }}>
+      {/* Email */}
+      <label className="label">
+        Email
         <input
           type="email"
           required
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+          className="input"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="vous@exemple.fr"
         />
-      </div>
+      </label>
 
-      <div className="space-y-1">
-        <label className="block text-sm font-medium text-slate-700">
-          Mot de passe
-        </label>
+      {/* Mot de passe */}
+      <label className="label">
+        Mot de passe
         <input
           type="password"
           required
           minLength={6}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+          className="input"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
         />
-        <p className="text-xs text-slate-500">
-          6 caractères minimum. Tu pourras le modifier plus tard.
-        </p>
-      </div>
+      </label>
 
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          {error}
-        </p>
-      )}
+      <p className="helper">
+        6 caractères minimum. Tu pourras le modifier plus tard.
+      </p>
 
+      {/* Erreur */}
+      {error && <p className="error">{error}</p>}
+
+      {/* Bouton */}
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full rounded-full px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition disabled:opacity-60 disabled:cursor-not-allowed"
+        className="button"
+        style={{
+          width: '100%',
+          marginTop: '20px',
+          opacity: isSubmitting ? 0.7 : 1,
+          cursor: isSubmitting ? 'not-allowed' : 'pointer'
+        }}
       >
         {isSubmitting
           ? isLogin
@@ -114,10 +114,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
             : 'Inscription en cours...'
           : isLogin
           ? 'Se connecter'
-          : "Créer mon compte"}
+          : 'Créer mon compte'}
       </button>
 
-      <p className="text-xs text-slate-500 text-center pt-1">
+      <p className="helper" style={{ textAlign: 'center', marginTop: '8px' }}>
         En continuant, vous acceptez les CGU de PawPass.
       </p>
     </form>
