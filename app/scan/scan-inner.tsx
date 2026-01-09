@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
+// @ts-expect-error
 import QrScanner from "react-qr-scanner";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,11 @@ export default function ScanInner() {
       <AnyQrScanner
         delay={250}
         style={{ width: "100%" }}
+        constraints={{
+          video: {
+            facingMode: { ideal: "environment" }
+          }
+        }}
         onScan={(result: any) => {
           if (result && !scanned) {
             setScanned(true);
