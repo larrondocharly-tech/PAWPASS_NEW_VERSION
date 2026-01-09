@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabaseClient";
 import QrScanner from "react-qr-scanner";
 const AnyQrScanner: any = QrScanner;
 
+// Force la page en dynamique (Next.js App Router)
 export const dynamic = "force-dynamic";
 
 const { useEffect, useState } = React;
@@ -23,13 +24,9 @@ export default function ScanPage() {
   const searchParams = useSearchParams();
   const supabase = createClient();
 
-  const [merchantCode, setMerchantCode] = useState("");
+  const [scanned, setScanned] = useState(false);
+  const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
-  const [spas, setSpas] = useState<Spa[]>([]);
-  const [selectedSpaId, setSelectedSpaId] = useState("");
-  const [donationPercent, setDonationPercent] = useState(50);
-  const [showScanner, setShowScanner] = useState(true);
-
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
@@ -74,10 +71,8 @@ export default function ScanPage() {
     setErrorMsg(null);
   };
 
-  // Callback en cas d'erreur du scanner
   const handleError = (err: any) => {
-    console.error("Erreur scanner QR :", err);
-    setErrorMsg("Impossible d'accéder à la caméra ou de lire le QR.");
+    console.error("Erreur QR Scanner :", err);
   };
 
   // Soumission du formulaire de transaction
@@ -164,13 +159,6 @@ export default function ScanPage() {
       setLoading(false);
     }
   };
-
-  const scannerStyle = {
-    width: "100%",
-    maxWidth: 320,
-    borderRadius: 12,
-    overflow: "hidden",
-  } as const;
 
   return (
     <div
@@ -262,126 +250,31 @@ export default function ScanPage() {
             }}
           />
 
-          <label style={{ fontWeight: 600 }}>Montant de l&apos;achat (€)</label>
           <input
             type="number"
-            min="0"
-            step="0.01"
+            placeholder="Montant de l'achat"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             style={{
+              padding: "10px",
               width: "100%",
-              padding: 10,
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              marginBottom: 12,
+              margin: "10px 0",
+              fontSize: "16px",
             }}
           />
 
-          <label style={{ fontWeight: 600 }}>Refuge bénéficiaire</label>
-          <select
-            value={selectedSpaId}
-            onChange={(e) => setSelectedSpaId(e.target.value)}
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 8,
-              border: "1px solid #d1d5db",
-              marginBottom: 12,
-            }}
-          >
-            <option value="">Sélectionner un refuge</option>
-            {spas.map((spa) => (
-              <option key={spa.id} value={spa.id}>
-                {spa.name}
-              </option>
-            ))}
-          </select>
-
-          {/* CHOIX 50% / 100% */}
-          <div style={{ marginBottom: 16, marginTop: 8 }}>
-            <label
-              style={{
-                fontWeight: 600,
-                display: "block",
-                marginBottom: 8,
-              }}
-            >
-              Pourcentage de don au refuge
-            </label>
-
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => setDonationPercent(50)}
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  borderRadius: 999,
-                  border:
-                    donationPercent === 50
-                      ? "2px solid #059669"
-                      : "1px solid #d1d5db",
-                  backgroundColor:
-                    donationPercent === 50 ? "#059669" : "white",
-                  color: donationPercent === 50 ? "white" : "black",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                50%
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDonationPercent(100)}
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  borderRadius: 999,
-                  border:
-                    donationPercent === 100
-                      ? "2px solid #059669"
-                      : "1px solid #d1d5db",
-                  backgroundColor:
-                    donationPercent === 100 ? "#059669" : "white",
-                  color: donationPercent === 100 ? "white" : "black",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                100%
-              </button>
-            </div>
-
-            <p
-              style={{
-                marginTop: 8,
-                fontSize: 14,
-                color: "#4b5563",
-              }}
-            >
-              Vous donnez {donationPercent}% de votre cashback au refuge.
-            </p>
-          </div>
-
           <button
-            type="submit"
+            onClick={handleSubmit}
             disabled={loading}
             style={{
-              width: "100%",
-              padding: 12,
-              borderRadius: 999,
-              border: "none",
-              fontWeight: 600,
-              backgroundColor: "#059669",
+              padding: "10px 20px",
+              background: "#0A8F44",
               color: "white",
-              cursor: loading ? "default" : "pointer",
-              opacity: loading ? 0.7 : 1,
-              marginTop: 4,
+              borderRadius: "6px",
+              fontSize: "18px",
             }}
           >
-            {loading ? "Validation..." : "Valider la transaction"}
+            Valider
           </button>
           {errorMsg && (
             <p style={{ marginTop: 8, color: "#b00020", fontSize: "0.9rem" }}>
