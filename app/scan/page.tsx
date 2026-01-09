@@ -184,7 +184,16 @@ export default function ScanPage() {
             }}
           >
             <div style={scannerStyle}>
-              <QrScanner delay={300} onScan={handleScan} onError={handleError} />
+              <QrScanner
+                delay={300}
+                onScan={handleScan}
+                onError={handleError}
+                constraints={{
+                  video: {
+                    facingMode: { ideal: "environment" },
+                  },
+                }}
+              />
             </div>
           </div>
         )}
