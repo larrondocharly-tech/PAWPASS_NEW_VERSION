@@ -37,13 +37,17 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setLoading(true);
 
     if (mode === 'login') {
+      console.log('[AuthForm] Tentative de login', { email });
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
+      console.log('[AuthForm] Résultat login', { data, error });
+
       if (error) {
-        setErrorMsg(error.message);
+        setErrorMsg(error.message || 'Erreur de connexion.');
         setLoading(false);
         return;
       }
@@ -211,9 +215,18 @@ export default function AuthForm({ mode }: AuthFormProps) {
       </button>
 
       {errorMsg && (
-        <p style={{ color: 'red', marginTop: 8, fontSize: '0.9rem' }}>
+        <div
+          style={{
+            marginTop: 12,
+            padding: 10,
+            borderRadius: 8,
+            backgroundColor: '#ffe5e5',
+            color: '#b00020',
+            fontSize: '0.9rem',
+          }}
+        >
           {errorMsg}
-        </p>
+        </div>
       )}
 
       <p className="text-xs text-slate-500 text-center pt-1">
