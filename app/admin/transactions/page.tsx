@@ -328,7 +328,7 @@ export default function AdminTransactionsPage() {
                         textAlign: 'right',
                       }}
                     >
-                      {tx.cashback_amount.toFixed(2).replace('.', ',')} €
+                      {(tx.cashback_amount ?? 0).toFixed(2).replace('.', ',')} €
                     </td>
                   </tr>
                 ))}
