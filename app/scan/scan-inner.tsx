@@ -60,7 +60,21 @@ export default function ScanInner() {
 
   const handleScan = (result: any) => {
     if (!result || scanned) return;
-    const code = result.text;
+
+    const raw = result.text;
+    let code = raw;
+
+    try {
+      // If QR contains a URL with ?m=
+      const url = new URL(raw);
+      const m = url.searchParams.get("m");
+      if (m) {
+        code = m;
+      }
+    } catch {
+      // Not a URL → keep raw as merchant code
+    }
+
     setScanned(true);
     router.push(`/scan?code=${code}`);
   };
