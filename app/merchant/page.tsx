@@ -9,7 +9,6 @@ import { formatCurrency } from '@/lib/utils';
 import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
 
-export const dynamic = "force-dynamic";
 
 interface TransactionLite {
   amount: number;
