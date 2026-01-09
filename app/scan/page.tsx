@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 export default function ScanPage() {
   return (
     <main className="min-h-[70vh] flex items-center justify-center px-4 bg-slate-50">

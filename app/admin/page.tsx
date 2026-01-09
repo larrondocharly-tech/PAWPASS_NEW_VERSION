@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabaseServer';
