@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabaseClient';
+import TopNav from '@/components/TopNav';
 
 interface Wallet {
   balance: number;
@@ -42,7 +43,6 @@ export default function DashboardPage() {
       const supabase = createClient();
 
       try {
-        // 1) Récupérer l'utilisateur
         const {
           data: { user },
           error: userError,
@@ -68,7 +68,6 @@ export default function DashboardPage() {
           return;
         }
 
-        // 2) Charger le wallet + quelques transactions
         const [walletRes, txRes] = await Promise.all([
           supabase
             .from('wallets')
@@ -130,26 +129,29 @@ export default function DashboardPage() {
   const { status, userEmail, wallet, transactions, errorMessage } = state;
 
   return (
-    <main className="min-h-[70vh] px-4 pt-8 pb-12 bg-slate-50">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold text-slate-900">
+    <div className="min-h-screen bg-[#F8FAF5]">
+      {/* Header PawPass */}
+      <TopNav />
+
+      {/* Contenu principal */}
+      <main className="max-w-5xl mx-auto px-4 pb-16 pt-10 space-y-8">
+        <section>
+          <h1 className="text-3xl font-semibold text-slate-900 mb-1">
             Tableau de bord
           </h1>
           {userEmail && (
             <p className="text-sm text-slate-600">
-              Connecté en tant que{' '}
-              <span className="font-medium">{userEmail}</span>
+              Connecté en tant que <span className="font-medium">{userEmail}</span>
             </p>
           )}
-        </div>
+        </section>
 
         {status === 'loading' && (
           <p className="text-sm text-slate-600">Chargement de vos données…</p>
         )}
 
         {status === 'error' && (
-          <div className="bg-red-50 border border-red-200 text-sm text-red-700 rounded-xl p-4">
+          <div className="bg-red-50 border border-red-200 text-sm text-red-700 rounded-2xl p-4">
             <p className="font-medium mb-1">
               Une erreur est survenue lors du chargement de votre tableau de bord.
             </p>
@@ -160,9 +162,9 @@ export default function DashboardPage() {
         {status === 'ok' && (
           <>
             {/* Carte cagnotte */}
-            <section className="grid md:grid-cols-3 gap-4">
-              <div className="md:col-span-2 bg-white rounded-2xl shadow-sm p-6 space-y-3">
-                <h2 className="text-lg font-semibold text-slate-900">
+            <section className="grid md:grid-cols-3 gap-5">
+              <div className="md:col-span-2 bg-white rounded-2xl shadow-lg shadow-slate-200/60 p-6 space-y-4">
+                <h2 className="text-xl font-semibold text-slate-900">
                   Votre cagnotte PawPass
                 </h2>
                 <p className="text-sm text-slate-600">
@@ -177,7 +179,7 @@ export default function DashboardPage() {
                     {wallet ? wallet.balance.toFixed(2) : '0.00'} €
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-4 text-xs text-slate-600 mt-2">
+                <div className="flex flex-wrap gap-4 text-xs text-slate-600 mt-3">
                   <span>
                     Cashback cumulé :{' '}
                     <strong>
@@ -199,7 +201,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-sm p-6 space-y-3">
+              <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/60 p-6 space-y-3">
                 <h3 className="text-sm font-semibold text-slate-900">
                   Prochaines actions
                 </h3>
@@ -212,9 +214,9 @@ export default function DashboardPage() {
             </section>
 
             {/* Dernières transactions */}
-            <section className="bg-white rounded-2xl shadow-sm p-6 space-y-3">
+            <section className="bg-white rounded-2xl shadow-lg shadow-slate-200/60 p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-xl font-semibold text-slate-900">
                   Dernières transactions
                 </h2>
               </div>
@@ -270,7 +272,7 @@ export default function DashboardPage() {
             </section>
           </>
         )}
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
