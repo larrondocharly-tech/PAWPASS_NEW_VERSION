@@ -6,8 +6,6 @@ import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
 
-
-
 interface Transaction {
   id: string;
   amount: number;

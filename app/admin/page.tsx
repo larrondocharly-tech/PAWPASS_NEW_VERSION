@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabaseClient';
 export const dynamic = "force-dynamic";
 
-
-
 interface SpaSummary {
   spa_name: string;
   spa_id: string | null;

@@ -6,8 +6,6 @@ import type { Profile, Spa } from '@/lib/types';
 import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
 
-
-
 export default function SettingsPage() {
   const supabase = createClient();
   const [profile, setProfile] = useState<Profile | null>(null);

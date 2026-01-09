@@ -6,10 +6,6 @@ import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
 
-
-
-
-
 export default function ReferralPage() {
   const supabase = createClient();
   const router = useRouter();

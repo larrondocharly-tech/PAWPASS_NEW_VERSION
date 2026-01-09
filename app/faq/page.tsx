@@ -3,10 +3,6 @@
 import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
 
-
-
-
-
 const faqItems = [
   {
     question: 'PawPass, c’est quoi ?',

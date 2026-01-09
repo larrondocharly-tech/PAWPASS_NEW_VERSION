@@ -4,10 +4,6 @@ import { useState } from 'react';
 import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
 
-
-
-
-
 interface ContactFormState {
   name: string;
   email: string;

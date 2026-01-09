@@ -6,8 +6,6 @@ import { createClient } from "@/lib/supabaseClient";
 import { QrReader } from "react-qr-reader";
 export const dynamic = "force-dynamic";
 
-
-
 export default function ScanPage() {
   const router = useRouter();
   const supabase = createClient();

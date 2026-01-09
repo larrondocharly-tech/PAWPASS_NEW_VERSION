@@ -5,8 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 export const dynamic = "force-dynamic";
 
-
-
 // --- composant interne qui utilise useSearchParams ---
 function LoginPageInner() {
   const router = useRouter();

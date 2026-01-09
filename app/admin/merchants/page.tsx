@@ -7,8 +7,6 @@ import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
 
-
-
 interface MerchantRow {
   id: string;
   name: string | null;

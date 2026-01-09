@@ -5,10 +5,6 @@ import TopNav from '@/components/TopNav';
 import { createClient } from '@/lib/supabaseClient';
 export const dynamic = "force-dynamic";
 
-
-
-
-
 export default function HelpPage() {
   const supabase = createClient();
   const handleSignOut = async () => {
