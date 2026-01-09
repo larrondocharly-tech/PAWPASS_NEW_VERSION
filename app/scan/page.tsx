@@ -1,19 +1,18 @@
-// @ts-nocheck
+'use client';
 
-"use client";
-
-import { useEffect, useState } from "react";
+import React from 'react';
 import { useRouter, useSearchParams } from "next/navigation";
-import NextDynamic from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
 
-// Import dynamique du lecteur QR (empêche l’erreur côté serveur)
-const QrScanner = NextDynamic(() => import("react-qr-scanner"), {
-  ssr: false,
-});
+// On force QrScanner en "any" pour que TypeScript ne bloque pas sur des props
+// non typées comme `constraints`.
+import QrScanner from "react-qr-scanner";
+const AnyQrScanner: any = QrScanner;
 
 // Force la page en dynamique (Next.js App Router)
 export const dynamic = "force-dynamic";
+
+const { useEffect, useState } = React;
 
 interface Spa {
   id: string;
@@ -203,7 +202,7 @@ export default function ScanPage() {
             }}
           >
             <div style={scannerStyle}>
-              <QrScanner
+              <AnyQrScanner
                 delay={300}
                 onScan={handleScan}
                 onError={handleError}
