@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, { Suspense } from "react";
 import ScanInner from "./scan-inner";
@@ -8,6 +8,9 @@ const scannerStyle = {
   width: '100%',
   maxWidth: 400,
 };
+=======
+export const dynamic = "force-dynamic";
+>>>>>>> Stashed changes
 
 export default function ScanPage() {
   return (
