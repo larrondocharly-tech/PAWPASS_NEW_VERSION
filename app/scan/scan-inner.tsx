@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
-// @ts-expect-error
 import QrScanner from "react-qr-scanner";
 
 export const dynamic = "force-dynamic";
