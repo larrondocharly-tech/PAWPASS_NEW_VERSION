@@ -1,11 +1,10 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 "use client";
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
+export const dynamic = "force-dynamic";
 
 interface MerchantApplication {
   id: string;

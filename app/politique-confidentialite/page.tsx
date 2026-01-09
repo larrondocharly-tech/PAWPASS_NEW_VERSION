@@ -1,6 +1,7 @@
-'use client';
+"use client";
 
 import TopNav from '@/components/TopNav';
+export const dynamic = "force-dynamic";
 
 export default function PolitiqueConfidentialitePage() {
   return (

@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
@@ -9,6 +7,7 @@ import QRCodeCard from '@/components/QRCodeCard';
 import type { MerchantProfile } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
 import TopNav from '@/components/TopNav';
+export const dynamic = "force-dynamic";
 
 interface TransactionLite {
   amount: number;

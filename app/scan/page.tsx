@@ -1,11 +1,10 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 import { QrReader } from "react-qr-reader";
+export const dynamic = "force-dynamic";
 
 export default function ScanPage() {
   const router = useRouter();
