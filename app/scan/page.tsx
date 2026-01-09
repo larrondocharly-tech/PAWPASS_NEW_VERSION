@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
@@ -9,7 +11,6 @@ type Step = 'form' | 'success';
 export default function ScanPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const supabase = createClient();
 
   const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
@@ -17,6 +18,7 @@ export default function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>('form');
 
+  // On récupère le code commerçant UNIQUEMENT côté client
   useEffect(() => {
     const code =
       searchParams.get('m') ||
@@ -52,6 +54,8 @@ export default function ScanPage() {
     setIsSubmitting(true);
 
     try {
+      const supabase = createClient();
+
       // Vérifier que l'utilisateur est connecté
       const {
         data: { user },
@@ -59,10 +63,10 @@ export default function ScanPage() {
       } = await supabase.auth.getUser();
 
       if (userError) {
+        console.error('getUser error:', userError);
         setError(
           "Erreur d'authentification. Merci de vous reconnecter puis de rescanner le QR code."
         );
-        console.error('getUser error:', userError);
         setIsSubmitting(false);
         return;
       }
@@ -75,13 +79,13 @@ export default function ScanPage() {
         return;
       }
 
-      // Appel de ta fonction SQL (adapté à ta fonction existante)
+      // Appel de ta fonction SQL
       const { data, error: rpcError } = await supabase.rpc(
         'apply_cashback_transaction',
         {
           p_merchant_code: merchantCode,
           p_amount: parsed,
-          p_spa_id: null, // à brancher plus tard sur un vrai refuge
+          p_spa_id: null,
           p_use_wallet: false,
           p_wallet_spent: 0,
           p_donation_percent: 0,
@@ -98,7 +102,6 @@ export default function ScanPage() {
       }
 
       console.log('Transaction créée :', data);
-
       setStep('success');
       setIsSubmitting(false);
     } catch (err: any) {
@@ -168,7 +171,7 @@ export default function ScanPage() {
             </button>
 
             <p className="text-xs text-slate-500">
-              Le montant servira uniquement à calculer le cashback PawPass. Aucun
+              Le montant sert uniquement à calculer le cashback PawPass. Aucun
               prélèvement bancaire n&apos;est effectué.
             </p>
           </form>
