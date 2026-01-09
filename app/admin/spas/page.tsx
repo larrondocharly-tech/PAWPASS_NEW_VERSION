@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabaseServer';
 import TopNav from '@/components/TopNav';
+export const dynamic = "force-dynamic";
 
 export const dynamic = "force-dynamic";
 

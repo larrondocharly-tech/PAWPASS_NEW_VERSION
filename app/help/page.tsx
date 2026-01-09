@@ -1,8 +1,9 @@
-'use client';
+"use client";
 
 import Link from 'next/link';
 import TopNav from '@/components/TopNav';
 import { createClient } from '@/lib/supabaseClient';
+export const dynamic = "force-dynamic";
 
 export default function HelpPage() {
   const supabase = createClient();

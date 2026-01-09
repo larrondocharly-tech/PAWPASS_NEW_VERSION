@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
+export const dynamic = "force-dynamic";
 
 export const dynamic = "force-dynamic";
 

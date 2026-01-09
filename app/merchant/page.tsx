@@ -7,6 +7,7 @@ import QRCodeCard from '@/components/QRCodeCard';
 import type { MerchantProfile } from '@/lib/types';
 import { formatCurrency } from '@/lib/utils';
 import TopNav from '@/components/TopNav';
+export const dynamic = "force-dynamic";
 
 export const dynamic = "force-dynamic";
 

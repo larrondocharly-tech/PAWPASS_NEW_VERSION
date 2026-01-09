@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
+export const dynamic = "force-dynamic";
 
 export const dynamic = "force-dynamic";
 
