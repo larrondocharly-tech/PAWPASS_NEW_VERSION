@@ -1,11 +1,12 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 "use client";
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabaseClient';
 import type { Profile, Spa } from '@/lib/types';
 import TopNav from '@/components/TopNav';
+export const dynamic = "force-dynamic";
+
+
 
 export default function SettingsPage() {
   const supabase = createClient();
