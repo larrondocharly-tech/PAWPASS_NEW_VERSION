@@ -1,25 +1,17 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import NextDynamic from "next/dynamic";
+import React from 'react';
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
-type QrScannerProps = {
-  delay: number;
-  onScan: (data: any) => void;
-  onError: (err: any) => void;
-};
-
-const QrScanner = NextDynamic<QrScannerProps>(
-  () => import("react-qr-scanner"),
-  {
-    ssr: false,
-  }
-);
+// On force QrScanner en "any" pour que TypeScript ne bloque pas sur des props
+// non typées comme `constraints`.
+import QrScanner from "react-qr-scanner";
+const AnyQrScanner: any = QrScanner;
 
 export const dynamic = "force-dynamic";
 
+const { useEffect, useState } = React;
 
 interface Spa {
   id: string;
@@ -28,6 +20,7 @@ interface Spa {
 
 export default function ScanPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   const [merchantCode, setMerchantCode] = useState("");
@@ -38,8 +31,17 @@ export default function ScanPage() {
   const [showScanner, setShowScanner] = useState(true);
 
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
+  const merchantCodeFromQuery = searchParams.get("m");
+  const resolvedMerchantCode = merchantCodeFromQuery ?? merchantCode;
+
+  useEffect(() => {
+    if (merchantCodeFromQuery && !merchantCode) {
+      setMerchantCode(merchantCodeFromQuery);
+      setShowScanner(false);
+    }
+  }, [merchantCodeFromQuery, merchantCode]);
 
   // Charger la liste des refuges (table "spas")
   useEffect(() => {
@@ -69,7 +71,7 @@ export default function ScanPage() {
 
     setMerchantCode(text);
     setShowScanner(false); // on cache le scanner une fois le code lu
-    setErrorMsg("");
+    setErrorMsg(null);
   };
 
   // Callback en cas d'erreur du scanner
@@ -79,27 +81,49 @@ export default function ScanPage() {
   };
 
   // Soumission du formulaire de transaction
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
+  const handleValidateTransaction = async (
+    e?: React.FormEvent | React.MouseEvent
+  ) => {
+    if (e && "preventDefault" in e) e.preventDefault();
+    setErrorMsg(null);
     setSuccessMsg("");
+    setLoading(true);
 
-    if (!merchantCode) {
+    if (!resolvedMerchantCode) {
       setErrorMsg("Merci de scanner le QR commerçant avant de valider.");
+      setLoading(false);
       return;
     }
 
-    if (!amount || Number(amount) <= 0) {
+    const normalizedAmount = amount.replace(",", ".");
+    const parsedAmount = Number.parseFloat(normalizedAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       setErrorMsg("Montant invalide.");
+      setLoading(false);
       return;
     }
 
     if (!selectedSpaId) {
       setErrorMsg("Merci de choisir un refuge bénéficiaire.");
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      console.error("Erreur récupération utilisateur :", authError);
+    }
+
+    if (!authData?.user) {
+      const redirectParams = new URLSearchParams({
+        from: "scan",
+        m: resolvedMerchantCode,
+        amount: normalizedAmount,
+      });
+      router.push(`/register?${redirectParams.toString()}`);
+      setLoading(false);
+      return;
+    }
 
     try {
       // Appel à ta fonction Supabase (adaptée à ton schéma)
@@ -107,8 +131,8 @@ export default function ScanPage() {
       const { data, error } = await supabase.rpc(
         "apply_cashback_transaction",
         {
-          p_merchant_code: merchantCode,
-          p_amount: Number(amount),
+          p_merchant_code: resolvedMerchantCode,
+          p_amount: parsedAmount,
           p_spa_id: selectedSpaId,
           p_use_wallet: false,
           p_wallet_spent: 0,
@@ -118,18 +142,24 @@ export default function ScanPage() {
 
       if (error) {
         console.error("Erreur RPC :", error);
-        setErrorMsg(error.message || "Erreur lors de l'enregistrement.");
-      } else {
-        setSuccessMsg("Transaction enregistrée, merci pour votre don !");
-        setAmount("");
-        setDonationPercent(50);
-        setSelectedSpaId("");
-        // tu peux rediriger si tu veux
-        // router.push("/dashboard");
+        setErrorMsg(
+          error.message ||
+            "Une erreur est survenue lors de l'enregistrement de la transaction."
+        );
+        setLoading(false);
+        return;
       }
+
+      setSuccessMsg("Transaction enregistrée, merci pour votre don !");
+      setAmount("");
+      setDonationPercent(50);
+      setSelectedSpaId("");
+      router.push("/dashboard");
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Erreur inconnue lors de l'enregistrement.");
+      setErrorMsg(
+        "Une erreur est survenue lors de l'enregistrement de la transaction."
+      );
     } finally {
       setLoading(false);
     }
@@ -184,7 +214,16 @@ export default function ScanPage() {
             }}
           >
             <div style={scannerStyle}>
-              <QrScanner delay={300} onScan={handleScan} onError={handleError} />
+              <AnyQrScanner
+                delay={300}
+                onScan={handleScan}
+                onError={handleError}
+                constraints={{
+                  video: {
+                    facingMode: { ideal: "environment" },
+                  },
+                }}
+              />
             </div>
           </div>
         )}
@@ -207,7 +246,7 @@ export default function ScanPage() {
         )}
 
         {/* FORMULAIRE */}
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleValidateTransaction}>
           <label style={{ fontWeight: 600 }}>Code commerçant</label>
           <input
             type="text"
@@ -344,6 +383,11 @@ export default function ScanPage() {
           >
             {loading ? "Validation..." : "Valider la transaction"}
           </button>
+          {errorMsg && (
+            <p style={{ marginTop: 8, color: "#b00020", fontSize: "0.9rem" }}>
+              {errorMsg}
+            </p>
+          )}
         </form>
       </div>
     </div>
