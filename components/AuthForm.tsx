@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 
 type Mode = 'login' | 'register';
@@ -12,7 +12,10 @@ interface AuthFormProps {
 
 export default function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  const redirectTo = searchParams.get('redirectTo') || '/dashboard';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,75 +26,76 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [city, setCity] = useState('');
   const [phone, setPhone] = useState('');
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const isLogin = mode === 'login';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsSubmitting(true);
+    setErrorMsg(null);
+    setLoading(true);
 
-    try {
-      if (isLogin) {
-        // 🔐 Connexion
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+    if (mode === 'login') {
+      console.log('[AuthForm] Tentative de login', { email });
 
-        if (error) {
-          setError(error.message);
-          setIsSubmitting(false);
-          return;
-        }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-        router.push('/dashboard');
-      } else {
-        // 🆕 Création de compte
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
+      console.log('[AuthForm] Résultat login', { data, error });
 
-        if (error) {
-          setError(error.message);
-          setIsSubmitting(false);
-          return;
-        }
-
-        const user = data.user;
-        if (!user) {
-          setError("Impossible de créer le compte.");
-          setIsSubmitting(false);
-          return;
-        }
-
-        // 🧾 Si l’utilisateur demande un compte commerçant
-        if (wantsMerchant) {
-          const { error: appError } = await supabase
-            .from('merchant_applications')
-            .insert({
-              user_id: user.id,
-              business_name: businessName,
-              city,
-              phone,
-              status: 'pending',
-            });
-
-          if (appError) {
-            console.error('Erreur création demande commerçant :', appError);
-          }
-        }
-
-        router.push('/dashboard');
+      if (error) {
+        setErrorMsg(error.message || 'Erreur de connexion.');
+        setLoading(false);
+        return;
       }
-    } catch (err: any) {
-      setError(err?.message ?? 'Une erreur est survenue.');
+
+      router.push(redirectTo);
+      setLoading(false);
+      return;
     }
 
-    setIsSubmitting(false);
+    // 🆕 Création de compte
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      setErrorMsg(error.message);
+      setLoading(false);
+      return;
+    }
+
+    const user = data.user;
+    if (!user) {
+      setErrorMsg("Impossible de créer le compte.");
+      setLoading(false);
+      return;
+    }
+
+    // 🧾 Si l’utilisateur demande un compte commerçant
+    if (wantsMerchant) {
+      const { error: appError } = await supabase
+        .from('merchant_applications')
+        .insert({
+          user_id: user.id,
+          business_name: businessName,
+          city,
+          phone,
+          status: 'pending',
+        });
+
+      if (appError) {
+        console.error('Erreur création demande commerçant :', appError);
+      }
+    }
+
+    router.push('/dashboard');
+
+    setLoading(false);
   };
 
   return (
@@ -195,27 +199,35 @@ export default function AuthForm({ mode }: AuthFormProps) {
         </div>
       )}
 
-      {/* Erreur */}
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          {error}
-        </p>
-      )}
-
       {/* Bouton submit */}
       <button
         type="submit"
-        disabled={isSubmitting}
+        disabled={loading}
         className="w-full rounded-full px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        {isSubmitting
-          ? isLogin
-            ? 'Connexion en cours...'
-            : 'Inscription en cours...'
-          : isLogin
+        {loading
+          ? mode === 'login'
+            ? 'Connexion...'
+            : 'Création du compte...'
+          : mode === 'login'
           ? 'Se connecter'
-          : 'Créer mon compte'}
+          : 'Créer un compte'}
       </button>
+
+      {errorMsg && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 10,
+            borderRadius: 8,
+            backgroundColor: '#ffe5e5',
+            color: '#b00020',
+            fontSize: '0.9rem',
+          }}
+        >
+          {errorMsg}
+        </div>
+      )}
 
       <p className="text-xs text-slate-500 text-center pt-1">
         En continuant, vous acceptez les CGU de PawPass.
