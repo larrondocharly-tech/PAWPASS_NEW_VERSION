@@ -1,7 +1,7 @@
 "use client";
 
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabaseServer';
+import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 import { addSpaAction } from './addSpaAction';
 import { deleteSpaAction } from './deleteSpaAction';
