@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabaseServer';
 
-export async function addSpaAction(formData: FormData) {
+export async function addSpaAction(formData: FormData): Promise<void> {
   const supabase = createClient();
 
   const name = String(formData.get('name') ?? '').trim();
@@ -18,5 +18,4 @@ export async function addSpaAction(formData: FormData) {
 
   if (error) throw error;
 
-  return true;
 }

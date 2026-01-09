@@ -3,12 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabaseServer';
 
-export async function deleteSpaAction(formData: FormData) {
+export async function deleteSpaAction(formData: FormData): Promise<void> {
   const supabase = createClient();
   const id = String(formData.get('id') ?? '').trim();
 
   if (!id) {
-    return false;
+    return;
   }
 
   const { error } = await supabase.from('spas').delete().eq('id', id);
@@ -17,5 +17,4 @@ export async function deleteSpaAction(formData: FormData) {
 
   revalidatePath('/admin/spas');
 
-  return true;
 }
