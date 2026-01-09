@@ -1,11 +1,10 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
+export const dynamic = "force-dynamic";
 export default function RegisterPage() {
   const router = useRouter();
   const supabase = createClient();

@@ -1,12 +1,11 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 "use client";
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
-// --- composant interne qui utilise useSearchParams ---
+export const dynamic = "force-dynamic";
+
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -27,42 +26,42 @@ function LoginPageInner() {
       password,
     });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (error) {
-      setErrorMsg(error.message);
-      return;
-    }
+      if (error) {
+        setErrorMsg(error.message);
+        return;
+      }
 
-    const user = data.user;
-    const userMeta = (user?.user_metadata ?? {}) as any;
-    const appMeta = (user?.app_metadata ?? {}) as any;
+      const user = data.user;
+      const userMeta = (user?.user_metadata ?? {}) as any;
+      const appMeta = (user?.app_metadata ?? {}) as any;
 
-    let role: string | undefined = userMeta.role || appMeta.role;
+      let role: string | undefined = userMeta.role || appMeta.role;
 
-    if (!role && appMeta.is_admin) {
-      role = "admin";
-    }
+      if (!role && appMeta.is_admin) {
+        role = "admin";
+      }
 
-    if (!role && user?.email === "admin@admin.com") {
-      role = "admin";
-    }
+      if (!role && user?.email === "admin@admin.com") {
+        role = "admin";
+      }
 
-    if (role !== "merchant" && role !== "admin") {
-      role = "user";
-    }
+      if (role !== "merchant" && role !== "admin") {
+        role = "user";
+      }
 
-    const redirectTo = searchParams.get("redirectTo");
+      const redirectTo = searchParams.get("redirectTo");
 
-    if (role === "merchant") {
-      router.push("/merchant");
-    } else if (role === "admin") {
-      router.push("/admin");
-    } else if (redirectTo) {
-      router.push(redirectTo);
-    } else {
-      router.push("/dashboard");
-    }
+      if (role === "merchant") {
+        router.push("/merchant");
+      } else if (role === "admin") {
+        router.push("/admin");
+      } else if (redirectTo) {
+        router.push(redirectTo);
+      } else {
+        router.push("/dashboard");
+      }
   };
 
   return (
@@ -177,7 +176,6 @@ function LoginPageInner() {
   );
 }
 
-// --- composant exporté, entouré d'une Suspense ---
 export default function LoginPage() {
   return (
     <Suspense fallback={<div>Chargement...</div>}>
