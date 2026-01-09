@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
-// la lib n'a pas de types TS corrects, on ignore pour éviter les erreurs TS
-// @ts-expect-error
-import QrScanner from "react-qr-scanner";
+
+const QrScanner = dynamic(() => import("react-qr-scanner"), {
+  ssr: false,
+});
 
 export const dynamic = "force-dynamic";
 
