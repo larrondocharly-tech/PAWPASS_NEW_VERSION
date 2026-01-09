@@ -1,9 +1,10 @@
 "use client";
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabaseServer';
 import TopNav from '@/components/TopNav';
+import { addSpaAction } from './addSpaAction';
+import { deleteSpaAction } from './deleteSpaAction';
 export const dynamic = "force-dynamic";
 
 
@@ -54,33 +55,6 @@ export default async function AdminSpasPage() {
   const supabase = await requireAdmin();
   const { data: spas, error } = await fetchSpas(supabase);
 
-  const addSpa = async (formData: FormData) => {
-    'use server';
-    const serverSupabase = await requireAdmin();
-    const name = String(formData.get('name') ?? '').trim();
-    const city = String(formData.get('city') ?? '').trim();
-
-    if (!name || !city) {
-      return;
-    }
-
-    await serverSupabase.from('spas').insert({ name, city });
-    revalidatePath('/admin/spas');
-  };
-
-  const deleteSpa = async (formData: FormData) => {
-    'use server';
-    const serverSupabase = await requireAdmin();
-    const id = String(formData.get('id') ?? '');
-
-    if (!id) {
-      return;
-    }
-
-    await serverSupabase.from('spas').delete().eq('id', id);
-    revalidatePath('/admin/spas');
-  };
-
   return (
     <div className="container">
       <TopNav title="Admin PawPass" />
@@ -92,7 +66,7 @@ export default async function AdminSpasPage() {
 
       <div className="card" style={{ marginBottom: 24 }}>
         <h3>Ajouter une SPA</h3>
-        <form action={addSpa}>
+        <form action={addSpaAction}>
           <label className="label" htmlFor="spaName">
             Nom
             <input id="spaName" className="input" name="name" required />
@@ -130,7 +104,7 @@ export default async function AdminSpasPage() {
                   <td>{spa.city ?? '—'}</td>
                   <td>{new Date(spa.created_at).toLocaleString('fr-FR')}</td>
                   <td>
-                    <form action={deleteSpa}>
+                    <form action={deleteSpaAction}>
                       <input type="hidden" name="id" value={spa.id} />
                       <button className="button secondary" type="submit">
                         Supprimer
