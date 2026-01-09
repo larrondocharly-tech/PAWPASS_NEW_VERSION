@@ -50,7 +50,7 @@ export default function ScanInner() {
       const { data } = await supabase
         .from("merchants")
         .select("*")
-        .eq("merchant_code", merchantCode)
+.eq("qr_token", scannedCode)
         .single();
       setMerchantFound(data || null);
       setLoadingMerchant(false);
