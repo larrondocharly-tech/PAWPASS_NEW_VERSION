@@ -3,6 +3,8 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabaseServer';
 import TopNav from '@/components/TopNav';
 
+export const dynamic = "force-dynamic";
+
 interface SpaRow {
   id: string;
   name: string | null;
