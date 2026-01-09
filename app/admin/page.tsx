@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabaseServer';
+import { createClient } from '@/lib/supabaseClient';
 import { formatCurrency } from '@/lib/utils';
 import TopNav from '@/components/TopNav';
 
