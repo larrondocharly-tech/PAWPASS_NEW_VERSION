@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
+import NextDynamic from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
 
-const QrScanner = dynamic(() => import("react-qr-scanner"), {
+const QrScanner = NextDynamic(() => import("react-qr-scanner"), {
   ssr: false,
 });
 
 export const dynamic = "force-dynamic";
+
 
 interface Spa {
   id: string;
