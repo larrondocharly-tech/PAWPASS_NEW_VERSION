@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 export const dynamic = "force-dynamic";
 
-export const dynamic = "force-dynamic";
 export default function RegisterPage() {
   const router = useRouter();
   const supabase = createClient();
