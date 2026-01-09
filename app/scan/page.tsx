@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default function ScanPage() {
   return (
-    <Suspense fallback={<p>Chargement...</p>}>
+    <Suspense fallback={<p>Chargement…</p>}>
       <ScanInner />
     </Suspense>
   );
