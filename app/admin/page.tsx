@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabaseClient';
 export const dynamic = "force-dynamic";
 
-export const dynamic = "force-dynamic";
 
 
 interface SpaSummary {
