@@ -1,9 +1,12 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+"use client";
+
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabaseServer';
 import TopNav from '@/components/TopNav';
 
-export const dynamic = "force-dynamic";
 
 interface SpaRow {
   id: string;

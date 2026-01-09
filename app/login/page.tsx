@@ -1,11 +1,13 @@
-"use client";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+"use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
-export default function LoginPage() {
+// --- composant interne qui utilise useSearchParams ---
+function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -36,8 +38,7 @@ export default function LoginPage() {
     const userMeta = (user?.user_metadata ?? {}) as any;
     const appMeta = (user?.app_metadata ?? {}) as any;
 
-    let role: string | undefined =
-      userMeta.role || appMeta.role;
+    let role: string | undefined = userMeta.role || appMeta.role;
 
     if (!role && appMeta.is_admin) {
       role = "admin";
@@ -162,12 +163,25 @@ export default function LoginPage() {
           Pas encore de compte ?{" "}
           <a
             href="/register"
-            style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}
+            style={{
+              color: "#059669",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
           >
             Créer un compte
           </a>
         </p>
       </div>
     </div>
+  );
+}
+
+// --- composant exporté, entouré d'une Suspense ---
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div>Chargement...</div>}>
+      <LoginPageInner />
+    </Suspense>
   );
 }
