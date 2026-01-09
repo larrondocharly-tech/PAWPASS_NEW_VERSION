@@ -1,31 +1,39 @@
 'use client';
-export const dynamic = "force-dynamic";
+
 import Link from 'next/link';
 import AuthForm from '@/components/AuthForm';
 
 export default function LoginPage() {
   return (
-    <main className="min-h-[70vh] flex flex-col items-center justify-start pt-10 px-4">
-      <div className="w-full max-w-xl">
-        <Link href="/" className="text-sm text-emerald-500 hover:underline">
-          ← Retour
-        </Link>
-
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">
-          Connexion
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Retrouvez votre cagnotte PawPass et vos dons aux refuges.
-        </p>
-
-        <AuthForm mode="login" />
-
-        <p className="mt-4 text-sm text-slate-600">
-          Pas encore de compte ?{' '}
-          <Link href="/register" className="text-emerald-500 font-medium hover:underline">
-            Créer un compte
+    <main>
+      <div className="container">
+        <div className="card">
+          <Link href="/" className="text-sm">
+            ← Retour
           </Link>
-        </p>
+
+          <h1 style={{ marginTop: '16px', fontSize: '2rem', fontWeight: 700 }}>
+            Connexion
+          </h1>
+
+          <p className="helper" style={{ marginTop: '4px', maxWidth: '480px' }}>
+            Retrouvez votre cagnotte PawPass et vos dons aux refuges.
+          </p>
+
+          {/* Formulaire */}
+          <div style={{ marginTop: '24px' }}>
+            <AuthForm mode="login" />
+          </div>
+
+          <p className="helper" style={{ marginTop: '16px' }}>
+            Pas encore de compte ?{' '}
+            <Link href="/register">
+              <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                Créer un compte
+              </span>
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   );
