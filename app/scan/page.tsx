@@ -5,9 +5,18 @@ import { useRouter } from "next/navigation";
 import NextDynamic from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
 
-const QrScanner = NextDynamic(() => import("react-qr-scanner"), {
-  ssr: false,
-});
+type QrScannerProps = {
+  delay: number;
+  onScan: (data: any) => void;
+  onError: (err: any) => void;
+};
+
+const QrScanner = NextDynamic<QrScannerProps>(
+  () => import("react-qr-scanner"),
+  {
+    ssr: false,
+  }
+);
 
 export const dynamic = "force-dynamic";
 
