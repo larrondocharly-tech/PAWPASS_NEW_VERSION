@@ -1,155 +1,219 @@
+// components/TopNav.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabaseClient';
 import AccountMenuOverlay from '@/components/AccountMenuOverlay';
 
+type AppRole = 'user' | 'merchant' | 'admin' | null;
+
 interface TopNavProps {
   title?: string;
-  onSignOut?: () => void;
 }
 
-const baseNavItems = [
-  { key: 'dashboard', label: 'Tableau de bord' },
-  { key: 'scan', label: 'Scanner' },
-  { key: 'history', label: 'Historique' }
-] as const;
-
-export default function TopNav({ title = 'PawPass', onSignOut }: TopNavProps) {
+export default function TopNav({ title }: TopNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const supabase = createClient();
-  const [role, setRole] = useState<'user' | 'merchant' | 'admin'>('user');
-  const [merchantId, setMerchantId] = useState<string | null>(null);
-  const [merchantCode, setMerchantCode] = useState<string | null>(null);
-  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  const [role, setRole] = useState<AppRole>(null);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+
+  // Charge le rôle depuis la table profiles
   useEffect(() => {
     const loadRole = async () => {
       const {
-        data: { user }
+        data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setRole('user');
-        setMerchantId(null);
-        setMerchantCode(null);
-        setIsAuthenticated(false);
+        setRole(null);
         return;
       }
-      setIsAuthenticated(true);
 
-      const { data, error } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
-        .select('role,merchant_id,merchant_code')
+        .select('role')
         .eq('id', user.id)
         .maybeSingle();
 
       if (error) {
-        setRole('user');
-        setMerchantId(null);
-        setMerchantCode(null);
-        setIsAuthenticated(true);
-        return;
-      }
-
-      const normalizedRole = data?.role?.toLowerCase();
-      if (normalizedRole === 'admin' || normalizedRole === 'merchant' || normalizedRole === 'user') {
-        setRole(normalizedRole);
+        console.error('Erreur chargement rôle :', error);
+        setRole(null);
       } else {
-        setRole('user');
+        setRole((profile?.role as AppRole) ?? null);
       }
-      setMerchantId(data?.merchant_id ?? null);
-      setMerchantCode(data?.merchant_code ?? null);
     };
 
-    void loadRole();
+    loadRole();
   }, [supabase]);
 
-  const navItems =
-    role === 'merchant' && merchantId
-      ? [
-          { href: '/merchant', label: 'Dashboard commerçant' },
-          { href: '/merchant/transactions', label: 'Transactions' }
-        ]
-      : baseNavItems.map((item) => {
-          if (item.key === 'dashboard') {
-            return {
-              href: '/dashboard',
-              label: item.label
-            };
-          }
-          if (item.key === 'scan') {
-            return { href: '/scan', label: item.label };
-          }
-          return { href: '/transactions', label: item.label };
-        });
-  const adminNavItems =
-    role === 'admin'
-      ? [
-          { href: '/admin/spas', label: 'Gérer les SPA' },
-          { href: '/admin/merchants', label: 'Gérer les commerces' }
-        ]
-      : [];
-  const handleSignOut = onSignOut
-    ? onSignOut
-    : async () => {
-        await supabase.auth.signOut();
-        window.location.href = '/login';
-      };
+  // Déconnexion
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.push('/login');
+    } catch (e) {
+      console.error('Erreur déconnexion :', e);
+    }
+  };
+
+  // liens principaux
+  const navItems = [
+    { href: '/dashboard', label: 'Tableau de bord' },
+    { href: '/scan', label: 'Scanner' },
+    { href: '/transactions', label: 'Historique' },
+  ];
+
+  const isActive = (href: string) => {
+    if (href === '/dashboard' && pathname === '/') return true;
+    return pathname === href || pathname.startsWith(href + '/');
+  };
+
+  // rôle pour l'overlay (il attend 'client' | 'merchant')
+  const overlayRole: 'client' | 'merchant' =
+    role === 'merchant' ? 'merchant' : 'client';
 
   return (
-    <div className="nav">
-      <Image src="/pawpass-logo.jpg" alt="PawPass" width={140} height={70} priority />
-      <div className="nav-links" style={{ flexWrap: 'wrap' }}>
-        {[...navItems, ...adminNavItems].map((item) => {
-          const isActive = pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
+    <>
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 30,
+          backgroundColor: '#ffffff',
+          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1100,
+            margin: '0 auto',
+            height: 64,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 16px',
+          }}
+        >
+          {/* Logo + titre */}
+          <Link
+            href="/dashboard"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              textDecoration: 'none',
+            }}
+          >
+            <div
               style={{
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? '#0e3a4a' : 'inherit',
-                background: isActive ? '#f3d9a4' : 'transparent',
-                padding: '6px 12px',
-                borderRadius: 10
+                height: 32,
+                width: 32,
+                borderRadius: 999,
+                backgroundColor: '#DCFCE7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 18,
               }}
-              aria-current={isActive ? 'page' : undefined}
             >
-              {item.label}
-            </Link>
-          );
-        })}
-        {isAuthenticated && (
-          <>
+              🐾
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                lineHeight: 1.2,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#0F172A',
+                }}
+              >
+                PawPass
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: '#64748B',
+                }}
+              >
+                Cashback solidaire
+              </span>
+            </div>
+          </Link>
+
+          {/* Nav + bouton Menu compte */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            {/* Liens de navigation */}
+            <nav
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+              }}
+            >
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    textDecoration: 'none',
+                    color: isActive(item.href) ? '#047857' : '#4B5563',
+                    padding: '4px 0',
+                    borderBottom: isActive(item.href)
+                      ? '2px solid #10B981'
+                      : '2px solid transparent',
+                  }}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+
+            {/* Bouton pour ouvrir le menu compte (déconnexion, etc.) */}
             <button
-              className="button secondary"
               type="button"
               onClick={() => setIsAccountMenuOpen(true)}
               style={{
-                color: '#f9f9f4',
-                fontWeight: 700,
-                borderColor: '#5fd3b3',
-                background: 'rgba(95, 211, 179, 0.15)'
+                borderRadius: 999,
+                border: '1px solid #E5E7EB',
+                padding: '6px 14px',
+                fontSize: 13,
+                fontWeight: 500,
+                color: '#374151',
+                backgroundColor: '#F9FAFB',
+                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+                cursor: 'pointer',
               }}
             >
               Menu
             </button>
-          </>
-        )}
-      </div>
-      {isAuthenticated && (
-        <AccountMenuOverlay
-          isOpen={isAccountMenuOpen}
-          onClose={() => setIsAccountMenuOpen(false)}
-          role={role === 'merchant' ? 'merchant' : 'client'}
-          onSignOut={handleSignOut}
-        />
-      )}
-    </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Overlay du compte (à droite, avec déconnexion) */}
+      <AccountMenuOverlay
+        isOpen={isAccountMenuOpen}
+        onClose={() => setIsAccountMenuOpen(false)}
+        role={overlayRole}
+        onSignOut={handleSignOut}
+      />
+    </>
   );
 }

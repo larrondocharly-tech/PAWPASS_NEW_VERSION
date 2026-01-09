@@ -180,14 +180,9 @@ export default function MerchantPage() {
     }
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
   return (
     <div className="container">
-      <TopNav title="Mon QR commerçant" onSignOut={handleSignOut} />
+      <TopNav title="Mon QR commerçant" />
 
       {merchant ? (
         <div className="grid grid-2">

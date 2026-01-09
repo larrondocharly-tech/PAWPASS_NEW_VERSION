@@ -1,222 +1,243 @@
 'use client';
-export const dynamic = "force-dynamic";
-import { Fragment } from 'react';
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabaseClient';
-import { formatCurrency } from '@/lib/utils';
-import TopNav from '@/components/TopNav';
 
-interface TransactionRow {
-  id: string;
-  amount: number;
-  cashback_amount: number | null;
-  donation_amount: number | null;
-  created_at: string;
-  spa_id: string | null;
-  // IMPORTANT : Supabase renvoie un TABLEAU d'associations
-  spa?: {
-    name: string | null;
-  }[] | null;
-}
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { createClient } from '@/lib/supabaseClient';
 
 interface SpaSummary {
-  spaId: string;
-  spaName: string;
-  transactions: TransactionRow[];
-  transactionCount: number;
-  totalAmount: number;
-  totalDonation: number;
-  totalCashback: number;
+  spa_name: string;
+  spa_id: string | null;
+  nb_transactions: number;
+  total_achats: number;
+  total_dons: number;
+  total_cashback: number;
 }
 
-const getCashbackValue = (transaction: TransactionRow) =>
-  Number(transaction.cashback_amount ?? 0);
-
-const requireAdmin = async () => {
+export default function AdminDashboardPage() {
   const supabase = createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect('/login');
-  }
+  const [summary, setSummary] = useState<SpaSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
 
-  if (profile?.role?.toLowerCase() !== 'admin') {
-    redirect('/dashboard');
-  }
+      const { data, error } = await supabase
+        .from('admin_transactions_summary_by_spa')
+        .select('*')
+        .order('nb_transactions', { ascending: false });
 
-  return supabase;
-};
+      if (error) {
+        console.error('Erreur chargement résumé SPA :', error);
+        setError('Impossible de charger les statistiques.');
+      } else {
+        setSummary((data || []) as SpaSummary[]);
+      }
 
-export default async function AdminPage() {
-  const supabase = await requireAdmin();
+      setLoading(false);
+    };
 
-  const {
-    data: transactionData,
-    error: transactionError
-  } = await supabase
-    .from('transactions')
-    .select(
-      'id,amount,cashback_amount,donation_amount,created_at,spa_id,spa:associations(name)'
-    )
-    .order('created_at', { ascending: false });
+    loadData();
+  }, [supabase]);
 
-  // On force ici le type attendu pour que Typescript arrête de gueuler
-  const transactions: TransactionRow[] = (transactionData ?? []) as TransactionRow[];
-  const summariesMap = new Map<string, SpaSummary>();
-
-  transactions.forEach((transaction) => {
-    const spaKey = transaction.spa_id ?? 'sans-spa';
-    const spaName =
-      transaction.spa?.[0]?.name ??
-      (transaction.spa_id ? 'Association inconnue' : 'Sans SPA');
-
-    if (!summariesMap.has(spaKey)) {
-      summariesMap.set(spaKey, {
-        spaId: spaKey,
-        spaName,
-        transactions: [],
-        transactionCount: 0,
-        totalAmount: 0,
-        totalDonation: 0,
-        totalCashback: 0
-      });
-    }
-
-    const summary = summariesMap.get(spaKey);
-    if (!summary) return;
-
-    summary.transactions.push(transaction);
-    summary.transactionCount += 1;
-    summary.totalAmount += Number(transaction.amount ?? 0);
-    summary.totalDonation += Number(transaction.donation_amount ?? 0);
-    summary.totalCashback += getCashbackValue(transaction);
-  });
-
-  const summaries = Array.from(summariesMap.values()).sort((a, b) =>
-    a.spaName.localeCompare(b.spaName)
-  );
-
-  const grandTotalDonation = transactions.reduce(
-    (sum, transaction) => sum + Number(transaction.donation_amount ?? 0),
+  // Calcul du total de tous les dons
+  const totalDonsToutesSpa = summary.reduce(
+    (sum, row) => sum + (row.total_dons || 0),
     0
   );
 
+  if (loading) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
+          Tableau de bord admin – Transactions par SPA
+        </h1>
+        <p>Chargement des statistiques...</p>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
+          Tableau de bord admin – Transactions par SPA
+        </h1>
+        <p style={{ color: 'red' }}>{error}</p>
+      </main>
+    );
+  }
+
   return (
-    <div className="container">
-      <TopNav title="Admin PawPass" />
+    <main style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
+        Tableau de bord admin – Transactions par SPA
+      </h1>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <h2>Tableau de bord admin – Transactions par SPA</h2>
-        <p className="helper">Vision globale des dons et cashbacks enregistrés.</p>
-      </div>
+      {/* barre de boutons admin */}
+      <nav
+        style={{
+          marginBottom: 24,
+          display: 'flex',
+          gap: 8,
+        }}
+      >
+        <Link
+          href="/admin"
+          style={{
+            padding: '8px 12px',
+            borderRadius: 999,
+            fontSize: 14,
+            fontWeight: 600,
+            backgroundColor: '#059669',
+            color: '#ffffff',
+            textDecoration: 'none',
+          }}
+        >
+          Vue d’ensemble
+        </Link>
+        <Link
+          href="/admin/transactions"
+          style={{
+            padding: '8px 12px',
+            borderRadius: 999,
+            fontSize: 14,
+            fontWeight: 600,
+            backgroundColor: '#e5e7eb',
+            color: '#111827',
+            textDecoration: 'none',
+          }}
+        >
+          Transactions
+        </Link>
+        <Link
+          href="/dashboard"
+          style={{
+            padding: '8px 12px',
+            borderRadius: 999,
+            fontSize: 14,
+            fontWeight: 500,
+            backgroundColor: '#f3f4f6',
+            color: '#374151',
+            textDecoration: 'none',
+          }}
+        >
+          Retour à l’application
+        </Link>
+      </nav>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <h3>Total des dons (toutes SPA)</h3>
-        <p style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-          {formatCurrency(grandTotalDonation)}
+      {/* Carte total dons */}
+      <section
+        style={{
+          marginBottom: 24,
+          padding: 24,
+          borderRadius: 16,
+          backgroundColor: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.06)',
+        }}
+      >
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+          Total des dons (toutes SPA)
+        </h2>
+        <p style={{ fontSize: 24, fontWeight: 700 }}>
+          {totalDonsToutesSpa.toFixed(2).replace('.', ',')} €
         </p>
-      </div>
+      </section>
 
-      <div className="card">
-        <h3>Résumé par SPA</h3>
-        {transactionError ? (
-          <p className="error">{transactionError.message}</p>
-        ) : summaries.length === 0 ? (
-          <p className="helper">Aucune transaction trouvée.</p>
-        ) : (
-          <table className="table">
+      {/* Tableau récap par SPA */}
+      <section
+        style={{
+          padding: 24,
+          borderRadius: 16,
+          backgroundColor: '#ffffff',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.06)',
+        }}
+      >
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>
+          Résumé par SPA
+        </h2>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th>SPA</th>
-                <th>Transactions</th>
-                <th>Total achats</th>
-                <th>Total dons</th>
-                <th>Total cashback</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px' }}>
+                  SPA
+                </th>
+                <th style={{ textAlign: 'right', padding: '8px 12px' }}>
+                  Transactions
+                </th>
+                <th style={{ textAlign: 'right', padding: '8px 12px' }}>
+                  Total achats
+                </th>
+                <th style={{ textAlign: 'right', padding: '8px 12px' }}>
+                  Total dons
+                </th>
+                <th style={{ textAlign: 'right', padding: '8px 12px' }}>
+                  Total cashback
+                </th>
               </tr>
             </thead>
             <tbody>
-              {summaries.map((summary) => (
-                <Fragment key={summary.spaId}>
-                  <tr>
-                    <td>
-                      <strong>{summary.spaName}</strong>
+              {summary.map((row) => {
+                const spaName = row.spa_name;
+
+                return (
+                  <tr key={row.spa_id ?? spaName}>
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        borderTop: '1px solid #eee',
+                      }}
+                    >
+                      {spaName}
                     </td>
-                    <td>{summary.transactionCount}</td>
-                    <td>{formatCurrency(summary.totalAmount)}</td>
-                    <td>{formatCurrency(summary.totalDonation)}</td>
-                    <td>{formatCurrency(summary.totalCashback)}</td>
-                  </tr>
-                  <tr>
-                    <td colSpan={5}>
-                      <details style={{ padding: '12px 0' }}>
-                        <summary
-                          style={{ cursor: 'pointer', fontWeight: 600 }}
-                        >
-                          Voir les transactions
-                        </summary>
-                        {summary.transactions.length === 0 ? (
-                          <p
-                            className="helper"
-                            style={{ marginTop: 12 }}
-                          >
-                            Aucune transaction pour cette SPA.
-                          </p>
-                        ) : (
-                          <table
-                            className="table"
-                            style={{ marginTop: 12 }}
-                          >
-                            <thead>
-                              <tr>
-                                <th>Date</th>
-                                <th>Montant</th>
-                                <th>Cashback</th>
-                                <th>Don</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {summary.transactions.map((transaction) => (
-                                <tr key={transaction.id}>
-                                  <td>
-                                    {new Date(
-                                      transaction.created_at
-                                    ).toLocaleString('fr-FR')}
-                                  </td>
-                                  <td>
-                                    {formatCurrency(transaction.amount)}
-                                  </td>
-                                  <td>
-                                    {formatCurrency(
-                                      getCashbackValue(transaction)
-                                    )}
-                                  </td>
-                                  <td>
-                                    {formatCurrency(
-                                      transaction.donation_amount ?? 0
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                      </details>
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        borderTop: '1px solid #eee',
+                        textAlign: 'right',
+                      }}
+                    >
+                      {row.nb_transactions}
+                    </td>
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        borderTop: '1px solid #eee',
+                        textAlign: 'right',
+                      }}
+                    >
+                      {row.total_achats.toFixed(2).replace('.', ',')} €
+                    </td>
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        borderTop: '1px solid #eee',
+                        textAlign: 'right',
+                      }}
+                    >
+                      {row.total_dons.toFixed(2).replace('.', ',')} €
+                    </td>
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        borderTop: '1px solid #eee',
+                        textAlign: 'right',
+                      }}
+                    >
+                      {row.total_cashback.toFixed(2).replace('.', ',')} €
                     </td>
                   </tr>
-                </Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
-        )}
-      </div>
-    </div>
+        </div>
+      </section>
+    </main>
   );
 }

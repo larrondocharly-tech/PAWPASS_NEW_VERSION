@@ -227,7 +227,7 @@ export default function AdminMerchantsPage() {
 
   return (
     <div className="container">
-      <TopNav title="Admin PawPass" onSignOut={handleSignOut} />
+      <TopNav title="Admin PawPass" />
 
       {!hasCheckedAccess ? (
         <div className="card" style={{ marginBottom: 24 }}>

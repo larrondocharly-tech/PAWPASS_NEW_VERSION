@@ -3,8 +3,9 @@ import './globals.css';
 import type { ReactNode } from 'react';
 import SiteFooter from '@/components/SiteFooter';
 import { Inter } from 'next/font/google';
+import TopNav from '@/components/TopNav';
 
-// On charge INTER une bonne fois pour toutes
+// Police Inter une seule fois
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-sans',
@@ -19,9 +20,26 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={inter.variable}>
-      <body>
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1 }}>{children}</div>
+      <body
+        style={{
+          margin: 0,
+          backgroundColor: '#FAFAF5',
+        }}
+      >
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {/* HEADER GLOBAL */}
+          <TopNav />
+
+          {/* CONTENU DES PAGES */}
+          <main style={{ flex: 1 }}>{children}</main>
+
+          {/* FOOTER */}
           <SiteFooter />
         </div>
       </body>

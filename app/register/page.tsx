@@ -14,132 +14,162 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [isMerchant, setIsMerchant] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg("");
     setLoading(true);
+
+    const role = isMerchant ? "merchant" : "user";
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          role,
+        },
+      },
     });
 
+    setLoading(false);
+
     if (error) {
-      alert(error.message);
-      setLoading(false);
+      setErrorMsg(error.message);
       return;
     }
 
-    if (data.user) {
-      await supabase.from("profiles").insert({
-        id: data.user.id,
-        role: isMerchant ? "merchant_pending" : "user",
-      });
-    }
+    // Selon ton setup, l'email peut avoir besoin de confirmation.
+    // On suppose ici que le user est directement connecté.
+    const newRole = (data.user?.user_metadata as any)?.role || role;
 
-    router.push("/dashboard");
+    if (newRole === "merchant") {
+      router.push("/merchant");
+    } else if (newRole === "admin") {
+      router.push("/admin");
+    } else {
+      router.push("/dashboard");
+    }
   };
 
   return (
     <div
       style={{
-        minHeight: "calc(100vh - 80px)",
+        minHeight: "100vh",
         display: "flex",
-        alignItems: "center",
         justifyContent: "center",
-        padding: "24px",
+        alignItems: "center",
+        padding: 16,
       }}
     >
       <div
         style={{
           width: "100%",
-          maxWidth: "480px",
-          backgroundColor: "#ffffff",
-          borderRadius: "16px",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-          padding: "24px",
+          maxWidth: 520,
+          backgroundColor: "white",
+          borderRadius: 24,
+          padding: 32,
+          boxShadow: "0 12px 30px rgba(15,23,42,0.15)",
         }}
       >
-        <a href="/" style={{ color: "#059669", fontSize: "14px" }}>
-          ← Retour
-        </a>
-
-        <h1 style={{ fontSize: "28px", fontWeight: 700, marginTop: 16 }}>
+        <h1
+          style={{
+            fontSize: 28,
+            fontWeight: 700,
+            marginBottom: 8,
+            color: "#0f172a",
+          }}
+        >
           Créer un compte
         </h1>
-        <p style={{ color: "#4b5563", marginTop: 8, marginBottom: 24 }}>
+        <p style={{ color: "#64748b", marginBottom: 24 }}>
           Gagnez du cashback chez les commerçants partenaires et soutenez les
           refuges locaux.
         </p>
 
         <form onSubmit={handleRegister}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{
-                width: "100%",
-                border: "1px solid #d1d5db",
-                borderRadius: 8,
-                padding: "8px 12px",
-              }}
-            />
-          </div>
+          <label style={{ fontWeight: 600 }}>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            placeholder="vous@exemple.fr"
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              marginBottom: 16,
+            }}
+          />
 
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>
-              Mot de passe
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{
-                width: "100%",
-                border: "1px solid #d1d5db",
-                borderRadius: 8,
-                padding: "8px 12px",
-              }}
-            />
-          </div>
+          <label style={{ fontWeight: 600 }}>Mot de passe</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={6}
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              marginBottom: 8,
+            }}
+          />
+          <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>
+            6 caractères minimum. Tu pourras le modifier plus tard.
+          </p>
 
-          <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 16,
+            }}
+          >
             <input
               type="checkbox"
               checked={isMerchant}
               onChange={(e) => setIsMerchant(e.target.checked)}
             />
-            <span style={{ fontSize: 14 }}>
-              Je suis commerçant et je souhaite proposer PawPass
-            </span>
-          </div>
+            <span>Je suis commerçant et je souhaite proposer PawPass</span>
+          </label>
+
+          {errorMsg && (
+            <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>
+          )}
 
           <button
             type="submit"
             disabled={loading}
             style={{
               width: "100%",
+              padding: 12,
+              borderRadius: 999,
               border: "none",
-              borderRadius: 8,
-              padding: "10px 0",
-              backgroundColor: "#059669",
-              color: "#ffffff",
               fontWeight: 600,
+              backgroundColor: "#059669",
+              color: "white",
               cursor: loading ? "default" : "pointer",
               opacity: loading ? 0.7 : 1,
+              marginBottom: 12,
             }}
           >
             {loading ? "Création..." : "Créer mon compte"}
           </button>
         </form>
 
-        <p style={{ marginTop: 16, fontSize: 14, textAlign: "center" }}>
+        <p style={{ marginTop: 12, fontSize: 14 }}>
           Déjà un compte ?{" "}
-          <a href="/login" style={{ color: "#059669", fontWeight: 600 }}>
+          <a
+            href="/login"
+            style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}
+          >
             Se connecter
           </a>
         </p>

@@ -79,14 +79,10 @@ export default function MerchantTransactionsPage() {
     void loadData();
   }, [router, supabase]);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
 
   return (
     <div className="container">
-      <TopNav title="Transactions commerçant" onSignOut={handleSignOut} />
+      <TopNav title="Transactions commerçant" />
 
       <div className="card">
         <h2>Historique des transactions</h2>

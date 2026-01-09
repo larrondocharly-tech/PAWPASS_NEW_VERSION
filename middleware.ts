@@ -1,103 +1,102 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import type { Session } from "@supabase/supabase-js";
 
 const protectedPaths = [
-  '/dashboard',
-  '/transactions',
-  '/merchant',
-  '/settings',
-  '/admin',
-  '/refuge'
+  "/dashboard",
+  "/transactions",
+  "/merchant",
+  "/settings",
+  "/admin",
+  "/scan",
+  "/refuge",
+  "/partners",
 ];
 
 const createMiddlewareClient = (request: NextRequest, response: NextResponse) =>
   createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
     {
       cookies: {
-         get(name: string) {
-         return request.cookies.get(name)?.value;
-  },
-  set(name: string, value: string, options: any) {
-    response.cookies.set({ name, value, ...options });
-  },
-  remove(name: string, options: any) {
-    response.cookies.set({ name, value: '', ...options });
-  }
-}
-
+        get(name: string) {
+          return request.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: any) {
+          response.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          response.cookies.set({ name, value: "", ...options });
+        },
+      },
     }
   );
 
-const getRoleFromSession = async (
-  supabase: ReturnType<typeof createServerClient>,
-  user: { id: string } | null
-) => {
-  if (!user) {
-    return 'user';
+function getRoleFromSession(session: Session | null): "user" | "merchant" | "admin" {
+  if (!session) return "user";
+
+  const user = session.user;
+  const userMeta = (user.user_metadata ?? {}) as any;
+  const appMeta = (user.app_metadata ?? {}) as any;
+
+  let role: string | undefined = userMeta.role || appMeta.role;
+
+  // Flag possible dans app_metadata
+  if (!role && appMeta.is_admin) {
+    role = "admin";
   }
 
-  const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  return data?.role?.toLowerCase() ?? 'user';
-};
+  // Fallback : email admin
+  if (!role && user.email === "admin@admin.com") {
+    role = "admin";
+  }
 
-const canAccessPath = (pathname: string, role: string) => {
-  if (pathname.startsWith('/admin')) {
-    return role === 'admin';
-  }
-  if (pathname.startsWith('/merchant')) {
-    return role === 'merchant' || role === 'admin';
-  }
-  if (pathname.startsWith('/refuge')) {
-    return role === 'admin';
-  }
-  if (['/dashboard', '/settings', '/transactions'].some((path) => pathname.startsWith(path))) {
-    return true;
-  }
-  return true;
-};
+  if (role === "merchant") return "merchant";
+  if (role === "admin") return "admin";
+  return "user";
+}
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({
-    request: {
-      headers: request.headers
-    }
-  });
-
+  const response = NextResponse.next();
   const supabase = createMiddlewareClient(request, response);
 
-  const { data } = await supabase.auth.getSession();
-  const isProtected = protectedPaths.some((path) => request.nextUrl.pathname.startsWith(path));
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (!data.session && isProtected) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = '/login';
-    return NextResponse.redirect(redirectUrl);
+  const { pathname } = request.nextUrl;
+
+  const isProtected = protectedPaths.some(
+    (path) => pathname === path || pathname.startsWith(path + "/")
+  );
+
+  // Pas de session + route protégée → /login
+  if (!session && isProtected) {
+    const url = new URL("/login", request.url);
+    url.searchParams.set("redirectTo", pathname);
+    return NextResponse.redirect(url);
   }
 
-  if (!data.session) {
+  // Pas de session + route publique → ok
+  if (!session) {
     return response;
   }
 
-  const role = await getRoleFromSession(supabase, data.session.user);
-  const pathname = request.nextUrl.pathname;
+  const role = getRoleFromSession(session);
 
-  // Redirect authenticated users who try to access a role-protected route they don't own.
-  if (isProtected && !canAccessPath(pathname, role)) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  // Admin only
+  if (pathname.startsWith("/admin") && role !== "admin") {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // Merchant only
+  if (pathname.startsWith("/merchant") && role !== "merchant") {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return response;
 }
 
 export const config = {
-  matcher: [
-    '/dashboard/:path*',
-    '/transactions/:path*',
-    '/merchant/:path*',
-    '/settings/:path*',
-    '/admin/:path*',
-    '/refuge/:path*'
-  ]
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
