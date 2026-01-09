@@ -1,10 +1,11 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 "use client";
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabaseClient';
+export const dynamic = "force-dynamic";
+
+
 
 interface SpaSummary {
   spa_name: string;

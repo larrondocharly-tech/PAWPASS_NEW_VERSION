@@ -1,8 +1,13 @@
-'use client';
+"use client";
 
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
+export const dynamic = "force-dynamic";
+
+
+
+
 
 interface MerchantPartner {
   id: string;
