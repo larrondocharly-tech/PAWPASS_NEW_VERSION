@@ -4,12 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
-// @ts-expect-error
-import QrScanner from "react-qr-scanner";
+import QrScannerRaw from "react-qr-scanner";
+const QrScanner: any = QrScannerRaw;
 
 export const dynamic = "force-dynamic";
-
-const AnyQrScanner: any = QrScanner;
 
 interface Spa {
   id: string;
@@ -27,13 +25,13 @@ export default function ScanInner() {
     <div style={{ padding: "20px" }}>
       <h1>Scanner un code QR</h1>
 
-      <AnyQrScanner
+      <QrScanner
         delay={250}
         style={{ width: "100%" }}
         constraints={{
           video: {
-            facingMode: { ideal: "environment" }
-          }
+            facingMode: { ideal: "environment" } // caméra arrière
+          },
         }}
         onScan={(result: any) => {
           if (result && !scanned) {
