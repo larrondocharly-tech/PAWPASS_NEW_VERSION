@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabaseClient';
 import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
 
-export const dynamic = "force-dynamic";
 
 interface MerchantApplication {
   id: string;
