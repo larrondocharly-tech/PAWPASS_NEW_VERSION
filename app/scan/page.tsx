@@ -20,6 +20,7 @@ const QrScanner = NextDynamic<QrScannerProps>(
 
 export const dynamic = "force-dynamic";
 
+
 interface Spa {
   id: string;
   name: string;
