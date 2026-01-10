@@ -10,6 +10,13 @@ const QrScanner = dynamicImport(() => import("react-qr-scanner"), {
   ssr: false,
 }) as any;
 
+// Contraintes vidéo : on force la caméra arrière sur mobile
+const videoConstraints = {
+  video: {
+    facingMode: { ideal: "environment" },
+  },
+};
+
 type Mode = "scan" | "redeem";
 
 interface Merchant {
@@ -313,6 +320,7 @@ export default function ScanPageClient() {
               delay={300}
               onError={handleScanError}
               onScan={handleScan}
+              constraints={videoConstraints}
               style={{ width: "100%" }}
             />
           </div>
@@ -640,6 +648,7 @@ export default function ScanPageClient() {
             delay={300}
             onError={handleScanError}
             onScan={handleScan}
+            constraints={videoConstraints}
             style={{ width: "100%" }}
           />
         </div>
