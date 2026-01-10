@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
@@ -27,7 +27,17 @@ type Mode = "purchase" | "redeem";
 const MIN_REDEEM_BALANCE = 5; // minimum 5€
 const POPUP_DURATION_SECONDS = 5 * 60; // 5 minutes
 
+// ===== Wrapper avec Suspense (exigé par Next pour useSearchParams) =====
 export default function ScanPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>Chargement...</div>}>
+      <ScanPageInner />
+    </Suspense>
+  );
+}
+
+// ===== Composant réel de la page (toute la logique est ici) =====
+function ScanPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
