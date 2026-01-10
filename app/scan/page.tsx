@@ -1,7 +1,7 @@
 'use client';
 
-import React, { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
 
@@ -16,13 +16,12 @@ interface Spa {
   name: string;
 }
 
-function ScanInner() {
+export default function ScanPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = createClient();
 
   // code commerçant dans l'URL : /scan?m=PP_...
-  const merchantCode = searchParams.get("m");
+  const [merchantCode, setMerchantCode] = useState<string | null>(null);
 
   const [scanned, setScanned] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,10 +32,19 @@ function ScanInner() {
   const [loadingSpas, setLoadingSpas] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Quand on a un merchantCode, on charge la liste des refuges
+  // 🔹 On lit ?m= dans l'URL côté client
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const m = params.get("m");
+    setMerchantCode(m);
+  }, []);
+
+  // 🔹 Quand on a un merchantCode, on charge la liste des refuges
+  useEffect(() => {
+    if (!merchantCode) return;
+
     const loadSpas = async () => {
-      if (!merchantCode) return;
       setLoadingSpas(true);
 
       const {
@@ -63,7 +71,7 @@ function ScanInner() {
     loadSpas();
   }, [merchantCode, supabase]);
 
-  // Gestion du résultat du scanner
+  // 🔹 Gestion du résultat du scanner
   const handleScan = (data: any) => {
     if (!data || scanned) return;
 
@@ -101,8 +109,13 @@ function ScanInner() {
     setScanned(true);
     setError(null);
 
-    // Redirection vers /scan?m=CODE → ensuite on n'affiche plus le scanner
-    router.push(`/scan?m=${encodeURIComponent(extractedMerchantCode)}`);
+    const newUrl = `/scan?m=${encodeURIComponent(extractedMerchantCode)}`;
+
+    // On change l'URL → au prochain render, useEffect relira ?m= et on passera en mode formulaire
+    router.push(newUrl);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", newUrl);
+    }
   };
 
   const handleError = (err: any) => {
@@ -110,7 +123,7 @@ function ScanInner() {
     setError("Impossible d'accéder à la caméra. Vérifie les autorisations.");
   };
 
-  // Soumission du formulaire quand on a déjà le merchantCode
+  // 🔹 Soumission du formulaire quand on a déjà le merchantCode
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!merchantCode) return;
@@ -253,19 +266,5 @@ function ScanInner() {
         </form>
       )}
     </div>
-  );
-}
-
-export default function ScanPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          Chargement...
-        </div>
-      }
-    >
-      <ScanInner />
-    </Suspense>
   );
 }
