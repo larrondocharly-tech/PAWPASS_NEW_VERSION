@@ -27,6 +27,7 @@ export default function ScanPage() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const m = params.get("m");
+    console.log("DEBUG URLSearchParams m =>", m); // 🔍 log 1
     setMerchantCode(m);
   }, []);
 
@@ -41,6 +42,9 @@ export default function ScanPage() {
   const [isCreatingVoucher, setIsCreatingVoucher] = useState(false);
   const [voucherMessage, setVoucherMessage] = useState<string | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
+
+  // Nouveau : message de succès après validation d'achat
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Si on a un merchantCode dans l'URL, on charge la liste des SPAs
   useEffect(() => {
@@ -121,6 +125,7 @@ export default function ScanPage() {
   const handleUseCredits = async () => {
     setVoucherMessage(null);
     setVoucherError(null);
+    setSuccessMessage(null); // on efface le message de succès de transaction si présent
 
     const numericAmount = parseFloat(amount.replace(",", "."));
     if (Number.isNaN(numericAmount) || numericAmount <= 0) {
@@ -176,6 +181,8 @@ export default function ScanPage() {
     e.preventDefault();
     if (!merchantCode) return;
 
+    console.log("DEBUG merchantCode envoyé au RPC =>", merchantCode); // 🔍 log 2
+
     const numericAmount = parseFloat(amount.replace(",", "."));
     if (Number.isNaN(numericAmount) || numericAmount <= 0) {
       setError("Merci d'entrer un montant valide.");
@@ -184,6 +191,9 @@ export default function ScanPage() {
 
     setSubmitting(true);
     setError(null);
+    setVoucherMessage(null);
+    setVoucherError(null);
+    setSuccessMessage(null);
 
     try {
       const {
@@ -196,11 +206,14 @@ export default function ScanPage() {
         return;
       }
 
-      const { data, error: txError } = await supabase.rpc("create_transaction_from_scan", {
-        p_merchant_code: merchantCode,
-        p_amount: numericAmount,
-        p_spa_id: selectedSpaId,
-      });
+      const { data, error: txError } = await supabase.rpc(
+        "create_transaction_from_scan",
+        {
+          p_merchant_code: merchantCode,
+          p_amount: numericAmount,
+          p_spa_id: selectedSpaId,
+        }
+      );
 
       if (txError) {
         console.error("Erreur création transaction :", txError);
@@ -208,7 +221,18 @@ export default function ScanPage() {
           "Erreur lors de la validation : " + (txError.message || "Erreur inconnue.")
         );
       } else {
-        router.push("/dashboard");
+        // Ici : message de remerciement après validation de l'achat
+        setSuccessMessage(
+          "Merci pour votre achat ! Votre don a bien été enregistré pour le refuge choisi. Vous allez être redirigé vers votre tableau de bord."
+        );
+
+        // On peut vider le montant pour éviter un double envoi
+        setAmount("");
+
+        // Redirection vers le dashboard après un court délai
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 2500);
       }
     } finally {
       setSubmitting(false);
@@ -306,6 +330,7 @@ export default function ScanPage() {
           >
             {submitting ? "Validation en cours..." : "Valider et générer le cashback"}
           </button>
+
           <button
             type="button"
             onClick={handleUseCredits}
@@ -324,6 +349,12 @@ export default function ScanPage() {
           {voucherError && (
             <p className="text-red-600 text-sm">
               {voucherError}
+            </p>
+          )}
+
+          {successMessage && (
+            <p className="text-green-600 text-sm text-center">
+              {successMessage}
             </p>
           )}
         </form>
