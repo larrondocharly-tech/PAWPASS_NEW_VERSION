@@ -205,23 +205,34 @@ export default function ScanPageClient() {
     setScanned(true);
 
     try {
-      // Si le QR code pointe déjà vers une URL avec m=..., on redirige directement
+      // Si le QR code pointe déjà vers une URL
       if (text.startsWith("http://") || text.startsWith("https://")) {
         const url = new URL(text);
-        const m = url.searchParams.get("m");
+        const m =
+          url.searchParams.get("m") || url.searchParams.get("code") || "";
 
-        if (m) {
-          router.push(`/scan?mode=${mode}&m=${encodeURIComponent(m)}`);
-          return;
+        if (mode === "redeem") {
+          // Utiliser mes crédits
+          const codeToUse = m || text;
+          router.push(
+            `/scan?mode=redeem&m=${encodeURIComponent(codeToUse)}`
+          );
+        } else {
+          // Scan normal -> page de traitement
+          const codeToUse = m || text;
+          router.push(
+            `/scan/scan-inner?m=${encodeURIComponent(codeToUse)}`
+          );
         }
-
-        // Pas de m=, on l'ajoute tel quel
-        router.push(text);
         return;
       }
 
       // Sinon on considère que le QR contient directement le code marchand
-      router.push(`/scan?mode=${mode}&m=${encodeURIComponent(text)}`);
+      if (mode === "redeem") {
+        router.push(`/scan?mode=redeem&m=${encodeURIComponent(text)}`);
+      } else {
+        router.push(`/scan/scan-inner?m=${encodeURIComponent(text)}`);
+      }
     } catch (e) {
       console.error(e);
       setError("Erreur lors de la lecture du QR code.");
@@ -260,11 +271,8 @@ export default function ScanPageClient() {
       return;
     }
 
-    // Ici, dans ta version en prod, tu as sûrement déjà un appel Supabase / API
-    // qui décrémente la cagnotte + crée une transaction de réduction.
-    // Comme je n'ai pas ton schéma exact, je ne touche pas à ta BDD.
+    // Ici, tu as sûrement déjà un appel Supabase qui gère la réduction.
     // On se contente d'afficher la popup de confirmation.
-
     setError(null);
     setRedeemStep("CONFIRM");
     setShowRedeemConfirmation(true);
@@ -274,7 +282,7 @@ export default function ScanPageClient() {
   // RENDU
   // =========================
 
-  // Aucun code marchand => on affiche le scanner
+  // Aucun code marchand => on affiche le scanner pour le mode "redeem"
   if (mode === "redeem" && !merchantCode) {
     return (
       <div
