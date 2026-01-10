@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
-import ScanInner from "./scan-inner"; // composant pour le flux normal
 
 // On importe le scanner en dynamique pour éviter les problèmes SSR
 const QrScanner = dynamicImport(() => import("react-qr-scanner"), {
@@ -150,7 +149,7 @@ export default function ScanPageClient() {
   }, [mode, merchantCode, supabase]);
 
   // =========================
-  // CALCUL DU CASHBACK SUR LE MONTANT RESTANT
+  // CALCUL DU CASHBACK SUR LE MONTANT RESTANT (flux crédits)
   // =========================
   useEffect(() => {
     if (!merchant || !merchant.cashback_rate) {
@@ -586,10 +585,50 @@ export default function ScanPageClient() {
 
   // 3) MODE SCAN NORMAL
   if (mode === "scan") {
-    // Si on a déjà un code marchand dans l'URL → on affiche ton composant existant
+    // Si on a déjà un code marchand dans l'URL → écran simple "commerçant reconnu"
     if (merchantCode) {
-      // scan-inner.tsx gère la suite (montant de l'achat, choix SPA, etc.)
-      return <ScanInner />;
+      return (
+        <div
+          style={{
+            minHeight: "100vh",
+            padding: 16,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 16,
+          }}
+        >
+          <h1 style={{ fontSize: 22, fontWeight: 700, textAlign: "center" }}>
+            Commerçant reconnu
+          </h1>
+          <p style={{ textAlign: "center" }}>
+            Code du commerçant :{" "}
+            <strong>{merchantCode}</strong>
+          </p>
+          <p style={{ textAlign: "center", maxWidth: 320 }}>
+            Cette page servira à saisir le montant de l&apos;achat et à
+            calculer automatiquement le cashback.
+          </p>
+
+          <button
+            onClick={() => router.push("/scan")}
+            style={{
+              marginTop: 8,
+              padding: "10px 18px",
+              borderRadius: 999,
+              border: "none",
+              fontWeight: 600,
+              fontSize: 16,
+              cursor: "pointer",
+              backgroundColor: "#0f766e",
+              color: "white",
+            }}
+          >
+            Retourner au scanner
+          </button>
+        </div>
+      );
     }
 
     // Sinon on affiche le scanner
