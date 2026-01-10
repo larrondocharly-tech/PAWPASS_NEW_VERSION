@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
@@ -19,16 +19,51 @@ interface SpaSummary {
 export default function AdminDashboardPage() {
   const supabase = createClient();
   const pathname = usePathname();
+  const router = useRouter();
 
   const [summary, setSummary] = useState<SpaSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Tabs de navigation admin
+  const tabs = [
+    { href: "/admin", label: "Vue d’ensemble" },
+    { href: "/admin/transactions", label: "Transactions" },
+    { href: "/admin/merchants", label: "Gérer les commerçants" },
+    { href: "/admin/merchant-applications", label: "Demandes commerçants" },
+    { href: "/admin/spas", label: "Gérer les SPA" },
+    { href: "/dashboard", label: "Retour à l’application" },
+  ];
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       setError(null);
 
+      // 1) Vérifier que l'utilisateur est connecté
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      // 2) Vérifier que c'est bien un admin
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profile || profile.role?.toLowerCase() !== "admin") {
+        // Pas admin → on renvoie vers le dashboard normal
+        router.replace("/dashboard");
+        return;
+      }
+
+      // 3) Charger les stats admin
       const { data, error } = await supabase
         .from("admin_transactions_summary_by_spa")
         .select("*")
@@ -45,7 +80,7 @@ export default function AdminDashboardPage() {
     };
 
     loadData();
-  }, [supabase]);
+  }, [supabase, router]);
 
   // Calcul du total de tous les dons
   const totalDonsToutesSpa = summary.reduce(
@@ -53,18 +88,36 @@ export default function AdminDashboardPage() {
     0
   );
 
-  // Configuration des onglets d'admin
-  const tabs = [
-    { href: "/admin", label: "Vue d’ensemble" },
-    { href: "/admin/transactions", label: "Transactions" },
-    { href: "/admin/merchants", label: "Gérer les commerçants" },
-    {
-      href: "/admin/merchant-applications",
-      label: "Demandes commerçants",
-    },
-    { href: "/admin/spas", label: "Gérer les SPA" },
-    { href: "/dashboard", label: "Retour à l’application" },
-  ];
+  const renderTabs = () => (
+    <nav
+      style={{
+        marginBottom: 24,
+        display: "flex",
+        gap: 8,
+      }}
+    >
+      {tabs.map((tab) => {
+        const isActive = pathname === tab.href;
+        return (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
+              fontSize: 14,
+              fontWeight: isActive ? 700 : 500,
+              backgroundColor: isActive ? "#059669" : "#e5e7eb",
+              color: isActive ? "#ffffff" : "#111827",
+              textDecoration: "none",
+            }}
+          >
+            {tab.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
 
   if (loading) {
     return (
@@ -72,37 +125,7 @@ export default function AdminDashboardPage() {
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
           Tableau de bord admin – Transactions par SPA
         </h1>
-
-        {/* barre d’onglets */}
-        <nav
-          style={{
-            marginBottom: 24,
-            display: "flex",
-            gap: 8,
-          }}
-        >
-          {tabs.map((tab) => {
-            const isActive = pathname === tab.href;
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  fontSize: 14,
-                  fontWeight: isActive ? 700 : 500,
-                  backgroundColor: isActive ? "#059669" : "#e5e7eb",
-                  color: isActive ? "#ffffff" : "#111827",
-                  textDecoration: "none",
-                }}
-              >
-                {tab.label}
-              </Link>
-            );
-          })}
-        </nav>
-
+        {renderTabs()}
         <p>Chargement des statistiques...</p>
       </main>
     );
@@ -114,37 +137,7 @@ export default function AdminDashboardPage() {
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
           Tableau de bord admin – Transactions par SPA
         </h1>
-
-        {/* barre d’onglets */}
-        <nav
-          style={{
-            marginBottom: 24,
-            display: "flex",
-            gap: 8,
-          }}
-        >
-          {tabs.map((tab) => {
-            const isActive = pathname === tab.href;
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  fontSize: 14,
-                  fontWeight: isActive ? 700 : 500,
-                  backgroundColor: isActive ? "#059669" : "#e5e7eb",
-                  color: isActive ? "#ffffff" : "#111827",
-                  textDecoration: "none",
-                }}
-              >
-                {tab.label}
-              </Link>
-            );
-          })}
-        </nav>
-
+        {renderTabs()}
         <p style={{ color: "red" }}>{error}</p>
       </main>
     );
@@ -156,35 +149,7 @@ export default function AdminDashboardPage() {
         Tableau de bord admin – Transactions par SPA
       </h1>
 
-      {/* barre de boutons admin */}
-      <nav
-        style={{
-          marginBottom: 24,
-          display: "flex",
-          gap: 8,
-        }}
-      >
-        {tabs.map((tab) => {
-          const isActive = pathname === tab.href;
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                fontSize: 14,
-                fontWeight: isActive ? 700 : 500,
-                backgroundColor: isActive ? "#059669" : "#e5e7eb",
-                color: isActive ? "#ffffff" : "#111827",
-                textDecoration: "none",
-              }}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
+      {renderTabs()}
 
       {/* Carte total dons */}
       <section
