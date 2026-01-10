@@ -32,7 +32,10 @@ export default function ScanPage() {
   const [loadingSpas, setLoadingSpas] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // 🔹 On lit ?m= dans l'URL côté client
+  // 🔹 choix client : 100% don ou 50/50
+  const [donateAll, setDonateAll] = useState(false);
+
+  // On lit ?m= dans l'URL côté client
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -40,7 +43,7 @@ export default function ScanPage() {
     setMerchantCode(m);
   }, []);
 
-  // 🔹 Quand on a un merchantCode, on charge la liste des refuges
+  // Quand on a un merchantCode, on charge la liste des refuges
   useEffect(() => {
     if (!merchantCode) return;
 
@@ -71,7 +74,7 @@ export default function ScanPage() {
     loadSpas();
   }, [merchantCode, supabase]);
 
-  // 🔹 Gestion du résultat du scanner
+  // Gestion du résultat du scanner
   const handleScan = (data: any) => {
     if (!data || scanned) return;
 
@@ -82,7 +85,6 @@ export default function ScanPage() {
 
     let extractedMerchantCode: string | null = null;
 
-    // 1) Si c'est une URL complète (https://.../scan?m=...)
     try {
       const url = new URL(text);
       const mParam = url.searchParams.get("m");
@@ -93,7 +95,6 @@ export default function ScanPage() {
       // pas une URL → on continue
     }
 
-    // 2) Sinon, un code brut type PP_XXXX_YYYY
     if (!extractedMerchantCode) {
       const match = text.match(/PP_[A-Z0-9]+_[A-Z0-9]+/);
       if (match) {
@@ -111,7 +112,6 @@ export default function ScanPage() {
 
     const newUrl = `/scan?m=${encodeURIComponent(extractedMerchantCode)}`;
 
-    // On change l'URL → au prochain render, useEffect relira ?m= et on passera en mode formulaire
     router.push(newUrl);
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", newUrl);
@@ -123,7 +123,7 @@ export default function ScanPage() {
     setError("Impossible d'accéder à la caméra. Vérifie les autorisations.");
   };
 
-  // 🔹 Soumission du formulaire quand on a déjà le merchantCode
+  // Soumission du formulaire quand on a déjà le merchantCode
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!merchantCode) return;
@@ -155,6 +155,7 @@ export default function ScanPage() {
           p_merchant_code: merchantCode,
           p_amount: numericAmount,
           p_spa_id: selectedSpaId,
+          p_donate_all: donateAll,
         }
       );
 
@@ -190,7 +191,7 @@ export default function ScanPage() {
             constraints={{
               audio: false,
               video: {
-                facingMode: { ideal: "environment" }, // caméra arrière
+                facingMode: { ideal: "environment" },
               },
             }}
           />
@@ -205,7 +206,7 @@ export default function ScanPage() {
     );
   }
 
-  // 🔹 Si merchantCode présent → on affiche le FORMULAIRE (plus de scanner)
+  // 🔹 Si merchantCode présent → on affiche le FORMULAIRE
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4">
       <h1 className="text-2xl font-bold mb-2">Valider votre achat</h1>
@@ -248,6 +249,21 @@ export default function ScanPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="donate-all"
+              type="checkbox"
+              checked={donateAll}
+              onChange={(e) => setDonateAll(e.target.checked)}
+            />
+            <label htmlFor="donate-all" className="text-sm">
+              Donner <strong>100% du cashback</strong> au refuge
+              <span className="block text-xs text-gray-500">
+                (décoché = 50% don / 50% cagnotte client)
+              </span>
+            </label>
           </div>
 
           {error && (
