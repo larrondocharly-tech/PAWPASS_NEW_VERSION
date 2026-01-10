@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
 
-// Scanner chargé uniquement côté client
+// Chargement du scanner uniquement côté client
 const QrScanner: any = dynamicImport(() => import("react-qr-scanner"), {
   ssr: false,
 });
@@ -22,6 +22,7 @@ function ScanInner() {
   const searchParams = useSearchParams();
   const supabase = createClient();
 
+  // code commerçant dans l'URL : /scan?m=PP_...
   const merchantCode = searchParams.get("m");
 
   const [scanned, setScanned] = useState(false);
@@ -33,10 +34,10 @@ function ScanInner() {
   const [loadingSpas, setLoadingSpas] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Toggle 100% don
+  // Toggle 100% don (true) ou 50/50 (false)
   const [donateAll, setDonateAll] = useState(false);
 
-  // Charger la liste des refuges
+  // Charger la liste des refuges quand on a un code commerçant
   useEffect(() => {
     const loadSpas = async () => {
       if (!merchantCode) return;
@@ -49,7 +50,7 @@ function ScanInner() {
         .order("name", { ascending: true });
 
       if (error) {
-        console.error(error);
+        console.error("Erreur chargement SPAs :", error);
         setError("Impossible de charger la liste des refuges.");
       } else {
         setSpas(data || []);
@@ -64,7 +65,7 @@ function ScanInner() {
     loadSpas();
   }, [merchantCode, supabase]);
 
-  /** 📌 Gestion du scan QR */
+  /** 🔹 Gestion du résultat du scanner */
   const handleScan = (data: any) => {
     if (!data || scanned) return;
 
@@ -75,41 +76,51 @@ function ScanInner() {
 
     let extractedMerchantCode: string | null = null;
 
-    // Extraction depuis une URL
+    // 1) Essayer de lire comme URL (https://.../scan?m=...)
     try {
       const url = new URL(text);
-      const m = url.searchParams.get("m");
-      if (m) extractedMerchantCode = m;
-    } catch {}
+      const mParam = url.searchParams.get("m");
+      if (mParam) {
+        extractedMerchantCode = mParam;
+      }
+    } catch {
+      // pas une URL → on continue
+    }
 
-    // Extraction d'un code brut PP_XXXX_YYYY
+    // 2) Sinon matcher un code brut PP_XXXX_YYYY
     if (!extractedMerchantCode) {
       const match = text.match(/PP_[A-Z0-9]+_[A-Z0-9]+/);
-      if (match) extractedMerchantCode = match[0];
+      if (match) {
+        extractedMerchantCode = match[0];
+      }
     }
 
     if (!extractedMerchantCode) {
-      setError("QR code invalide.");
+      setError("QR code invalide. Merci de scanner le QR fourni par le commerçant.");
       return;
     }
 
     setScanned(true);
+    setError(null);
+
+    // Redirection vers /scan?m=CODE
     router.push(`/scan?m=${encodeURIComponent(extractedMerchantCode)}`);
   };
 
+  /** 🔹 Erreur caméra */
   const handleError = (err: any) => {
-    console.error(err);
-    setError("Impossible d'accéder à la caméra.");
+    console.error("Erreur scanner QR :", err);
+    setError("Impossible d'accéder à la caméra. Vérifie les autorisations.");
   };
 
-  /** 📌 Soumission de la transaction */
+  /** 🔹 Soumission du formulaire */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!merchantCode) return;
 
     const numericAmount = parseFloat(amount.replace(",", "."));
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      setError("Montant invalide.");
+    if (Number.isNaN(numericAmount) || numericAmount <= 0) {
+      setError("Merci d'entrer un montant valide.");
       return;
     }
 
@@ -119,10 +130,12 @@ function ScanInner() {
     try {
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (!session) {
-        router.push(`/login?redirect=${encodeURIComponent(`/scan?m=${merchantCode}`)}`);
+      if (sessionError || !session) {
+        const redirectUrl = `/scan?m=${encodeURIComponent(merchantCode)}`;
+        router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
         return;
       }
 
@@ -132,14 +145,23 @@ function ScanInner() {
           p_merchant_code: merchantCode,
           p_amount: numericAmount,
           p_spa_id: selectedSpaId,
-          p_donate_all: donateAll, // 👈 toggle 100% don
+          p_donate_all: donateAll, // 👈 100% don ou 50/50
         }
       );
 
       if (txError) {
-        console.error(txError);
-        setError("Erreur lors de la validation : " + txError.message);
+        console.error("Erreur création transaction :", txError);
+        setError(
+          "Erreur lors de la validation : " +
+            (txError.message || "Erreur inconnue.")
+        );
       } else {
+        // ✅ Message de remerciement avant redirection
+        const msg = donateAll
+          ? "Merci ! Vous avez donné 100% de votre cashback au refuge 🐾"
+          : "Merci ! Votre don et votre cashback ont bien été pris en compte 🐾";
+
+        alert(msg);
         router.push("/dashboard");
       }
     } finally {
@@ -147,11 +169,14 @@ function ScanInner() {
     }
   };
 
-  /** 🔹 Si PAS de merchantCode → affichage du SCANNER */
+  /** 🔹 S'il n'y a PAS de code commerçant → on affiche le SCANNER */
   if (!merchantCode) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4">
         <h1 className="text-2xl font-bold mb-4">Scanner un commerçant</h1>
+        <p className="mb-4 text-center">
+          Place le QR code du commerçant dans le cadre pour commencer.
+        </p>
 
         <div className="w-full max-w-xs aspect-square mb-4">
           <QrScanner
@@ -161,82 +186,111 @@ function ScanInner() {
             style={{ width: "100%", height: "100%" }}
             constraints={{
               audio: false,
-              video: { facingMode: { ideal: "environment" } },
+              video: {
+                facingMode: { ideal: "environment" }, // caméra arrière
+              },
             }}
           />
         </div>
 
-        {error && <p className="text-red-500 mt-2">{error}</p>}
+        {error && (
+          <p className="text-red-500 text-center mt-2">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
 
-  /** 🔹 Si merchantCode présent → affichage du FORMULAIRE */
+  /** 🔹 S'il y a un code commerçant → on affiche le FORMULAIRE */
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4">
-      <h1 className="text-2xl font-bold">Valider votre achat</h1>
+      <h1 className="text-2xl font-bold mb-2">Valider votre achat</h1>
+      <p className="mb-1 text-center text-sm text-gray-600">
+        Commerçant : <span className="font-mono">{merchantCode}</span>
+      </p>
 
-      <p className="mt-2 text-sm">Commerçant : <b>{merchantCode}</b></p>
+      {loadingSpas ? (
+        <p className="mt-4">Chargement des refuges...</p>
+      ) : (
+        <form onSubmit={handleSubmit} className="w-full max-w-sm mt-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Montant de votre achat (€)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+              placeholder="Ex : 23,50"
+              required
+            />
+          </div>
 
-      <form onSubmit={handleSubmit} className="w-full max-w-sm mt-6 space-y-4">
-        <div>
-          <label className="block text-sm mb-1">Montant (€)</label>
-          <input
-            type="number"
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full border rounded px-3 py-2"
-            required
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Refuge à soutenir
+            </label>
+            <select
+              value={selectedSpaId || ""}
+              onChange={(e) => setSelectedSpaId(e.target.value)}
+              className="w-full border rounded px-3 py-2"
+            >
+              {spas.map((spa) => (
+                <option key={spa.id} value={spa.id}>
+                  {spa.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label className="block text-sm mb-1">Refuge à soutenir</label>
-          <select
-            value={selectedSpaId || ""}
-            onChange={(e) => setSelectedSpaId(e.target.value)}
-            className="w-full border rounded px-3 py-2"
+          {/* Choix 50/50 ou 100% don */}
+          <div className="flex items-center gap-2">
+            <input
+              id="donate-all"
+              type="checkbox"
+              checked={donateAll}
+              onChange={(e) => setDonateAll(e.target.checked)}
+            />
+            <label htmlFor="donate-all" className="text-sm">
+              Donner <strong>100% du cashback</strong> au refuge{" "}
+              <span className="block text-xs text-gray-500">
+                (décoché = 50% don / 50% cagnotte client)
+              </span>
+            </label>
+          </div>
+
+          {error && (
+            <p className="text-red-500 text-sm">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-black text-white rounded py-2 font-semibold disabled:opacity-60"
           >
-            {spas.map((spa) => (
-              <option key={spa.id} value={spa.id}>
-                {spa.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Toggle 50/50 ou 100% don */}
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={donateAll}
-            onChange={(e) => setDonateAll(e.target.checked)}
-          />
-          <label className="text-sm">
-            Donner 100% du cashback au refuge (décoché = 50% don / 50% cagnotte client)
-          </label>
-        </div>
-
-        {error && (
-          <p className="text-red-500 text-sm">{error}</p>
-        )}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full bg-black text-white py-2 rounded disabled:opacity-60"
-        >
-          {submitting ? "Validation..." : "Valider et générer le cashback"}
-        </button>
-      </form>
+            {submitting ? "Validation en cours..." : "Valider et générer le cashback"}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
 
 export default function ScanPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Chargement...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          Chargement...
+        </div>
+      }
+    >
       <ScanInner />
     </Suspense>
   );
