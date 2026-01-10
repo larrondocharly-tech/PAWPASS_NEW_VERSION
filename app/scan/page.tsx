@@ -48,7 +48,6 @@ function ScanPageInner() {
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
 
-  // on réutilise amountInput + formError + submitting pour les 2 modes
   const [amountInput, setAmountInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -153,13 +152,11 @@ function ScanPageInner() {
   }, [showPopup]);
 
   // 5) quand un QR est scanné dans l'appli
-  // On lit la chaîne brute, on en déduit le token, puis on va
-  // DIRECTEMENT chercher le commerçant dans Supabase.
   const handleScan = async (result: any) => {
     if (!result || !result.text) return;
 
     const raw = String(result.text).trim();
-    setDebugRaw(raw); // <- on affiche ce que le scanner lit
+    setDebugRaw(raw); // debug
     setScanError(null);
 
     let token: string | null = null;
@@ -345,7 +342,6 @@ function ScanPageInner() {
         return;
       }
 
-      // On insère la transaction brute, les triggers s'occupent du cashback / don
       const { error: insertError } = await supabase.from("transactions").insert({
         user_id: session.user.id,
         merchant_id: merchant.id,
@@ -353,18 +349,17 @@ function ScanPageInner() {
       });
 
       if (insertError) {
-        console.error(insertError);
-        setFormError("Erreur lors de l'enregistrement de l'achat.");
+        console.error("ERROR INSERT :", insertError);
+        setFormError(`Erreur Supabase : ${insertError.message}`);
         setSubmitting(false);
         return;
       }
 
-      // On peut vider le champ et renvoyer sur le tableau de bord
       setAmountInput("");
       setSubmitting(false);
       router.push("/dashboard");
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("UNEXPECTED ERROR:", err);
       setFormError("Erreur inattendue.");
       setSubmitting(false);
     }
@@ -462,7 +457,6 @@ function ScanPageInner() {
           </button>
         </form>
 
-        {/* popup */}
         {renderPopup()}
       </>
     );
