@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { createClient } from '@/lib/supabaseClient';
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { createClient } from "@/lib/supabaseClient";
+
 export const dynamic = "force-dynamic";
-
-
 
 interface SpaSummary {
   spa_name: string;
@@ -18,6 +18,7 @@ interface SpaSummary {
 
 export default function AdminDashboardPage() {
   const supabase = createClient();
+  const pathname = usePathname();
 
   const [summary, setSummary] = useState<SpaSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,13 +30,13 @@ export default function AdminDashboardPage() {
       setError(null);
 
       const { data, error } = await supabase
-        .from('admin_transactions_summary_by_spa')
-        .select('*')
-        .order('nb_transactions', { ascending: false });
+        .from("admin_transactions_summary_by_spa")
+        .select("*")
+        .order("nb_transactions", { ascending: false });
 
       if (error) {
-        console.error('Erreur chargement résumé SPA :', error);
-        setError('Impossible de charger les statistiques.');
+        console.error("Erreur chargement résumé SPA :", error);
+        setError("Impossible de charger les statistiques.");
       } else {
         setSummary((data || []) as SpaSummary[]);
       }
@@ -52,12 +53,56 @@ export default function AdminDashboardPage() {
     0
   );
 
+  // Configuration des onglets d'admin
+  const tabs = [
+    { href: "/admin", label: "Vue d’ensemble" },
+    { href: "/admin/transactions", label: "Transactions" },
+    { href: "/admin/merchants", label: "Gérer les commerçants" },
+    {
+      href: "/admin/merchant-applications",
+      label: "Demandes commerçants",
+    },
+    { href: "/admin/spas", label: "Gérer les SPA" },
+    { href: "/dashboard", label: "Retour à l’application" },
+  ];
+
   if (loading) {
     return (
       <main style={{ padding: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
           Tableau de bord admin – Transactions par SPA
         </h1>
+
+        {/* barre d’onglets */}
+        <nav
+          style={{
+            marginBottom: 24,
+            display: "flex",
+            gap: 8,
+          }}
+        >
+          {tabs.map((tab) => {
+            const isActive = pathname === tab.href;
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  fontSize: 14,
+                  fontWeight: isActive ? 700 : 500,
+                  backgroundColor: isActive ? "#059669" : "#e5e7eb",
+                  color: isActive ? "#ffffff" : "#111827",
+                  textDecoration: "none",
+                }}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
+
         <p>Chargement des statistiques...</p>
       </main>
     );
@@ -69,7 +114,38 @@ export default function AdminDashboardPage() {
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
           Tableau de bord admin – Transactions par SPA
         </h1>
-        <p style={{ color: 'red' }}>{error}</p>
+
+        {/* barre d’onglets */}
+        <nav
+          style={{
+            marginBottom: 24,
+            display: "flex",
+            gap: 8,
+          }}
+        >
+          {tabs.map((tab) => {
+            const isActive = pathname === tab.href;
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  fontSize: 14,
+                  fontWeight: isActive ? 700 : 500,
+                  backgroundColor: isActive ? "#059669" : "#e5e7eb",
+                  color: isActive ? "#ffffff" : "#111827",
+                  textDecoration: "none",
+                }}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <p style={{ color: "red" }}>{error}</p>
       </main>
     );
   }
@@ -84,52 +160,30 @@ export default function AdminDashboardPage() {
       <nav
         style={{
           marginBottom: 24,
-          display: 'flex',
+          display: "flex",
           gap: 8,
         }}
       >
-        <Link
-          href="/admin"
-          style={{
-            padding: '8px 12px',
-            borderRadius: 999,
-            fontSize: 14,
-            fontWeight: 600,
-            backgroundColor: '#059669',
-            color: '#ffffff',
-            textDecoration: 'none',
-          }}
-        >
-          Vue d’ensemble
-        </Link>
-        <Link
-          href="/admin/transactions"
-          style={{
-            padding: '8px 12px',
-            borderRadius: 999,
-            fontSize: 14,
-            fontWeight: 600,
-            backgroundColor: '#e5e7eb',
-            color: '#111827',
-            textDecoration: 'none',
-          }}
-        >
-          Transactions
-        </Link>
-        <Link
-          href="/dashboard"
-          style={{
-            padding: '8px 12px',
-            borderRadius: 999,
-            fontSize: 14,
-            fontWeight: 500,
-            backgroundColor: '#f3f4f6',
-            color: '#374151',
-            textDecoration: 'none',
-          }}
-        >
-          Retour à l’application
-        </Link>
+        {tabs.map((tab) => {
+          const isActive = pathname === tab.href;
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                fontSize: 14,
+                fontWeight: isActive ? 700 : 500,
+                backgroundColor: isActive ? "#059669" : "#e5e7eb",
+                color: isActive ? "#ffffff" : "#111827",
+                textDecoration: "none",
+              }}
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Carte total dons */}
@@ -138,15 +192,15 @@ export default function AdminDashboardPage() {
           marginBottom: 24,
           padding: 24,
           borderRadius: 16,
-          backgroundColor: '#ffffff',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.06)',
+          backgroundColor: "#ffffff",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.06)",
         }}
       >
         <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
           Total des dons (toutes SPA)
         </h2>
         <p style={{ fontSize: 24, fontWeight: 700 }}>
-          {totalDonsToutesSpa.toFixed(2).replace('.', ',')} €
+          {totalDonsToutesSpa.toFixed(2).replace(".", ",")} €
         </p>
       </section>
 
@@ -155,31 +209,29 @@ export default function AdminDashboardPage() {
         style={{
           padding: 24,
           borderRadius: 16,
-          backgroundColor: '#ffffff',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.06)',
+          backgroundColor: "#ffffff",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.06)",
         }}
       >
         <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>
           Résumé par SPA
         </h2>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>
-                  SPA
-                </th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>
+                <th style={{ textAlign: "left", padding: "8px 12px" }}>SPA</th>
+                <th style={{ textAlign: "right", padding: "8px 12px" }}>
                   Transactions
                 </th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>
+                <th style={{ textAlign: "right", padding: "8px 12px" }}>
                   Total achats
                 </th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>
+                <th style={{ textAlign: "right", padding: "8px 12px" }}>
                   Total dons
                 </th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>
+                <th style={{ textAlign: "right", padding: "8px 12px" }}>
                   Total cashback
                 </th>
               </tr>
@@ -192,47 +244,47 @@ export default function AdminDashboardPage() {
                   <tr key={row.spa_id ?? spaName}>
                     <td
                       style={{
-                        padding: '8px 12px',
-                        borderTop: '1px solid #eee',
+                        padding: "8px 12px",
+                        borderTop: "1px solid #eee",
                       }}
                     >
                       {spaName}
                     </td>
                     <td
                       style={{
-                        padding: '8px 12px',
-                        borderTop: '1px solid #eee',
-                        textAlign: 'right',
+                        padding: "8px 12px",
+                        borderTop: "1px solid #eee",
+                        textAlign: "right",
                       }}
                     >
                       {row.nb_transactions}
                     </td>
                     <td
                       style={{
-                        padding: '8px 12px',
-                        borderTop: '1px solid #eee',
-                        textAlign: 'right',
+                        padding: "8px 12px",
+                        borderTop: "1px solid #eee",
+                        textAlign: "right",
                       }}
                     >
-                      {row.total_achats.toFixed(2).replace('.', ',')} €
+                      {row.total_achats.toFixed(2).replace(".", ",")} €
                     </td>
                     <td
                       style={{
-                        padding: '8px 12px',
-                        borderTop: '1px solid #eee',
-                        textAlign: 'right',
+                        padding: "8px 12px",
+                        borderTop: "1px solid #eee",
+                        textAlign: "right",
                       }}
                     >
-                      {row.total_dons.toFixed(2).replace('.', ',')} €
+                      {row.total_dons.toFixed(2).replace(".", ",")} €
                     </td>
                     <td
                       style={{
-                        padding: '8px 12px',
-                        borderTop: '1px solid #eee',
-                        textAlign: 'right',
+                        padding: "8px 12px",
+                        borderTop: "1px solid #eee",
+                        textAlign: "right",
                       }}
                     >
-                      {row.total_cashback.toFixed(2).replace('.', ',')} €
+                      {row.total_cashback.toFixed(2).replace(".", ",")} €
                     </td>
                   </tr>
                 );
