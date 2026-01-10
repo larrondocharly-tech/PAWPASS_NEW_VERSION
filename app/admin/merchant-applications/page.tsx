@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabaseClient';
-import TopNav from '@/components/TopNav';
-export const dynamic = "force-dynamic";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabaseClient";
+import TopNav from "@/components/TopNav";
 
+export const dynamic = "force-dynamic";
 
 interface MerchantApplication {
   id: string;
@@ -19,7 +19,7 @@ interface MerchantApplication {
 }
 
 const buildMerchantToken = (userId: string) => {
-  const prefix = userId.replace(/-/g, '').slice(0, 8);
+  const prefix = userId.replace(/-/g, "").slice(0, 8);
   const random = Math.random().toString(36).slice(2, 8);
   return `PP_${prefix}_${random}`.toUpperCase();
 };
@@ -27,6 +27,7 @@ const buildMerchantToken = (userId: string) => {
 export default function AdminMerchantApplicationsPage() {
   const supabase = createClient();
   const router = useRouter();
+
   const [applications, setApplications] = useState<MerchantApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -37,18 +38,21 @@ export default function AdminMerchantApplicationsPage() {
       setIsLoading(true);
       setError(null);
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData.session;
+      // 1) Vérifier la session
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      if (!session) {
-        router.replace('/dashboard');
+      if (!user) {
+        router.replace("/login");
         return;
       }
 
+      // 2) Vérifier le rôle admin
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
         .maybeSingle();
 
       if (profileError) {
@@ -57,16 +61,19 @@ export default function AdminMerchantApplicationsPage() {
         return;
       }
 
-      if (profile?.role?.toLowerCase() !== 'admin') {
-        router.replace('/dashboard');
+      if (!profile || profile.role?.toLowerCase() !== "admin") {
+        router.replace("/dashboard");
         return;
       }
 
+      // 3) Charger les demandes en attente
       const { data, error: fetchError } = await supabase
-        .from('merchant_applications')
-        .select('id,user_id,business_name,city,address,phone,message,created_at')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: true });
+        .from("merchant_applications")
+        .select(
+          "id,user_id,business_name,city,address,phone,message,created_at"
+        )
+        .eq("status", "pending")
+        .order("created_at", { ascending: true });
 
       if (fetchError) {
         setError(fetchError.message);
@@ -85,33 +92,37 @@ export default function AdminMerchantApplicationsPage() {
     setError(null);
     setActionId(application.id);
 
+    // Création du commerçant
     const qrToken = buildMerchantToken(application.user_id);
     const { data: merchant, error: merchantError } = await supabase
-      .from('merchants')
+      .from("merchants")
       .insert({
         name: application.business_name,
         city: application.city,
         address: application.address,
         qr_token: qrToken,
-        is_active: true
+        is_active: true,
       })
-      .select('id')
+      .select("id")
       .single();
 
     if (merchantError || !merchant) {
-      setError(merchantError?.message ?? 'Impossible de créer le commerçant.');
+      setError(
+        merchantError?.message ?? "Impossible de créer le commerçant."
+      );
       setActionId(null);
       return;
     }
 
+    // Mise à jour du profil utilisateur -> rôle merchant
     const { error: profileUpdateError } = await supabase
-      .from('profiles')
+      .from("profiles")
       .update({
-        role: 'merchant',
+        role: "merchant",
         merchant_id: merchant.id,
-        merchant_code: qrToken
+        merchant_code: qrToken,
       })
-      .eq('id', application.user_id);
+      .eq("id", application.user_id);
 
     if (profileUpdateError) {
       setError(profileUpdateError.message);
@@ -119,13 +130,14 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
+    // Marquer la demande comme approuvée
     const { error: applicationUpdateError } = await supabase
-      .from('merchant_applications')
+      .from("merchant_applications")
       .update({
-        status: 'approved',
-        reviewed_at: new Date().toISOString()
+        status: "approved",
+        reviewed_at: new Date().toISOString(),
       })
-      .eq('id', application.id);
+      .eq("id", application.id);
 
     if (applicationUpdateError) {
       setError(applicationUpdateError.message);
@@ -133,7 +145,10 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    setApplications((prev) => prev.filter((item) => item.id !== application.id));
+    // Retirer la demande de la liste
+    setApplications((prev) =>
+      prev.filter((item) => item.id !== application.id)
+    );
     setActionId(null);
   };
 
@@ -142,12 +157,12 @@ export default function AdminMerchantApplicationsPage() {
     setActionId(application.id);
 
     const { error: updateError } = await supabase
-      .from('merchant_applications')
+      .from("merchant_applications")
       .update({
-        status: 'rejected',
-        reviewed_at: new Date().toISOString()
+        status: "rejected",
+        reviewed_at: new Date().toISOString(),
       })
-      .eq('id', application.id);
+      .eq("id", application.id);
 
     if (updateError) {
       setError(updateError.message);
@@ -155,7 +170,9 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    setApplications((prev) => prev.filter((item) => item.id !== application.id));
+    setApplications((prev) =>
+      prev.filter((item) => item.id !== application.id)
+    );
     setActionId(null);
   };
 
@@ -181,7 +198,7 @@ export default function AdminMerchantApplicationsPage() {
           <p className="helper">Aucune demande en attente.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: 16 }}>
+        <div style={{ display: "grid", gap: 16 }}>
           {applications.map((application) => (
             <div key={application.id} className="card" style={{ padding: 16 }}>
               <h3 style={{ marginTop: 0 }}>{application.business_name}</h3>
@@ -189,7 +206,10 @@ export default function AdminMerchantApplicationsPage() {
                 {application.city}
               </p>
               {application.address && (
-                <p className="helper" style={{ marginTop: 4, fontSize: '0.9rem' }}>
+                <p
+                  className="helper"
+                  style={{ marginTop: 4, fontSize: "0.9rem" }}
+                >
                   {application.address}
                 </p>
               )}
@@ -198,18 +218,28 @@ export default function AdminMerchantApplicationsPage() {
                   Téléphone : {application.phone}
                 </p>
               )}
-              {application.message && <p style={{ marginTop: 8 }}>{application.message}</p>}
+              {application.message && (
+                <p style={{ marginTop: 8 }}>{application.message}</p>
+              )}
               <p className="helper" style={{ marginTop: 8 }}>
-                Demande créée le {new Date(application.created_at).toLocaleString('fr-FR')}
+                Demande créée le{" "}
+                {new Date(application.created_at).toLocaleString("fr-FR")}
               </p>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginTop: 12,
+                }}
+              >
                 <button
                   className="button"
                   type="button"
                   onClick={() => void handleApprove(application)}
                   disabled={actionId === application.id}
                 >
-                  {actionId === application.id ? 'Validation...' : 'Accepter'}
+                  {actionId === application.id ? "Validation..." : "Accepter"}
                 </button>
                 <button
                   className="button secondary"
@@ -217,7 +247,7 @@ export default function AdminMerchantApplicationsPage() {
                   onClick={() => void handleReject(application)}
                   disabled={actionId === application.id}
                 >
-                  {actionId === application.id ? 'Mise à jour...' : 'Refuser'}
+                  {actionId === application.id ? "Mise à jour..." : "Refuser"}
                 </button>
               </div>
             </div>

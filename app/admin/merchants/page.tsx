@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabaseClient';
-import TopNav from '@/components/TopNav';
-export const dynamic = "force-dynamic";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabaseClient";
+import TopNav from "@/components/TopNav";
 
+export const dynamic = "force-dynamic";
 
 interface MerchantRow {
   id: string;
@@ -27,29 +27,33 @@ export default function AdminMerchantsPage() {
   const supabase = createClient();
   const router = useRouter();
   const pathname = usePathname();
+
   const [merchants, setMerchants] = useState<MerchantRow[]>([]);
-  const [name, setName] = useState('');
-  const [city, setCity] = useState('');
-  const [address, setAddress] = useState('');
-  const [cashbackPercent, setCashbackPercent] = useState('5');
+  const [name, setName] = useState("");
+  const [city, setCity] = useState("");
+  const [address, setAddress] = useState("");
+  const [cashbackPercent, setCashbackPercent] = useState("5");
+
   const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editCity, setEditCity] = useState('');
-  const [editAddress, setEditAddress] = useState('');
-  const [editCashbackPercent, setEditCashbackPercent] = useState('');
+  const [editName, setEditName] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editCashbackPercent, setEditCashbackPercent] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMerchants = async () => {
     const { data, error: fetchError } = await supabase
-      .from('merchants')
-      .select('id,name,city,address,created_at,is_active,cashback_rate')
-      .order('created_at', { ascending: false });
+      .from("merchants")
+      .select("id,name,city,address,created_at,is_active,cashback_rate")
+      .order("created_at", { ascending: false });
 
     if (fetchError) {
       console.error(fetchError);
@@ -67,20 +71,22 @@ export default function AdminMerchantsPage() {
       setHasCheckedAccess(false);
       setIsAuthorized(false);
 
+      // 1) Vérifier la session
       const {
-        data: { user }
+        data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
         setHasCheckedAccess(true);
-        router.replace('/login');
+        router.replace("/login");
         return;
       }
 
+      // 2) Vérifier le rôle admin
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
         .maybeSingle();
 
       if (profileError) {
@@ -90,12 +96,13 @@ export default function AdminMerchantsPage() {
         return;
       }
 
-      if (profile?.role?.toLowerCase() !== 'admin') {
+      if (profile?.role?.toLowerCase() !== "admin") {
         setHasCheckedAccess(true);
-        router.replace('/dashboard');
+        router.replace("/dashboard");
         return;
       }
 
+      // 3) Autorisé : charger les commerçants
       setHasCheckedAccess(true);
       setIsAuthorized(true);
 
@@ -106,7 +113,9 @@ export default function AdminMerchantsPage() {
     void loadAdminData();
   }, [router, supabase]);
 
-  const handleAddMerchant = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleAddMerchant = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
     setError(null);
 
@@ -116,20 +125,24 @@ export default function AdminMerchantsPage() {
     const percentValue = Number.parseFloat(cashbackPercent);
 
     if (!trimmedName || !trimmedCity || Number.isNaN(percentValue)) {
-      setError('Veuillez renseigner un nom, une ville et un pourcentage valide.');
+      setError(
+        "Veuillez renseigner un nom, une ville et un pourcentage valide."
+      );
       return;
     }
 
     setIsSubmitting(true);
+
     const qrToken = crypto.randomUUID();
     const cashbackRate = percentValue / 100;
-    const { error: insertError } = await supabase.from('merchants').insert({
+
+    const { error: insertError } = await supabase.from("merchants").insert({
       qr_token: qrToken,
       name: trimmedName,
       city: trimmedCity,
       address: trimmedAddress || null,
       cashback_rate: cashbackRate,
-      is_active: true
+      is_active: true,
     });
 
     if (insertError) {
@@ -139,53 +152,57 @@ export default function AdminMerchantsPage() {
       return;
     }
 
-    setName('');
-    setCity('');
-    setAddress('');
-    setCashbackPercent('5');
+    setName("");
+    setCity("");
+    setAddress("");
+    setCashbackPercent("5");
     await fetchMerchants();
     setIsSubmitting(false);
   };
 
   const handleStartEdit = (merchant: MerchantRow) => {
     setEditingId(merchant.id);
-    setEditName(merchant.name ?? '');
-    setEditCity(merchant.city ?? '');
-    setEditAddress(merchant.address ?? '');
+    setEditName(merchant.name ?? "");
+    setEditCity(merchant.city ?? "");
+    setEditAddress(merchant.address ?? "");
     setEditCashbackPercent(formatCashbackPercent(merchant.cashback_rate));
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setEditName('');
-    setEditCity('');
-    setEditAddress('');
-    setEditCashbackPercent('');
+    setEditName("");
+    setEditCity("");
+    setEditAddress("");
+    setEditCashbackPercent("");
   };
 
   const handleSaveEdit = async (merchantId: string) => {
     setError(null);
+
     const trimmedName = editName.trim();
     const trimmedCity = editCity.trim();
     const trimmedAddress = editAddress.trim();
     const percentValue = Number.parseFloat(editCashbackPercent);
 
     if (!trimmedName || !trimmedCity || Number.isNaN(percentValue)) {
-      setError('Veuillez renseigner un nom, une ville et un pourcentage valide.');
+      setError(
+        "Veuillez renseigner un nom, une ville et un pourcentage valide."
+      );
       return;
     }
 
     setIsSavingEdit(true);
+
     const cashbackRate = percentValue / 100;
     const { error: updateError } = await supabase
-      .from('merchants')
+      .from("merchants")
       .update({
         name: trimmedName,
         city: trimmedCity,
         address: trimmedAddress || null,
-        cashback_rate: cashbackRate
+        cashback_rate: cashbackRate,
       })
-      .eq('id', merchantId);
+      .eq("id", merchantId);
 
     if (updateError) {
       console.error(updateError);
@@ -202,11 +219,13 @@ export default function AdminMerchantsPage() {
   const handleToggleActive = async (merchant: MerchantRow) => {
     setError(null);
     setTogglingId(merchant.id);
+
     const nextActive = !(merchant.is_active ?? true);
+
     const { error: toggleError } = await supabase
-      .from('merchants')
+      .from("merchants")
       .update({ is_active: nextActive })
-      .eq('id', merchant.id);
+      .eq("id", merchant.id);
 
     if (toggleError) {
       console.error(toggleError);
@@ -219,13 +238,10 @@ export default function AdminMerchantsPage() {
     setTogglingId(null);
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
-  const isMerchantsActive = pathname.startsWith('/admin/merchants');
-  const isApplicationsActive = pathname.startsWith('/admin/merchant-applications');
+  const isMerchantsActive = pathname.startsWith("/admin/merchants");
+  const isApplicationsActive = pathname.startsWith(
+    "/admin/merchant-applications"
+  );
 
   return (
     <div className="container">
@@ -243,22 +259,40 @@ export default function AdminMerchantsPage() {
         ) : null
       ) : (
         <>
-          <div className="card" style={{ marginBottom: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Link className={isMerchantsActive ? 'button' : 'button secondary'} href="/admin/merchants">
+          {/* Onglets locaux : commerçants / demandes */}
+          <div
+            className="card"
+            style={{
+              marginBottom: 24,
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <Link
+              className={isMerchantsActive ? "button" : "button secondary"}
+              href="/admin/merchants"
+            >
               Tous les commerces
             </Link>
             <Link
-              className={isApplicationsActive ? 'button' : 'button secondary'}
+              className={
+                isApplicationsActive ? "button" : "button secondary"
+              }
               href="/admin/merchant-applications"
             >
               Nouveaux commerçants
             </Link>
           </div>
+
           <div className="card" style={{ marginBottom: 24 }}>
             <h2>Gestion des commerçants</h2>
-            <p className="helper">Ajoutez, modifiez ou désactivez les commerces partenaires.</p>
+            <p className="helper">
+              Ajoutez, modifiez ou désactivez les commerces partenaires.
+            </p>
           </div>
 
+          {/* Formulaire d'ajout */}
           <div className="card" style={{ marginBottom: 24 }}>
             <h3>Ajouter un commerce partenaire</h3>
             <form onSubmit={handleAddMerchant}>
@@ -272,6 +306,7 @@ export default function AdminMerchantsPage() {
                   required
                 />
               </label>
+
               <label className="label" htmlFor="merchantCity">
                 Ville
                 <input
@@ -282,6 +317,7 @@ export default function AdminMerchantsPage() {
                   required
                 />
               </label>
+
               <label className="label" htmlFor="merchantAddress">
                 Adresse
                 <input
@@ -291,6 +327,7 @@ export default function AdminMerchantsPage() {
                   onChange={(event) => setAddress(event.target.value)}
                 />
               </label>
+
               <label className="label" htmlFor="merchantCashback">
                 Pourcentage de cashback
                 <input
@@ -301,22 +338,27 @@ export default function AdminMerchantsPage() {
                   min="0"
                   step="0.1"
                   value={cashbackPercent}
-                  onChange={(event) => setCashbackPercent(event.target.value)}
+                  onChange={(event) =>
+                    setCashbackPercent(event.target.value)
+                  }
                   required
                 />
               </label>
+
               {error && <p className="error">{error}</p>}
+
               <button
                 className="button"
                 type="submit"
                 disabled={isSubmitting}
                 style={{ marginTop: 12 }}
               >
-                {isSubmitting ? 'Ajout en cours...' : 'Ajouter le commerce'}
+                {isSubmitting ? "Ajout en cours..." : "Ajouter le commerce"}
               </button>
             </form>
           </div>
 
+          {/* Liste des commerçants */}
           <div className="card">
             <h3>Liste des commerces</h3>
             {isLoading ? (
@@ -324,43 +366,69 @@ export default function AdminMerchantsPage() {
             ) : merchants.length === 0 ? (
               <p className="helper">Aucun commerce trouvé.</p>
             ) : (
-              <div style={{ display: 'grid', gap: 16 }}>
+              <div style={{ display: "grid", gap: 16 }}>
                 {merchants.map((merchant) => {
                   const isEditing = editingId === merchant.id;
+
                   return (
-                    <div key={merchant.id} className="card" style={{ padding: 16 }}>
+                    <div
+                      key={merchant.id}
+                      className="card"
+                      style={{ padding: 16 }}
+                    >
                       {isEditing ? (
-                        <div style={{ display: 'grid', gap: 12 }}>
-                          <label className="label" htmlFor={`edit-name-${merchant.id}`}>
+                        <div style={{ display: "grid", gap: 12 }}>
+                          <label
+                            className="label"
+                            htmlFor={`edit-name-${merchant.id}`}
+                          >
                             Nom
                             <input
                               id={`edit-name-${merchant.id}`}
                               className="input"
                               value={editName}
-                              onChange={(event) => setEditName(event.target.value)}
+                              onChange={(event) =>
+                                setEditName(event.target.value)
+                              }
                               required
                             />
                           </label>
-                          <label className="label" htmlFor={`edit-city-${merchant.id}`}>
+
+                          <label
+                            className="label"
+                            htmlFor={`edit-city-${merchant.id}`}
+                          >
                             Ville
                             <input
                               id={`edit-city-${merchant.id}`}
                               className="input"
                               value={editCity}
-                              onChange={(event) => setEditCity(event.target.value)}
+                              onChange={(event) =>
+                                setEditCity(event.target.value)
+                              }
                               required
                             />
                           </label>
-                          <label className="label" htmlFor={`edit-address-${merchant.id}`}>
+
+                          <label
+                            className="label"
+                            htmlFor={`edit-address-${merchant.id}`}
+                          >
                             Adresse
                             <input
                               id={`edit-address-${merchant.id}`}
                               className="input"
                               value={editAddress}
-                              onChange={(event) => setEditAddress(event.target.value)}
+                              onChange={(event) =>
+                                setEditAddress(event.target.value)
+                              }
                             />
                           </label>
-                          <label className="label" htmlFor={`edit-cashback-${merchant.id}`}>
+
+                          <label
+                            className="label"
+                            htmlFor={`edit-cashback-${merchant.id}`}
+                          >
                             Pourcentage de cashback
                             <input
                               id={`edit-cashback-${merchant.id}`}
@@ -370,18 +438,31 @@ export default function AdminMerchantsPage() {
                               min="0"
                               step="0.1"
                               value={editCashbackPercent}
-                              onChange={(event) => setEditCashbackPercent(event.target.value)}
+                              onChange={(event) =>
+                                setEditCashbackPercent(event.target.value)
+                              }
                               required
                             />
                           </label>
-                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 12,
+                              flexWrap: "wrap",
+                            }}
+                          >
                             <button
                               className="button"
                               type="button"
-                              onClick={() => void handleSaveEdit(merchant.id)}
+                              onClick={() =>
+                                void handleSaveEdit(merchant.id)
+                              }
                               disabled={isSavingEdit}
                             >
-                              {isSavingEdit ? 'Enregistrement...' : 'Enregistrer'}
+                              {isSavingEdit
+                                ? "Enregistrement..."
+                                : "Enregistrer"}
                             </button>
                             <button
                               className="button secondary"
@@ -395,36 +476,58 @@ export default function AdminMerchantsPage() {
                         </div>
                       ) : (
                         <>
-                          <h4 style={{ marginTop: 0 }}>{merchant.name ?? 'Commerce partenaire'}</h4>
+                          <h4 style={{ marginTop: 0 }}>
+                            {merchant.name ?? "Commerce partenaire"}
+                          </h4>
                           <p className="helper" style={{ marginTop: 4 }}>
-                            {merchant.city ?? 'Ville non renseignée'}
+                            {merchant.city ?? "Ville non renseignée"}
                           </p>
                           {merchant.address && (
-                            <p className="helper" style={{ marginTop: 4, fontSize: '0.9rem' }}>
+                            <p
+                              className="helper"
+                              style={{ marginTop: 4, fontSize: "0.9rem" }}
+                            >
                               {merchant.address}
                             </p>
                           )}
                           <p style={{ marginTop: 8 }}>
-                            {formatCashbackPercent(merchant.cashback_rate)}% de cashback
+                            {formatCashbackPercent(
+                              merchant.cashback_rate
+                            )}
+                            % de cashback
                           </p>
                           <p className="helper" style={{ marginTop: 4 }}>
-                            {merchant.is_active ? 'Actif' : 'Inactif'}
+                            {merchant.is_active ? "Actif" : "Inactif"}
                           </p>
-                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 12,
+                              flexWrap: "wrap",
+                              marginTop: 12,
+                            }}
+                          >
                             <button
                               className="button secondary"
                               type="button"
-                              onClick={() => handleStartEdit(merchant)}
+                              onClick={() =>
+                                handleStartEdit(merchant)
+                              }
                             >
                               Modifier
                             </button>
                             <button
                               className="button secondary"
                               type="button"
-                              onClick={() => void handleToggleActive(merchant)}
+                              onClick={() =>
+                                void handleToggleActive(merchant)
+                              }
                               disabled={togglingId === merchant.id}
                             >
-                              {merchant.is_active ? 'Désactiver' : 'Réactiver'}
+                              {merchant.is_active
+                                ? "Désactiver"
+                                : "Réactiver"}
                             </button>
                           </div>
                         </>
