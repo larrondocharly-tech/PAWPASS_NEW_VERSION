@@ -315,6 +315,7 @@ function ScanPageInner() {
               onScan={handleScan}
               onError={handleError}
               style={{ width: "100%" }}
+              facingMode="rear"
             />
           </div>
         </>
@@ -371,6 +372,7 @@ function ScanPageInner() {
             onScan={handleScan}
             onError={handleError}
             style={{ width: "100%" }}
+            facingMode="rear"
           />
         </div>
         {scanError && <p style={{ color: "red" }}>{scanError}</p>}
