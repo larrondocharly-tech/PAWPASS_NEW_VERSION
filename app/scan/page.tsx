@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
 
-const QrScanner = dynamicImport(() => import("react-qr-scanner"), {
+const QrScanner: any = dynamicImport(() => import("react-qr-scanner"), {
   ssr: false,
 });
 
