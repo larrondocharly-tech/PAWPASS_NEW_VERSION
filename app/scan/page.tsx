@@ -172,6 +172,12 @@ export default function ScanPage() {
             onError={handleError}
             onScan={handleScan}
             style={{ width: "100%", height: "100%" }}
+            constraints={{
+              audio: false,
+              video: {
+                facingMode: { ideal: "environment" },
+              },
+            }}
           />
         </div>
 
