@@ -315,7 +315,7 @@ function ScanPageInner() {
               onScan={handleScan}
               onError={handleError}
               style={{ width: "100%" }}
-              facingMode="rear"
+              constraints={{ video: { facingMode: "environment" } }}
             />
           </div>
         </>
@@ -372,7 +372,7 @@ function ScanPageInner() {
             onScan={handleScan}
             onError={handleError}
             style={{ width: "100%" }}
-            facingMode="rear"
+            constraints={{ video: { facingMode: "environment" } }}
           />
         </div>
         {scanError && <p style={{ color: "red" }}>{scanError}</p>}
