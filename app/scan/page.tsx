@@ -1,7 +1,7 @@
 'use client';
 
-import React, { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
 
@@ -11,19 +11,24 @@ const QrScanner: any = dynamicImport(() => import("react-qr-scanner"), {
 
 export const dynamic = "force-dynamic";
 
-
 interface Spa {
   id: string;
   name: string;
 }
 
-function ScanInner() {
+export default function ScanPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = createClient();
 
-  // code commerçant dans l'URL : /scan?m=PP_...
-  const merchantCode = searchParams.get("m");
+  // On lit le paramètre ?m= dans l'URL côté client
+  const [merchantCode, setMerchantCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const m = params.get("m");
+    setMerchantCode(m);
+  }, []);
 
   const [scanned, setScanned] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +39,7 @@ function ScanInner() {
   const [loadingSpas, setLoadingSpas] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Quand on a un merchantCode, on charge la liste des refuges
+  // Si on a un merchantCode dans l'URL, on charge la liste des SPAs
   useEffect(() => {
     const loadSpas = async () => {
       if (!merchantCode) return;
@@ -57,7 +62,6 @@ function ScanInner() {
           setSelectedSpaId(spasData[0].id);
         }
       }
-
       setLoadingSpas(false);
     };
 
@@ -75,7 +79,7 @@ function ScanInner() {
 
     let extractedMerchantCode: string | null = null;
 
-    // 1) Si c'est une URL complète (https://.../scan?m=...)
+    // 1) Si c'est une URL complète (comme l'URL vercel /scan?m=...)
     try {
       const url = new URL(text);
       const mParam = url.searchParams.get("m");
@@ -83,10 +87,10 @@ function ScanInner() {
         extractedMerchantCode = mParam;
       }
     } catch {
-      // pas une URL → on continue
+      // pas une URL complète → on passe à la suite
     }
 
-    // 2) Sinon, un code brut type PP_XXXX_YYYY
+    // 2) Sinon, si c'est juste un code type PP_XXXX_XXXX
     if (!extractedMerchantCode) {
       const match = text.match(/PP_[A-Z0-9]+_[A-Z0-9]+/);
       if (match) {
@@ -102,7 +106,7 @@ function ScanInner() {
     setScanned(true);
     setError(null);
 
-    // Redirection vers /scan?m=CODE → ensuite on n'affiche plus le scanner
+    // On redirige vers /scan?m=CODE
     router.push(`/scan?m=${encodeURIComponent(extractedMerchantCode)}`);
   };
 
@@ -111,7 +115,7 @@ function ScanInner() {
     setError("Impossible d'accéder à la caméra. Vérifie les autorisations.");
   };
 
-  // Soumission du formulaire quand on a déjà le merchantCode
+  // Soumission du formulaire une fois qu'on a le merchantCode
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!merchantCode) return;
@@ -132,23 +136,21 @@ function ScanInner() {
       } = await supabase.auth.getSession();
 
       if (sessionError || !session) {
-        const redirectUrl = `/scan?m=${encodeURIComponent(merchantCode)}`;
-        router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+        router.push("/login?redirect=/scan" + encodeURIComponent(`?m=${merchantCode}`));
         return;
       }
 
-      const { error: txError } = await supabase.rpc(
-        "create_transaction_from_scan",
-        {
-          p_merchant_code: merchantCode,
-          p_amount: numericAmount,
-          p_spa_id: selectedSpaId,
-        }
-      );
+      const { data, error: txError } = await supabase.rpc("create_transaction_from_scan", {
+        p_merchant_code: merchantCode,
+        p_amount: numericAmount,
+        p_spa_id: selectedSpaId,
+      });
 
       if (txError) {
         console.error("Erreur création transaction :", txError);
-        setError("Erreur lors de la validation. Merci de réessayer.");
+        setError(
+          "Erreur lors de la validation : " + (txError.message || "Erreur inconnue.")
+        );
       } else {
         router.push("/dashboard");
       }
@@ -157,7 +159,7 @@ function ScanInner() {
     }
   };
 
-  // 🔹 Si PAS de merchantCode → on affiche le SCANNER (caméra arrière)
+  // 🔹 Cas 1 : on n'a PAS encore de merchantCode → on affiche le SCANNER
   if (!merchantCode) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4">
@@ -175,7 +177,7 @@ function ScanInner() {
             constraints={{
               audio: false,
               video: {
-                facingMode: { ideal: "environment" }, // caméra arrière
+                facingMode: { ideal: "environment" },
               },
             }}
           />
@@ -190,7 +192,7 @@ function ScanInner() {
     );
   }
 
-  // 🔹 Si merchantCode présent → on affiche le FORMULAIRE (plus de scanner)
+  // 🔹 Cas 2 : on a merchantCode dans l'URL → on affiche le FORMULAIRE
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4">
       <h1 className="text-2xl font-bold mb-2">Valider votre achat</h1>
@@ -251,19 +253,5 @@ function ScanInner() {
         </form>
       )}
     </div>
-  );
-}
-
-export default function ScanPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          Chargement...
-        </div>
-      }
-    >
-      <ScanInner />
-    </Suspense>
   );
 }
