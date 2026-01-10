@@ -58,8 +58,11 @@ function ScanPageInner() {
   const [popupAmount, setPopupAmount] = useState<number>(0);
   const [popupDate, setPopupDate] = useState<string>("");
 
-  // pour Safari / Chrome : possibilité de basculer avant / arrière
+  // bascule avant / arrière pour Chrome / Safari
   const [useBackCamera, setUseBackCamera] = useState(true);
+
+  // DEBUG : dernière chaîne brute lue par le scanner
+  const [debugRaw, setDebugRaw] = useState<string | null>(null);
 
   // 1) mode = redeem ou purchase, lu depuis l'URL (?mode=redeem|purchase)
   useEffect(() => {
@@ -104,9 +107,6 @@ function ScanPageInner() {
   useEffect(() => {
     const tokenFromUrl = searchParams.get("m");
     if (!tokenFromUrl) {
-      // pas de commerçant dans l'URL, on reste en mode scan
-      setMerchant(null);
-      setScanError(null);
       return;
     }
 
@@ -151,16 +151,13 @@ function ScanPageInner() {
   }, [showPopup]);
 
   // 5) quand un QR est scanné dans l'appli
-  // - on lit la chaîne brute
-  // - on essaie d'extraire le token depuis:
-  //    * un paramètre ?m=XXX
-  //    * ou le dernier segment d'une URL
-  //    * ou le texte brut du QR
-  const handleScan = (result: any) => {
+  // On lit la chaîne brute, on en déduit le token, puis on va
+  // DIRECTEMENT chercher le commerçant dans Supabase.
+  const handleScan = async (result: any) => {
     if (!result || !result.text) return;
-    if (merchant) return; // on ne re-scanne pas si un commerçant est déjà trouvé
 
     const raw = String(result.text).trim();
+    setDebugRaw(raw); // <- on affiche ce que le scanner lit
     setScanError(null);
 
     let token: string | null = null;
@@ -194,16 +191,35 @@ function ScanPageInner() {
       return;
     }
 
-    // On met à jour l'URL /scan?m=TOKEN&mode=...
     try {
-      const params = new URLSearchParams(window.location.search);
-      params.set("m", token);
-      params.set("mode", mode);
-      const newUrl = `/scan?${params.toString()}`;
-      router.push(newUrl);
-    } catch (e) {
-      console.error("Erreur lors de la mise à jour de l'URL:", e);
-      setScanError("Erreur lors de la lecture du QR code.");
+      const { data: merchantRow, error: merchantError } = await supabase
+        .from("merchants")
+        .select("id, name, qr_token")
+        .eq("qr_token", token)
+        .maybeSingle();
+
+      if (merchantError || !merchantRow) {
+        console.error(merchantError);
+        setScanError("Commerçant introuvable. Vérifiez le QR code.");
+        setMerchant(null);
+        return;
+      }
+
+      setMerchant(merchantRow);
+
+      // Optionnel : mettre l'URL propre /scan?m=TOKEN&mode=...
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.set("m", token);
+        params.set("mode", mode);
+        const newUrl = `/scan?${params.toString()}`;
+        window.history.replaceState(null, "", newUrl);
+      } catch (e) {
+        console.error("Erreur lors de la mise à jour de l'URL:", e);
+      }
+    } catch (err) {
+      console.error(err);
+      setScanError("Erreur lors de la reconnaissance du commerçant.");
     }
   };
 
@@ -331,6 +347,18 @@ function ScanPageInner() {
             />
           </div>
 
+          {debugRaw && (
+            <p
+              style={{
+                marginTop: 8,
+                fontSize: 12,
+                wordBreak: "break-all",
+              }}
+            >
+              Dernier QR lu : <code>{debugRaw}</code>
+            </p>
+          )}
+
           <button
             type="button"
             style={{ marginTop: 12 }}
@@ -404,6 +432,18 @@ function ScanPageInner() {
             }}
           />
         </div>
+
+        {debugRaw && (
+          <p
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              wordBreak: "break-all",
+            }}
+          >
+            Dernier QR lu : <code>{debugRaw}</code>
+          </p>
+        )}
 
         <button
           type="button"
