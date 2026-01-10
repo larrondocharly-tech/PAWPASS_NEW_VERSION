@@ -30,7 +30,8 @@ export default function ScanInner() {
   const [amount, setAmount] = useState("");
   const [spas, setSpas] = useState<Spa[]>([]);
   const [selectedSpaId, setSelectedSpaId] = useState("");
-  const [donationPercent, setDonationPercent] = useState(50);
+  // Choix limité : 50% ou 100%
+  const [donationPercent, setDonationPercent] = useState<50 | 100>(50);
 
   // errorMsg: erreurs de validation (montant vide, SPA non choisie, etc.)
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -72,7 +73,7 @@ export default function ScanInner() {
       const { data, error } = await supabase
         .from("merchants")
         .select("*")
-        .eq("qr_token", merchantCode) // on utilise le code marchand courant
+        .eq("qr_token", merchantCode)
         .single();
 
       if (error) {
@@ -145,9 +146,12 @@ export default function ScanInner() {
         p_merchant_code: merchantCode,
         p_amount: parseFloat(amount),
         p_spa_id: selectedSpaId,
-        p_donation_percent: donationPercent,
         p_use_wallet: false,
         p_wallet_spent: 0,
+        p_donation_percent: donationPercent,
+        // très important : on envoie explicitement null pour choisir
+        // la version de la fonction qui a p_receipt_image_url
+        p_receipt_image_url: null,
       }
     );
 
@@ -247,19 +251,61 @@ export default function ScanInner() {
             ))}
           </select>
 
-          <label style={{ display: "block", marginTop: 15 }}>
-            Pourcentage de don : {donationPercent}%
+          <label
+            style={{
+              display: "block",
+              marginTop: 15,
+              marginBottom: 8,
+              fontWeight: 600,
+            }}
+          >
+            Pourcentage de don
           </label>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={donationPercent}
-            onChange={(e) =>
-              setDonationPercent(parseInt(e.target.value, 10))
-            }
-            style={{ width: "100%" }}
-          />
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setDonationPercent(50)}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                borderRadius: 8,
+                border:
+                  donationPercent === 50
+                    ? "2px solid #0A8F44"
+                    : "1px solid #ccc",
+                backgroundColor:
+                  donationPercent === 50 ? "#0A8F44" : "white",
+                color: donationPercent === 50 ? "white" : "#111827",
+                fontWeight: 600,
+              }}
+            >
+              50%
+            </button>
+            <button
+              type="button"
+              onClick={() => setDonationPercent(100)}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                borderRadius: 8,
+                border:
+                  donationPercent === 100
+                    ? "2px solid #0A8F44"
+                    : "1px solid #ccc",
+                backgroundColor:
+                  donationPercent === 100 ? "#0A8F44" : "white",
+                color: donationPercent === 100 ? "white" : "#111827",
+                fontWeight: 600,
+              }}
+            >
+              100%
+            </button>
+          </div>
 
           <button
             type="submit"
