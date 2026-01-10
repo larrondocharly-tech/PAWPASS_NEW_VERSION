@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 // la lib n'a pas de types TS corrects, on ignore pour éviter les erreurs TS
 // @ts-ignore
@@ -16,14 +16,20 @@ interface Spa {
 
 export default function ScanPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  // On lit le paramètre ?m= dans l'URL côté client
+  const [merchantCode, setMerchantCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const m = params.get("m");
+    setMerchantCode(m);
+  }, []);
 
   const [scanned, setScanned] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Étape 2 : données quand on a déjà le merchant code dans l'URL (?m=...)
-  const merchantCode = searchParams.get("m") || null;
 
   const [amount, setAmount] = useState<string>("");
   const [spas, setSpas] = useState<Spa[]>([]);
@@ -98,7 +104,7 @@ export default function ScanPage() {
     setScanned(true);
     setError(null);
 
-    // On redirige vers /scan?m=CODE → là, on n'affichera plus le scanner
+    // On redirige vers /scan?m=CODE
     router.push(`/scan?m=${encodeURIComponent(extractedMerchantCode)}`);
   };
 
@@ -142,7 +148,6 @@ export default function ScanPage() {
         console.error("Erreur création transaction :", txError);
         setError("Erreur lors de la validation. Merci de réessayer.");
       } else {
-        // redirection vers dashboard ou page de confirmation
         router.push("/dashboard");
       }
     } finally {
