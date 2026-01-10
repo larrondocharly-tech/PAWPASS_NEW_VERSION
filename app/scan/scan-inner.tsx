@@ -18,9 +18,12 @@ export default function ScanInner() {
   const searchParams = useSearchParams();
   const supabase = createClient();
 
-  const scannedCode = searchParams.get("code") || null;
+  // On accepte ?code= ou ?m= pour être compatible avec /scan
+  const initialCode =
+    searchParams.get("code") || searchParams.get("m") || null;
+
   const [scanned, setScanned] = useState(false);
-  const [merchantCode, setMerchantCode] = useState(scannedCode);
+  const [merchantCode, setMerchantCode] = useState<string | null>(initialCode);
   const [merchantFound, setMerchantFound] = useState<any>(null);
   const [loadingMerchant, setLoadingMerchant] = useState(false);
 
@@ -28,113 +31,188 @@ export default function ScanInner() {
   const [spas, setSpas] = useState<Spa[]>([]);
   const [selectedSpaId, setSelectedSpaId] = useState("");
   const [donationPercent, setDonationPercent] = useState(50);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Load SPAs
+  // errorMsg: erreurs de validation (montant vide, SPA non choisie, etc.)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // error: erreurs venant de Supabase (RPC / trigger 2h / autres)
+  const [error, setError] = useState<string | null>(null);
+
+  // =========================
+  // Chargement des SPAs
+  // =========================
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("spas")
         .select("id, name")
         .order("name", { ascending: true });
+
+      if (error) {
+        console.error(error);
+        setError("Erreur lors du chargement des refuges.");
+        return;
+      }
+
       setSpas(data || []);
     };
     load();
-  }, []);
+  }, [supabase]);
 
-  // Load merchant once we have code
+  // =========================
+  // Chargement du commerçant
+  // =========================
   useEffect(() => {
     if (!merchantCode) return;
+
     const loadMerchant = async () => {
       setLoadingMerchant(true);
-      const { data } = await supabase
+      setError(null);
+      setErrorMsg(null);
+
+      const { data, error } = await supabase
         .from("merchants")
         .select("*")
-.eq("qr_token", scannedCode)
+        .eq("qr_token", merchantCode) // on utilise le code marchand courant
         .single();
-      setMerchantFound(data || null);
+
+      if (error) {
+        console.error(error);
+        setMerchantFound(null);
+        setError("Commerçant introuvable.");
+      } else {
+        setMerchantFound(data || null);
+      }
+
       setLoadingMerchant(false);
     };
-    loadMerchant();
-  }, [merchantCode]);
 
+    loadMerchant();
+  }, [merchantCode, supabase]);
+
+  // =========================
+  // Scan QR interne (si on vient directement sur /scan-inner)
+  // =========================
   const handleScan = (result: any) => {
     if (!result || scanned) return;
 
-    let code = (result.text || "").trim();
+    const code = (result.text || "").trim();
     if (!code) return;
 
     setScanned(true);
+    setMerchantCode(code);
 
-    const current = searchParams.get("code");
-    if (current !== code) {
-      router.push(`/scan?code=${code}`);
+    const currentCode =
+      searchParams.get("code") || searchParams.get("m") || null;
+
+    if (currentCode !== code) {
+      // On normalise sur ?m= pour être cohérent avec /scan
+      router.push(`/scan?m=${encodeURIComponent(code)}`);
     }
   };
 
+  // =========================
+  // Soumission du formulaire (création transaction)
+  // =========================
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     setErrorMsg(null);
+    setError(null);
 
     if (!merchantFound) {
-      setErrorMsg("Commerçant introuvable");
+      setErrorMsg("Commerçant introuvable.");
       return;
     }
     if (!amount) {
-      setErrorMsg("Montant invalide");
+      setErrorMsg("Montant invalide.");
       return;
     }
     if (!selectedSpaId) {
-      setErrorMsg("Choisissez une SPA");
+      setErrorMsg("Choisissez une SPA.");
       return;
     }
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) {
       router.push(
-        `/register?from=scan&code=${merchantCode}&amount=${amount}`
+        `/register?from=scan&code=${merchantCode ?? ""}&amount=${amount}`
       );
       return;
     }
 
-    const { error } = await supabase.rpc("apply_cashback_transaction", {
-      p_merchant_code: merchantCode,
-      p_amount: parseFloat(amount),
-      p_spa_id: selectedSpaId,
-      p_donation_percent: donationPercent,
-      p_use_wallet: false,
-      p_wallet_spent: 0
-    });
+    const { error: rpcError } = await supabase.rpc(
+      "apply_cashback_transaction",
+      {
+        p_merchant_code: merchantCode,
+        p_amount: parseFloat(amount),
+        p_spa_id: selectedSpaId,
+        p_donation_percent: donationPercent,
+        p_use_wallet: false,
+        p_wallet_spent: 0,
+      }
+    );
 
-    if (error) {
-      setErrorMsg(error.message);
+    if (rpcError) {
+      console.error(rpcError);
+
+      // Cas spécifique : trigger de protection "double scan < 2h"
+      if (
+        rpcError.message &&
+        rpcError.message.toUpperCase().includes("DOUBLE_SCAN_2H")
+      ) {
+        setError(
+          "Vous avez déjà enregistré un achat chez ce commerçant il y a moins de 2 heures. " +
+            "Pour éviter les abus, un seul scan est autorisé toutes les 2 heures pour un même commerçant."
+        );
+        return;
+      }
+
+      // Autres erreurs Supabase : on affiche le message brut pour debug
+      setError(
+        `Erreur lors de l'enregistrement de la transaction : ${rpcError.message}`
+      );
       return;
     }
 
+    // Succès : retour au tableau de bord
     router.push("/dashboard");
   };
 
+  // =========================
+  // Rendu
+  // =========================
   return (
     <div style={{ padding: 20 }}>
       <h1>Scanner un commerçant</h1>
 
-      {errorMsg && <p style={{ color: "red" }}>{errorMsg}</p>}
+      {(error || errorMsg) && (
+        <p style={{ color: "red", marginTop: 8 }}>
+          {error || errorMsg}
+        </p>
+      )}
 
+      {/* Si aucun code marchand → scanner interne */}
       {!merchantCode && (
         <QrScanner
           delay={250}
-          style={{ width: "100%" }}
+          style={{ width: "100%", marginTop: 16 }}
           constraints={{
-            video: { facingMode: { ideal: "environment" } }
+            video: { facingMode: { ideal: "environment" } },
           }}
           onScan={handleScan}
-          onError={(err: any) => console.error("QR error:", err)}
+          onError={(err: any) => {
+            console.error("QR error:", err);
+            setError("Erreur du scanner QR.");
+          }}
         />
       )}
 
-      {merchantCode && loadingMerchant && <p>Chargement commerçant…</p>}
+      {/* Chargement commerçant */}
+      {merchantCode && loadingMerchant && (
+        <p style={{ marginTop: 16 }}>Chargement commerçant…</p>
+      )}
 
-      {merchantFound && (
+      {/* Formulaire d'achat si commerçant trouvé */}
+      {merchantCode && merchantFound && !loadingMerchant && (
         <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
           <h2>{merchantFound.name}</h2>
 
@@ -146,7 +224,13 @@ export default function ScanInner() {
             style={{ width: "100%", padding: 10, marginTop: 10 }}
           />
 
-          <label style={{ fontWeight: 600, marginTop: 10, display: "block" }}>
+          <label
+            style={{
+              fontWeight: 600,
+              marginTop: 10,
+              display: "block",
+            }}
+          >
             Refuge bénéficiaire
           </label>
 
@@ -171,7 +255,9 @@ export default function ScanInner() {
             min="0"
             max="100"
             value={donationPercent}
-            onChange={(e) => setDonationPercent(parseInt(e.target.value))}
+            onChange={(e) =>
+              setDonationPercent(parseInt(e.target.value, 10))
+            }
             style={{ width: "100%" }}
           />
 
@@ -182,7 +268,7 @@ export default function ScanInner() {
               padding: "10px 20px",
               background: "#0A8F44",
               color: "white",
-              borderRadius: 8
+              borderRadius: 8,
             }}
           >
             Valider
@@ -190,8 +276,9 @@ export default function ScanInner() {
         </form>
       )}
 
-      {merchantCode && !merchantFound && !loadingMerchant && (
-        <p>Commerçant introuvable.</p>
+      {/* Cas commerçant introuvable */}
+      {merchantCode && !merchantFound && !loadingMerchant && !error && (
+        <p style={{ marginTop: 16 }}>Commerçant introuvable.</p>
       )}
     </div>
   );
