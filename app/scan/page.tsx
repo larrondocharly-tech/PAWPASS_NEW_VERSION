@@ -43,7 +43,6 @@ function ScanPageInner() {
   const supabase = createClient();
 
   const [mode, setMode] = useState<Mode>("purchase");
-  const [scanned, setScanned] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
   const [merchant, setMerchant] = useState<Merchant | null>(null);
@@ -107,7 +106,6 @@ function ScanPageInner() {
     if (!tokenFromUrl) {
       // pas de commerçant dans l'URL, on reste en mode scan
       setMerchant(null);
-      setScanned(false);
       setScanError(null);
       return;
     }
@@ -125,12 +123,10 @@ function ScanPageInner() {
         console.error(merchantError);
         setScanError("Commerçant introuvable. Veuillez réessayer.");
         setMerchant(null);
-        setScanned(false);
         return;
       }
 
       setMerchant(merchantRow);
-      setScanned(true); // on considère qu'un scan/lecture a abouti
     };
 
     loadMerchantFromUrl();
@@ -155,70 +151,59 @@ function ScanPageInner() {
   }, [showPopup]);
 
   // 5) quand un QR est scanné dans l'appli
-  // - si le QR contient une URL complète => on récupère ?m=
-  // - sinon on considère que c'est directement le qr_token
-  const handleScan = async (result: any) => {
+  // - on lit la chaîne brute
+  // - on essaie d'extraire le token depuis:
+  //    * un paramètre ?m=XXX
+  //    * ou le dernier segment d'une URL
+  //    * ou le texte brut du QR
+  const handleScan = (result: any) => {
     if (!result || !result.text) return;
+    if (merchant) return; // on ne re-scanne pas si un commerçant est déjà trouvé
 
     const raw = String(result.text).trim();
-
-    // si on a déjà un commerçant, on ignore les scans suivants
-    if (scanned && merchant) return;
-
-    setScanned(true);
     setScanError(null);
 
-    let tokenCandidate = raw;
+    let token: string | null = null;
 
-    // Cas 1 : le QR contient une URL complète
-    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    // 1) Chercher explicitement un paramètre m= dans la chaine
+    const mMatch = raw.match(/[?&]m=([^&]+)/);
+    if (mMatch && mMatch[1]) {
+      token = decodeURIComponent(mMatch[1]);
+    }
+
+    // 2) Sinon, si c'est une URL sans m=, on prend le dernier segment de path
+    if (!token && (raw.startsWith("http://") || raw.startsWith("https://"))) {
       try {
-        const url = new URL(raw);
-        const urlToken = url.searchParams.get("m");
-        if (urlToken) tokenCandidate = urlToken;
+        const urlObj = new URL(raw);
+        const segments = urlObj.pathname.split("/").filter(Boolean);
+        if (segments.length > 0) {
+          token = segments[segments.length - 1];
+        }
       } catch (e) {
-        console.error(e);
+        console.error("Erreur parsing URL de QR:", e);
       }
     }
 
-    if (!tokenCandidate) {
+    // 3) Sinon, on prend tout brut comme token
+    if (!token) {
+      token = raw;
+    }
+
+    if (!token) {
       setScanError("QR code invalide.");
-      setScanned(false);
       return;
     }
 
+    // On met à jour l'URL /scan?m=TOKEN&mode=...
     try {
-      // On va chercher le commerçant DIRECTEMENT ici
-      const { data: merchantRow, error: merchantError } = await supabase
-        .from("merchants")
-        .select("id, name, qr_token")
-        .eq("qr_token", tokenCandidate)
-        .maybeSingle();
-
-      if (merchantError || !merchantRow) {
-        console.error(merchantError);
-        setScanError("Commerçant introuvable. Veuillez réessayer.");
-        setMerchant(null);
-        setScanned(false);
-        return;
-      }
-
-      setMerchant(merchantRow);
-
-      // On met l'URL à jour pour cohérence (/scan?m=...&mode=...)
-      try {
-        const params = new URLSearchParams(window.location.search);
-        params.set("m", tokenCandidate);
-        params.set("mode", mode);
-        const newUrl = `/scan?${params.toString()}`;
-        window.history.replaceState(null, "", newUrl);
-      } catch (e) {
-        console.error(e);
-      }
-    } catch (err) {
-      console.error(err);
-      setScanError("Erreur lors de la reconnaissance du commerçant.");
-      setScanned(false);
+      const params = new URLSearchParams(window.location.search);
+      params.set("m", token);
+      params.set("mode", mode);
+      const newUrl = `/scan?${params.toString()}`;
+      router.push(newUrl);
+    } catch (e) {
+      console.error("Erreur lors de la mise à jour de l'URL:", e);
+      setScanError("Erreur lors de la lecture du QR code.");
     }
   };
 
