@@ -16,6 +16,7 @@ interface Merchant {
   id: string;
   name: string;
   qr_token: string;
+  cashback_rate: number | null; // taux défini dans l'admin pour ce commerçant
 }
 
 interface Wallet {
@@ -26,10 +27,6 @@ type Mode = "purchase" | "redeem";
 
 const MIN_REDEEM_BALANCE = 5; // minimum 5€
 const POPUP_DURATION_SECONDS = 5 * 60; // 5 minutes
-
-// Taux de cashback : ici 10 % du montant du ticket
-// (50 % pour l'utilisateur, 50 % pour la SPA par défaut)
-const CASHBACK_RATE = 0.1;
 
 // ===== Wrapper avec Suspense (exigé par Next pour useSearchParams) =====
 export default function ScanPage() {
@@ -120,7 +117,7 @@ function ScanPageInner() {
 
       const { data: merchantRow, error: merchantError } = await supabase
         .from("merchants")
-        .select("id, name, qr_token")
+        .select("id, name, qr_token, cashback_rate")
         .eq("qr_token", tokenFromUrl)
         .maybeSingle();
 
@@ -197,7 +194,7 @@ function ScanPageInner() {
     try {
       const { data: merchantRow, error: merchantError } = await supabase
         .from("merchants")
-        .select("id, name, qr_token")
+        .select("id, name, qr_token, cashback_rate")
         .eq("qr_token", token)
         .maybeSingle();
 
@@ -319,7 +316,7 @@ function ScanPageInner() {
     }
   };
 
-  // 7) validation d'un achat (mode PURCHASE) – AVEC CALCUL DU CASHBACK
+  // 7) validation d'un achat (mode PURCHASE) – AVEC TAUX PAR COMMERÇANT
   const handleSubmitPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!merchant) {
@@ -334,10 +331,17 @@ function ScanPageInner() {
       return;
     }
 
+    // On récupère le taux depuis le commerçant.
+    // Exemple :
+    //  - si en base tu stockes 0.05  → 5 %
+    //  - si en base tu stockes 5     → 5 % (on divise par 100)
+    // On met 5 % par défaut si null.
+    const merchantRateRaw = merchant.cashback_rate ?? 0.05;
+    const effectiveRate =
+      merchantRateRaw > 1 ? merchantRateRaw / 100 : merchantRateRaw;
+
     // Calcul du cashback
-    // total = montant * CASHBACK_RATE
-    // 50 % pour l'utilisateur, 50 % pour la SPA
-    const totalCashback = parseFloat((amount * CASHBACK_RATE).toFixed(2));
+    const totalCashback = parseFloat((amount * effectiveRate).toFixed(2));
     const cashbackToUser = parseFloat((totalCashback * 0.5).toFixed(2));
     const cashbackToSpa = parseFloat(
       (totalCashback - cashbackToUser).toFixed(2)
@@ -553,7 +557,8 @@ function ScanPageInner() {
           )}
 
           <p style={{ marginTop: 8, fontSize: 14 }}>
-            Le cashback et le don seront calculés automatiquement.
+            Le cashback et le don seront calculés automatiquement en fonction du
+            taux de ce commerçant.
           </p>
 
           <button
