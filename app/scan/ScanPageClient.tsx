@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
+import ScanInner from "./scan-inner"; // composant pour le scan normal quand le commerçant est reconnu
 
 // On importe le scanner en dynamique pour éviter les problèmes SSR
 const QrScanner = dynamicImport(() => import("react-qr-scanner"), {
@@ -114,7 +115,6 @@ export default function ScanPageClient() {
         }
 
         // 2) Récupérer le marchand à partir du code
-        // ATTENTION : adapte le nom de la table et de la colonne de code
         const { data: merchantData, error: merchantError } = await supabase
           .from("merchants")
           .select("id, name, cashback_rate, min_redeem_amount")
@@ -136,7 +136,6 @@ export default function ScanPageClient() {
             setMinRedeemAmount(merchantData.min_redeem_amount);
           }
         } else {
-          // Si on ne trouve pas, on met un marchand générique
           setMerchant({
             id: "",
             name: "Commerçant inconnu",
@@ -144,7 +143,6 @@ export default function ScanPageClient() {
         }
 
         // 3) Récupérer le wallet de l'utilisateur
-        // Adapte les noms de table/colonne si besoin
         const { data: walletData, error: walletError } = await supabase
           .from("wallets")
           .select("balance")
@@ -218,11 +216,9 @@ export default function ScanPageClient() {
             `/scan?mode=redeem&m=${encodeURIComponent(codeToUse)}`
           );
         } else {
-          // Scan normal -> page de traitement
+          // Scan normal -> on reste sur /scan et on passe le code en ?m=
           const codeToUse = m || text;
-          router.push(
-            `/scan/scan-inner?m=${encodeURIComponent(codeToUse)}`
-          );
+          router.push(`/scan?m=${encodeURIComponent(codeToUse)}`);
         }
         return;
       }
@@ -231,7 +227,7 @@ export default function ScanPageClient() {
       if (mode === "redeem") {
         router.push(`/scan?mode=redeem&m=${encodeURIComponent(text)}`);
       } else {
-        router.push(`/scan/scan-inner?m=${encodeURIComponent(text)}`);
+        router.push(`/scan?m=${encodeURIComponent(text)}`);
       }
     } catch (e) {
       console.error(e);
@@ -282,7 +278,7 @@ export default function ScanPageClient() {
   // RENDU
   // =========================
 
-  // Aucun code marchand => on affiche le scanner pour le mode "redeem"
+  // 1) MODE REDEEM, SANS CODE → SCANNER
   if (mode === "redeem" && !merchantCode) {
     return (
       <div
@@ -337,7 +333,7 @@ export default function ScanPageClient() {
     );
   }
 
-  // Mode redeem avec code marchand => écran de saisie de la réduction
+  // 2) MODE REDEEM, AVEC CODE → FORMULAIRE UTILISATION CRÉDITS + POPUPS
   if (mode === "redeem" && merchantCode) {
     return (
       <div
@@ -427,9 +423,7 @@ export default function ScanPageClient() {
           Valider la réduction
         </button>
 
-        {/* =======================
-            POPUP 1 : RÉDUCTION VALIDÉE
-           ======================= */}
+        {/* POPUP 1 : RÉDUCTION VALIDÉE */}
         {showRedeemConfirmation && redeemStep === "CONFIRM" && (
           <div
             style={{
@@ -504,9 +498,7 @@ export default function ScanPageClient() {
           </div>
         )}
 
-        {/* =======================
-            POPUP 2 : PRIX RESTANT À PAYER
-           ======================= */}
+        {/* POPUP 2 : PRIX RESTANT À PAYER */}
         {showRedeemConfirmation && redeemStep === "REMAINING" && (
           <div
             style={{
@@ -584,8 +576,6 @@ export default function ScanPageClient() {
 
               <button
                 onClick={() => {
-                  // TODO : ici on branchera l'enregistrement réel du cashback
-                  // sur le montant restant, quand tu m'auras donné le schéma exact.
                   setShowRedeemConfirmation(false);
                   router.push("/dashboard");
                 }}
@@ -611,56 +601,68 @@ export default function ScanPageClient() {
     );
   }
 
-  // Mode "scan" simple (hors utilisation de crédits) : scanner générique
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        padding: 16,
-        display: "flex",
-        flexDirection: "column",
-        gap: 16,
-      }}
-    >
-      <h1 style={{ fontSize: 22, fontWeight: 700, textAlign: "center" }}>
-        Scanner un ticket
-      </h1>
-      <p style={{ textAlign: "center", marginBottom: 8 }}>
-        Scannez le QR code du ticket ou du commerçant.
-      </p>
+  // 3) MODE SCAN NORMAL
+  if (mode === "scan") {
+    // Si on a déjà un code marchand dans l'URL → on affiche ton composant existant
+    if (merchantCode) {
+      // scan-inner.tsx gère la suite (montant de l'achat, choix SPA, etc.)
+      return <ScanInner />;
+    }
 
-      {error && (
-        <div
-          style={{
-            backgroundColor: "#fee2e2",
-            color: "#b91c1c",
-            padding: 8,
-            borderRadius: 8,
-            fontSize: 14,
-          }}
-        >
-          {error}
-        </div>
-      )}
-
+    // Sinon on affiche le scanner
+    return (
       <div
         style={{
-          flex: 1,
+          minHeight: "100vh",
+          padding: 16,
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          flexDirection: "column",
+          gap: 16,
         }}
       >
-        <div style={{ width: "100%", maxWidth: 360 }}>
-          <QrScanner
-            delay={300}
-            onError={handleScanError}
-            onScan={handleScan}
-            constraints={videoConstraints}
-            style={{ width: "100%" }}
-          />
+        <h1 style={{ fontSize: 22, fontWeight: 700, textAlign: "center" }}>
+          Scanner un ticket
+        </h1>
+        <p style={{ textAlign: "center", marginBottom: 8 }}>
+          Scannez le QR code du ticket ou du commerçant.
+        </p>
+
+        {error && (
+          <div
+            style={{
+              backgroundColor: "#fee2e2",
+              color: "#b91c1c",
+              padding: 8,
+              borderRadius: 8,
+              fontSize: 14,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: 360 }}>
+            <QrScanner
+              delay={300}
+              onError={handleScanError}
+              onScan={handleScan}
+              constraints={videoConstraints}
+              style={{ width: "100%" }}
+            />
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // Sécurité : au cas où
+  return null;
 }
