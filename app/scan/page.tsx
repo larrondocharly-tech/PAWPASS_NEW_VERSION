@@ -27,6 +27,10 @@ type Mode = "purchase" | "redeem";
 const MIN_REDEEM_BALANCE = 5; // minimum 5€
 const POPUP_DURATION_SECONDS = 5 * 60; // 5 minutes
 
+// Taux de cashback : ici 10 % du montant du ticket
+// (50 % pour l'utilisateur, 50 % pour la SPA par défaut)
+const CASHBACK_RATE = 0.1;
+
 // ===== Wrapper avec Suspense (exigé par Next pour useSearchParams) =====
 export default function ScanPage() {
   return (
@@ -315,7 +319,7 @@ function ScanPageInner() {
     }
   };
 
-  // 7) validation d'un achat (mode PURCHASE)
+  // 7) validation d'un achat (mode PURCHASE) – AVEC CALCUL DU CASHBACK
   const handleSubmitPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!merchant) {
@@ -329,6 +333,15 @@ function ScanPageInner() {
       setFormError("Montant invalide.");
       return;
     }
+
+    // Calcul du cashback
+    // total = montant * CASHBACK_RATE
+    // 50 % pour l'utilisateur, 50 % pour la SPA
+    const totalCashback = parseFloat((amount * CASHBACK_RATE).toFixed(2));
+    const cashbackToUser = parseFloat((totalCashback * 0.5).toFixed(2));
+    const cashbackToSpa = parseFloat(
+      (totalCashback - cashbackToUser).toFixed(2)
+    );
 
     setFormError(null);
     setSubmitting(true);
@@ -346,6 +359,10 @@ function ScanPageInner() {
         user_id: session.user.id,
         merchant_id: merchant.id,
         amount,
+        cashback_total: totalCashback,
+        cashback_amount: cashbackToUser,
+        cashback_to_user: cashbackToUser,
+        donation_amount: cashbackToSpa,
       });
 
       if (insertError) {
