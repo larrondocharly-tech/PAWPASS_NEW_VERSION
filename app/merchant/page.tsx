@@ -1,36 +1,51 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import QRCodeCard from '@/components/QRCodeCard';
-import type { MerchantProfile } from '@/lib/types';
-import { formatCurrency } from '@/lib/utils';
 import TopNav from '@/components/TopNav';
+import { formatCurrency } from '@/lib/utils';
 export const dynamic = "force-dynamic";
 
-
-interface TransactionLite {
-  amount: number;
-  cashback_total: number | null;
-  created_at: string;
+interface MerchantProfile {
+  id: string;
+  role: string | null;
+  merchant_code: string | null;
+  merchant_id: string | null;
 }
 
-const CASHBACK_RATE = 0.05;
+interface MerchantStats {
+  merchant_id: string;
+  total_transactions: number;
+  total_volume: number;
+  total_cashback: number;
+  total_donations: number;
+  total_profit_pawpass: number;
+  month_transactions: number;
+  month_volume: number;
+  month_cashback: number;
+  month_donations: number;
+  month_profit_pawpass: number;
+}
 
 export default function MerchantPage() {
   const supabase = createClient();
   const router = useRouter();
+
   const [merchant, setMerchant] = useState<MerchantProfile | null>(null);
-  const [transactions, setTransactions] = useState<TransactionLite[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<MerchantStats | null>(null);
   const [qrValue, setQrValue] = useState('');
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
+  // -----------------------------------------------------------
+  // 1. CHARGER PROFIL COMMERÇANT
+  // -----------------------------------------------------------
   useEffect(() => {
     const loadMerchant = async () => {
       const {
-        data: { user },
+        data: { user }
       } = await supabase.auth.getUser();
 
       if (!user) {
@@ -38,7 +53,8 @@ export default function MerchantPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
+      // Charger profil
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id,role,merchant_code,merchant_id')
         .eq('id', user.id)
@@ -49,208 +65,182 @@ export default function MerchantPage() {
         return;
       }
 
-      if (!profileData) {
-        setError('Profil introuvable.');
+      if (!profile) {
+        setError("Profil introuvable.");
         return;
       }
 
-      if (profileData.role?.toLowerCase() !== 'merchant' || !profileData.merchant_id) {
+      // Vérification du rôle
+      if (profile.role?.toLowerCase() !== "merchant" || !profile.merchant_id) {
         router.replace('/dashboard');
         return;
       }
 
-      let updatedMerchant = profileData;
-
-      if (!profileData.merchant_code) {
+      // Générer code si absent
+      if (!profile.merchant_code) {
         const generatedToken = `PP_${user.id.slice(0, 8)}_${Math.random()
           .toString(36)
           .slice(2, 8)}`.toUpperCase();
 
-        const { error: updateError } = await supabase
+        await supabase
           .from('profiles')
           .update({ merchant_code: generatedToken })
-          .eq('id', user.id)
-          .select();
+          .eq('id', user.id);
 
-        if (updateError) {
-          setError(updateError.message);
-          return;
-        }
+        profile.merchant_code = generatedToken;
       }
 
-      const { data: refreshed, error: refreshError } = await supabase
-        .from('profiles')
-        .select('id,role,merchant_code,merchant_id')
-        .eq('id', user.id)
+      setMerchant(profile);
+
+      // Charger stats SQL
+      const { data: statsData, error: statsError } = await supabase
+        .from('merchant_dashboard_stats')
+        .select('*')
+        .eq('merchant_id', profile.merchant_id)
         .single();
 
-      if (refreshError) {
-        setError(refreshError.message);
+      if (statsError) {
+        setError(statsError.message);
         return;
       }
 
-      updatedMerchant = refreshed;
-      setMerchant(updatedMerchant);
-
-      // Si aucun merchant_id encore lié, on ne charge juste pas de transactions
-      if (!updatedMerchant.merchant_id) {
-        setTransactions([]);
-        return;
-      }
-
-      const { data: transactionData, error: transactionError } = await supabase
-        .from('transactions')
-        .select('amount,cashback_total,created_at')
-        .eq('merchant_id', profileData.merchant_id);
-
-      if (transactionError) {
-        setError(transactionError.message);
-        return;
-      }
-
-      setTransactions(transactionData ?? []);
+      if (statsData) setStats(statsData);
     };
 
-    void loadMerchant();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+    loadMerchant();
+  }, [router, supabase]);
 
+  // -----------------------------------------------------------
+  // 2. CRÉATION DU LIEN QR
+  // -----------------------------------------------------------
   useEffect(() => {
-    if (!merchant?.merchant_code) {
-      setQrValue('');
-      return;
-    }
+    if (!merchant?.merchant_code) return;
 
     const baseUrl =
       typeof window !== 'undefined'
         ? window.location.origin
         : process.env.NEXT_PUBLIC_APP_URL;
 
-    setQrValue(baseUrl ? `${baseUrl}/scan?m=${merchant.merchant_code}` : merchant.merchant_code);
+    setQrValue(`${baseUrl}/scan?m=${merchant.merchant_code}`);
   }, [merchant]);
 
-  useEffect(() => {
-    setCopyStatus(null);
-  }, [qrValue]);
-
-  const stats = useMemo(() => {
-    const totalVolume = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
-    const totalCashback = transactions.reduce(
-      (sum, transaction) => sum + (transaction.cashback_total ?? 0),
-      0
-    );
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-    const monthly = transactions.filter(
-      (transaction) => new Date(transaction.created_at).getTime() >= monthStart.getTime()
-    );
-    const monthlyCashback = monthly.reduce(
-      (sum, transaction) => sum + (transaction.cashback_total ?? 0),
-      0
-    );
-    const monthlyRevenueEstimate =
-      CASHBACK_RATE > 0 ? monthlyCashback / CASHBACK_RATE : monthlyCashback;
-
-    return {
-      totalVolume,
-      totalCashback,
-      count: transactions.length,
-      monthlyCount: monthly.length,
-      monthlyCashback,
-      monthlyRevenueEstimate,
-    };
-  }, [transactions]);
-
+  // -----------------------------------------------------------
+  // 3. COPIE DU LIEN QR
+  // -----------------------------------------------------------
   const handleCopy = async () => {
     if (!qrValue) return;
     try {
       await navigator.clipboard.writeText(qrValue);
-      setCopyStatus('Copié ✅');
-    } catch (copyError) {
-      try {
-        const input = document.createElement('input');
-        input.value = qrValue;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
-        setCopyStatus('Copié ✅');
-      } catch {
-        setCopyStatus('Copie impossible.');
-      }
+      setCopyStatus("Copié !");
+    } catch {
+      setCopyStatus("Impossible de copier.");
     }
   };
+
+  // -----------------------------------------------------------
+  // 4. RENDER
+  // -----------------------------------------------------------
+  if (!merchant) {
+    return (
+      <div className="container">
+        <TopNav title="Mon QR commerçant" />
+        <div className="card">Chargement…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
       <TopNav title="Mon QR commerçant" />
 
-      {merchant ? (
-        <div className="grid grid-2">
-          <QRCodeCard value={qrValue} title="QR PawPass · Commerçant" />
-          <div className="card">
-            <h2>Statistiques</h2>
-            <p>
-              <strong>Transactions ce mois-ci :</strong> {stats.monthlyCount}
-            </p>
-            <p>
-              <strong>Cashback distribué (mois) :</strong>{' '}
-              {formatCurrency(stats.monthlyCashback)}
-            </p>
-            <p>
-              <strong>CA estimé PawPass :</strong>{' '}
-              {formatCurrency(stats.monthlyRevenueEstimate)}
-            </p>
-            <button className="button" type="button" onClick={handleCopy} style={{ marginTop: 12 }}>
-              Copier le lien QR
-            </button>
-            {copyStatus && <p className="helper">{copyStatus}</p>}
-            <div style={{ marginTop: 16 }}>
-              <p>
-                <strong>Code commerçant :</strong> {merchant.merchant_code}
-              </p>
-              <label className="label" htmlFor="qrLink">
-                Lien QR complet
-                <input id="qrLink" className="input" value={qrValue} readOnly />
-              </label>
-              <p className="helper">Les clients scannent ce QR à la caisse.</p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="card">
-          <p className="helper">Chargement des informations commerçant…</p>
-        </div>
-      )}
+      <div className="grid grid-2">
 
-      {merchant && (
-        <div className="grid grid-2" style={{ marginTop: 24 }}>
-          <div className="card">
-            <h3>Résumé du mois</h3>
+        {/* ---------------- QR CODE ---------------- */}
+        <QRCodeCard value={qrValue} title="QR PawPass · Commerçant" />
+
+        {/* ---------------- STATISTIQUES ---------------- */}
+        <div className="card">
+          <h2>Statistiques</h2>
+
+          <p>
+            <strong>Transactions ce mois-ci :</strong>{" "}
+            {stats?.month_transactions ?? 0}
+          </p>
+
+          <p>
+            <strong>Cashback distribué (mois) :</strong>{" "}
+            {formatCurrency(stats?.month_cashback ?? 0)}
+          </p>
+
+          <p>
+            <strong>CA estimé PawPass :</strong>{" "}
+            {formatCurrency(stats?.month_profit_pawpass ?? 0)}
+          </p>
+
+          <button
+            className="button"
+            type="button"
+            onClick={handleCopy}
+            style={{ marginTop: 12 }}
+          >
+            Copier le lien QR
+          </button>
+
+          {copyStatus && <p className="helper">{copyStatus}</p>}
+
+          <div style={{ marginTop: 16 }}>
             <p>
-              Vous avez généré environ{' '}
-              <strong>{formatCurrency(stats.monthlyRevenueEstimate)}</strong> de chiffre d’affaires
-              grâce à PawPass.
+              <strong>Code commerçant :</strong> {merchant.merchant_code}
             </p>
-            <p className="helper">
-              Basé sur {formatCurrency(stats.monthlyCashback)} de cashback distribué ce mois-ci.
-            </p>
-          </div>
-          <div className="card">
-            <h3>Totaux cumulés</h3>
-            <p>
-              <strong>Transactions au total :</strong> {stats.count}
-            </p>
-            <p>
-              <strong>Volume total :</strong> {formatCurrency(stats.totalVolume)}
-            </p>
-            <p>
-              <strong>Cashback distribué :</strong> {formatCurrency(stats.totalCashback)}
-            </p>
+            <label className="label">
+              Lien QR complet
+              <input className="input" value={qrValue} readOnly />
+            </label>
+            <p className="helper">Les clients scannent ce QR à la caisse.</p>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* ---------------- RÉSUMÉ DU MOIS ---------------- */}
+      <div className="grid grid-2" style={{ marginTop: 24 }}>
+        <div className="card">
+          <h3>Résumé du mois</h3>
+          <p>
+            Vous avez généré environ{" "}
+            <strong>{formatCurrency(stats?.month_profit_pawpass ?? 0)}</strong>{" "}
+            de chiffre d’affaires grâce à PawPass.
+          </p>
+          <p className="helper">
+            Basé sur {formatCurrency(stats?.month_cashback ?? 0)} de cashback
+            distribué.
+          </p>
+        </div>
+
+        {/* ---------------- TOTAUX ---------------- */}
+        <div className="card">
+          <h3>Totaux cumulés</h3>
+
+          <p>
+            <strong>Transactions totales :</strong>{" "}
+            {stats?.total_transactions ?? 0}
+          </p>
+
+          <p>
+            <strong>Volume total :</strong>{" "}
+            {formatCurrency(stats?.total_volume ?? 0)}
+          </p>
+
+          <p>
+            <strong>Cashback distribué :</strong>{" "}
+            {formatCurrency(stats?.total_cashback ?? 0)}
+          </p>
+
+          <p>
+            <strong>Dons totaux :</strong>{" "}
+            {formatCurrency(stats?.total_donations ?? 0)}
+          </p>
+        </div>
+      </div>
 
       {error && <p className="error">{error}</p>}
     </div>
