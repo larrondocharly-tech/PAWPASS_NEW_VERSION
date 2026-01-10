@@ -1,364 +1,392 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
 
+export const dynamic = "force-dynamic";
+
+// import du scanner en dynamique (évite les erreurs côté serveur)
 const QrScanner: any = dynamicImport(() => import("react-qr-scanner"), {
   ssr: false,
 });
 
-export const dynamic = "force-dynamic";
 
-interface Spa {
+interface Merchant {
   id: string;
   name: string;
+  qr_token: string;
 }
+
+interface Wallet {
+  balance: number;
+}
+
+type Mode = "purchase" | "redeem";
+
+const MIN_REDEEM_BALANCE = 5; // minimum 5€
+const POPUP_DURATION_SECONDS = 5 * 60; // 5 minutes
 
 export default function ScanPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
-  // On lit le paramètre ?m= dans l'URL côté client
-  const [merchantCode, setMerchantCode] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const m = params.get("m");
-    console.log("DEBUG URLSearchParams m =>", m); // 🔍 log 1
-    setMerchantCode(m);
-  }, []);
-
+  const [mode, setMode] = useState<Mode>("purchase");
   const [scanned, setScanned] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
-  const [amount, setAmount] = useState<string>("");
-  const [spas, setSpas] = useState<Spa[]>([]);
-  const [selectedSpaId, setSelectedSpaId] = useState<string | null>(null);
-  const [loadingSpas, setLoadingSpas] = useState(false);
+  const [merchant, setMerchant] = useState<Merchant | null>(null);
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [amountInput, setAmountInput] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [isCreatingVoucher, setIsCreatingVoucher] = useState(false);
-  const [voucherMessage, setVoucherMessage] = useState<string | null>(null);
-  const [voucherError, setVoucherError] = useState<string | null>(null);
 
-  // Nouveau : message de succès après validation d'achat
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(
+    POPUP_DURATION_SECONDS
+  );
+  const [popupAmount, setPopupAmount] = useState<number>(0);
+  const [popupDate, setPopupDate] = useState<string>("");
 
-  // Si on a un merchantCode dans l'URL, on charge la liste des SPAs
+  // mode = redeem ou purchase
   useEffect(() => {
-    const loadSpas = async () => {
-      if (!merchantCode) return;
-      setLoadingSpas(true);
+    const m = searchParams.get("mode");
+    if (m === "redeem") setMode("redeem");
+    else setMode("purchase");
+  }, [searchParams]);
 
+  // charger la session + wallet
+  useEffect(() => {
+    const loadUserAndWallet = async () => {
       const {
-        data: spasData,
-        error: spasError,
-      } = await supabase
-        .from("spas")
-        .select("id, name")
-        .order("name", { ascending: true });
-
-      if (spasError) {
-        console.error("Erreur chargement SPAs :", spasError);
-        setError("Impossible de charger la liste des refuges.");
-      } else {
-        setSpas(spasData || []);
-        if (spasData && spasData.length > 0) {
-          setSelectedSpaId(spasData[0].id);
-        }
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+      if (error) {
+        console.error(error);
+        return;
       }
-      setLoadingSpas(false);
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: walletData, error: walletError } = await supabase
+        .from("wallets")
+        .select("balance")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (walletError) {
+        console.error(walletError);
+      } else {
+        setWallet(walletData);
+      }
     };
 
-    loadSpas();
-  }, [merchantCode, supabase]);
+    loadUserAndWallet();
+  }, [supabase, router]);
 
-  // Gestion du résultat du scanner
-  const handleScan = (data: any) => {
-    if (!data || scanned) return;
+  // timer popup
+  useEffect(() => {
+    if (!showPopup) return;
 
-    const text = typeof data === "string" ? data : data.text || "";
-    if (!text) return;
+    setRemainingSeconds(POPUP_DURATION_SECONDS);
+    const interval = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-    console.log("QR scanné :", text);
+    return () => clearInterval(interval);
+  }, [showPopup]);
 
-    let extractedMerchantCode: string | null = null;
-
-    // 1) Si c'est une URL complète (comme l'URL vercel /scan?m=...)
-    try {
-      const url = new URL(text);
-      const mParam = url.searchParams.get("m");
-      if (mParam) {
-        extractedMerchantCode = mParam;
-      }
-    } catch {
-      // pas une URL complète → on passe à la suite
-    }
-
-    // 2) Sinon, si c'est juste un code type PP_XXXX_XXXX
-    if (!extractedMerchantCode) {
-      const match = text.match(/PP_[A-Z0-9]+_[A-Z0-9]+/);
-      if (match) {
-        extractedMerchantCode = match[0];
-      }
-    }
-
-    if (!extractedMerchantCode) {
-      setError("QR code invalide. Merci de scanner le QR fourni par le commerçant.");
-      return;
-    }
+  // quand un QR est scanné
+  const handleScan = async (result: any) => {
+    if (!result || !result.text || scanned) return;
 
     setScanned(true);
-    setError(null);
+    setScanError(null);
 
-    // On redirige vers /scan?m=CODE
-    router.push(`/scan?m=${encodeURIComponent(extractedMerchantCode)}`);
+    const code = String(result.text).trim();
+
+    try {
+      const { data: merchantRow, error: merchantError } = await supabase
+        .from("merchants")
+        .select("id, name, qr_token")
+        .eq("qr_token", code)
+        .maybeSingle();
+
+      if (merchantError || !merchantRow) {
+        console.error(merchantError);
+        setScanError("Commerçant introuvable. Veuillez réessayer.");
+        setScanned(false);
+        return;
+      }
+
+      setMerchant(merchantRow);
+    } catch (err) {
+      console.error(err);
+      setScanError("Erreur lors de la reconnaissance du commerçant.");
+      setScanned(false);
+    }
   };
 
   const handleError = (err: any) => {
-    console.error("Erreur scanner QR :", err);
-    setError("Impossible d'accéder à la caméra. Vérifie les autorisations.");
+    console.error(err);
+    setScanError("Erreur avec la caméra. Vérifiez les autorisations.");
   };
 
-  const handleUseCredits = async () => {
-    setVoucherMessage(null);
-    setVoucherError(null);
-    setSuccessMessage(null); // on efface le message de succès de transaction si présent
-
-    const numericAmount = parseFloat(amount.replace(",", "."));
-    if (Number.isNaN(numericAmount) || numericAmount <= 0) {
-      setVoucherError(
-        "Veuillez saisir un montant d'achat valide avant d'utiliser vos crédits."
-      );
-      return;
-    }
-
-    if (!merchantCode) {
-      setVoucherError("Commerçant invalide, veuillez re-scanner le QR code.");
-      return;
-    }
-
-    setIsCreatingVoucher(true);
-
-    try {
-      const { data, error: voucherErrorResponse } = await supabase.rpc(
-        "create_voucher_from_credits",
-        {
-          p_merchant_id: merchantCode,
-          p_max_amount: numericAmount,
-        }
-      );
-
-      if (voucherErrorResponse) {
-        if (voucherErrorResponse.message.includes("INSUFFICIENT_FUNDS")) {
-          setVoucherError(
-            "Vous n'avez pas assez de crédits pour créer un bon de réduction."
-          );
-        } else {
-          setVoucherError("Impossible de créer le bon de réduction. Veuillez réessayer.");
-        }
-        return;
-      }
-
-      const voucher = Array.isArray(data) ? data[0] : null;
-      if (!voucher) {
-        setVoucherError("Impossible de créer le bon de réduction. Veuillez réessayer.");
-        return;
-      }
-
-      setVoucherMessage(
-        `Bon de réduction de ${voucher.amount} € créé : ${voucher.code}. Montrez ce code au commerçant pour qu'il le valide.`
-      );
-    } finally {
-      setIsCreatingVoucher(false);
-    }
-  };
-
-  // Soumission du formulaire une fois qu'on a le merchantCode
-  const handleSubmit = async (e: React.FormEvent) => {
+  // validation d'une réduction (mode REDEEM)
+  const handleSubmitRedeem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!merchantCode) return;
-
-    console.log("DEBUG merchantCode envoyé au RPC =>", merchantCode); // 🔍 log 2
-
-    const numericAmount = parseFloat(amount.replace(",", "."));
-    if (Number.isNaN(numericAmount) || numericAmount <= 0) {
-      setError("Merci d'entrer un montant valide.");
+    if (!merchant || !wallet) {
+      setFormError("Données manquantes (commerçant ou cagnotte).");
       return;
     }
 
+    const solde = wallet.balance;
+
+    if (solde < MIN_REDEEM_BALANCE) {
+      setFormError(
+        `Il faut au moins ${MIN_REDEEM_BALANCE.toFixed(
+          2
+        )} € de cagnotte pour utiliser vos crédits.`
+      );
+      return;
+    }
+
+    const amount = Number(amountInput.replace(",", "."));
+
+    if (isNaN(amount) || amount <= 0) {
+      setFormError("Montant invalide.");
+      return;
+    }
+
+    if (amount > solde) {
+      setFormError("Montant supérieur à votre solde disponible.");
+      return;
+    }
+
+    setFormError(null);
     setSubmitting(true);
-    setError(null);
-    setVoucherMessage(null);
-    setVoucherError(null);
-    setSuccessMessage(null);
 
     try {
       const {
         data: { session },
-        error: sessionError,
       } = await supabase.auth.getSession();
-
-      if (sessionError || !session) {
-        router.push("/login?redirect=/scan" + encodeURIComponent(`?m=${merchantCode}`));
+      if (!session) {
+        router.push("/login");
         return;
       }
 
-      const { data, error: txError } = await supabase.rpc(
-        "create_transaction_from_scan",
-        {
-          p_merchant_code: merchantCode,
-          p_amount: numericAmount,
-          p_spa_id: selectedSpaId,
-        }
+      const expiresAt = new Date(
+        Date.now() + POPUP_DURATION_SECONDS * 1000
+      ).toISOString();
+
+      const { error: insertError } = await supabase
+        .from("credit_redemptions")
+        .insert({
+          user_id: session.user.id,
+          merchant_id: merchant.id,
+          amount,
+          expires_at: expiresAt,
+        });
+
+      if (insertError) {
+        console.error(insertError);
+        setFormError("Erreur lors de l'enregistrement de la remise.");
+        setSubmitting(false);
+        return;
+      }
+
+      // maj locale de la cagnotte (le trigger l'a fait côté DB)
+      setWallet((w) =>
+        w ? { ...w, balance: Math.max(0, w.balance - amount) } : w
       );
 
-      if (txError) {
-        console.error("Erreur création transaction :", txError);
-        setError(
-          "Erreur lors de la validation : " + (txError.message || "Erreur inconnue.")
-        );
-      } else {
-        // Ici : message de remerciement après validation de l'achat
-        setSuccessMessage(
-          "Merci pour votre achat ! Votre don a bien été enregistré pour le refuge choisi. Vous allez être redirigé vers votre tableau de bord."
-        );
-
-        // On peut vider le montant pour éviter un double envoi
-        setAmount("");
-
-        // Redirection vers le dashboard après un court délai
-        setTimeout(() => {
-          router.push("/dashboard");
-        }, 2500);
-      }
-    } finally {
+      // préparer le popup
+      setPopupAmount(amount);
+      setPopupDate(
+        new Date().toLocaleString("fr-FR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      );
+      setShowPopup(true);
+      setSubmitting(false);
+    } catch (err) {
+      console.error(err);
+      setFormError("Erreur inattendue.");
       setSubmitting(false);
     }
   };
 
-  // 🔹 Cas 1 : on n'a PAS encore de merchantCode → on affiche le SCANNER
-  if (!merchantCode) {
+  // contenu quand on est en mode "utiliser mes crédits"
+  const renderRedeemContent = () => {
+    const solde = wallet?.balance ?? 0;
+
+    if (!merchant) {
+      return (
+        <>
+          <p>
+            Scannez le QR code du commerçant pour utiliser vos crédits.
+          </p>
+          {wallet && solde < MIN_REDEEM_BALANCE && (
+            <p style={{ color: "red", marginTop: 8 }}>
+              Il faut au moins {MIN_REDEEM_BALANCE.toFixed(2)} € de cagnotte
+              pour utiliser vos crédits. Solde actuel : {solde.toFixed(2)} €.
+            </p>
+          )}
+          {scanError && <p style={{ color: "red" }}>{scanError}</p>}
+          <div style={{ maxWidth: 400, marginTop: 20 }}>
+            <QrScanner
+              delay={300}
+              onScan={handleScan}
+              onError={handleError}
+              style={{ width: "100%" }}
+            />
+          </div>
+        </>
+      );
+    }
+
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4">
-        <h1 className="text-2xl font-bold mb-4">Scanner un commerçant</h1>
-        <p className="mb-4 text-center">
-          Place le QR code du commerçant dans le cadre pour commencer.
+      <>
+        <h2>Utiliser mes crédits chez {merchant.name}</h2>
+        <p>Solde disponible : {solde.toFixed(2)} €</p>
+        <p>
+          Montant minimum pour utiliser vos crédits :{" "}
+          {MIN_REDEEM_BALANCE.toFixed(2)} €
         </p>
 
-        <div className="w-full max-w-xs aspect-square mb-4">
-          <QrScanner
-            delay={300}
-            onError={handleError}
-            onScan={handleScan}
-            style={{ width: "100%", height: "100%" }}
-            constraints={{
-              audio: false,
-              video: {
-                facingMode: { ideal: "environment" },
-              },
-            }}
-          />
-        </div>
-
-        {error && (
-          <p className="text-red-500 text-center mt-2">
-            {error}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  // 🔹 Cas 2 : on a merchantCode dans l'URL → on affiche le FORMULAIRE
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4">
-      <h1 className="text-2xl font-bold mb-2">Valider votre achat</h1>
-      <p className="mb-1 text-center text-sm text-gray-600">
-        Commerçant : <span className="font-mono">{merchantCode}</span>
-      </p>
-
-      {loadingSpas ? (
-        <p className="mt-4">Chargement des refuges...</p>
-      ) : (
-        <form onSubmit={handleSubmit} className="w-full max-w-sm mt-4 space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Montant de votre achat (€)
-            </label>
+        <form onSubmit={handleSubmitRedeem} style={{ marginTop: 20 }}>
+          <label>
+            Montant de la réduction que vous souhaitez utiliser :
             <input
               type="number"
               step="0.01"
               min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full border rounded px-3 py-2"
-              placeholder="Ex : 23,50"
-              required
+              max={solde}
+              value={amountInput}
+              onChange={(e) => setAmountInput(e.target.value)}
+              style={{ display: "block", marginTop: 8, padding: 8 }}
             />
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Refuge à soutenir
-            </label>
-            <select
-              value={selectedSpaId || ""}
-              onChange={(e) => setSelectedSpaId(e.target.value)}
-              className="w-full border rounded px-3 py-2"
-            >
-              {spas.map((spa) => (
-                <option key={spa.id} value={spa.id}>
-                  {spa.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {error && (
-            <p className="text-red-500 text-sm">
-              {error}
-            </p>
+          {formError && (
+            <p style={{ color: "red", marginTop: 8 }}>{formError}</p>
           )}
 
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-black text-white rounded py-2 font-semibold disabled:opacity-60"
+            style={{ marginTop: 16 }}
           >
-            {submitting ? "Validation en cours..." : "Valider et générer le cashback"}
+            Valider la remise
           </button>
+        </form>
+      </>
+    );
+  };
+
+  // mode achat classique (placeholder)
+  const renderPurchaseContent = () => {
+    return (
+      <>
+        <p>Mode achat : scannez le QR code pour enregistrer un achat.</p>
+        <div style={{ maxWidth: 400, marginTop: 20 }}>
+          <QrScanner
+            delay={300}
+            onScan={handleScan}
+            onError={handleError}
+            style={{ width: "100%" }}
+          />
+        </div>
+        {scanError && <p style={{ color: "red" }}>{scanError}</p>}
+      </>
+    );
+  };
+
+  // popup de confirmation + compte à rebours
+  const renderPopup = () => {
+    if (!showPopup || !merchant) return null;
+
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
+
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(0,0,0,0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div
+          style={{
+            background: "white",
+            borderRadius: 12,
+            padding: 24,
+            maxWidth: 420,
+            width: "90%",
+            textAlign: "center",
+          }}
+        >
+          <h2>Réduction validée</h2>
+          <p style={{ marginTop: 8 }}>
+            Commerçant : <strong>{merchant.name}</strong>
+          </p>
+          <p>
+            Montant de la réduction :{" "}
+            <strong>{popupAmount.toFixed(2)} €</strong>
+          </p>
+          <p>Date : {popupDate}</p>
+
+          <p style={{ marginTop: 16 }}>
+            Vous avez{" "}
+            <strong>
+              {minutes}:{seconds.toString().padStart(2, "0")}
+            </strong>{" "}
+            pour bénéficier de cette réduction en caisse.
+          </p>
 
           <button
-            type="button"
-            onClick={handleUseCredits}
-            disabled={isCreatingVoucher || !amount}
-            className="w-full border border-black text-black rounded py-2 font-semibold disabled:opacity-60"
+            style={{ marginTop: 20 }}
+            onClick={() => {
+              setShowPopup(false);
+              router.push("/dashboard");
+            }}
           >
-            {isCreatingVoucher ? "Création du bon..." : "Utiliser mes crédits"}
+            Retour au tableau de bord
           </button>
+        </div>
+      </div>
+    );
+  };
 
-          {voucherMessage && (
-            <p className="text-green-600 text-sm">
-              {voucherMessage}
-            </p>
-          )}
+  return (
+    <div style={{ padding: 24 }}>
+      <h1>
+        {mode === "redeem" ? "Utiliser mes crédits" : "Scanner un commerçant"}
+      </h1>
 
-          {voucherError && (
-            <p className="text-red-600 text-sm">
-              {voucherError}
-            </p>
-          )}
+      {mode === "redeem" ? renderRedeemContent() : renderPurchaseContent()}
 
-          {successMessage && (
-            <p className="text-green-600 text-sm text-center">
-              {successMessage}
-            </p>
-          )}
-        </form>
-      )}
+      {renderPopup()}
     </div>
   );
 }
