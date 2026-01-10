@@ -12,7 +12,6 @@ const QrScanner: any = dynamicImport(() => import("react-qr-scanner"), {
   ssr: false,
 });
 
-
 interface Merchant {
   id: string;
   name: string;
@@ -50,14 +49,14 @@ export default function ScanPage() {
   const [popupAmount, setPopupAmount] = useState<number>(0);
   const [popupDate, setPopupDate] = useState<string>("");
 
-  // mode = redeem ou purchase
+  // 1) mode = redeem ou purchase, lu depuis l'URL (?mode=redeem|purchase)
   useEffect(() => {
     const m = searchParams.get("mode");
     if (m === "redeem") setMode("redeem");
     else setMode("purchase");
   }, [searchParams]);
 
-  // charger la session + wallet
+  // 2) charger la session + wallet
   useEffect(() => {
     const loadUserAndWallet = async () => {
       const {
@@ -89,7 +88,42 @@ export default function ScanPage() {
     loadUserAndWallet();
   }, [supabase, router]);
 
-  // timer popup
+  // 3) si on arrive avec un paramètre ?m= dans l'URL, on charge automatiquement le commerçant
+  useEffect(() => {
+    const tokenFromUrl = searchParams.get("m");
+    if (!tokenFromUrl) {
+      // pas de commerçant dans l'URL, on reste en mode scan
+      setMerchant(null);
+      setScanned(false);
+      setScanError(null);
+      return;
+    }
+
+    const loadMerchantFromUrl = async () => {
+      setScanError(null);
+
+      const { data: merchantRow, error: merchantError } = await supabase
+        .from("merchants")
+        .select("id, name, qr_token")
+        .eq("qr_token", tokenFromUrl)
+        .maybeSingle();
+
+      if (merchantError || !merchantRow) {
+        console.error(merchantError);
+        setScanError("Commerçant introuvable. Veuillez réessayer.");
+        setMerchant(null);
+        setScanned(false);
+        return;
+      }
+
+      setMerchant(merchantRow);
+      setScanned(true); // on considère qu'un scan/lecture a abouti
+    };
+
+    loadMerchantFromUrl();
+  }, [searchParams, supabase]);
+
+  // 4) timer popup
   useEffect(() => {
     if (!showPopup) return;
 
@@ -107,33 +141,52 @@ export default function ScanPage() {
     return () => clearInterval(interval);
   }, [showPopup]);
 
-  // quand un QR est scanné
-  const handleScan = async (result: any) => {
+  // 5) quand un QR est scanné dans l'appli
+  // - si le QR contient une URL complète => on y navigue directement
+  // - sinon on considère que c'est le qr_token et on reconstruit /scan?m=TOKEN
+  const handleScan = (result: any) => {
     if (!result || !result.text || scanned) return;
 
+    const raw = String(result.text).trim();
     setScanned(true);
     setScanError(null);
 
-    const code = String(result.text).trim();
-
     try {
-      const { data: merchantRow, error: merchantError } = await supabase
-        .from("merchants")
-        .select("id, name, qr_token")
-        .eq("qr_token", code)
-        .maybeSingle();
+      let token: string | null = null;
 
-      if (merchantError || !merchantRow) {
-        console.error(merchantError);
-        setScanError("Commerçant introuvable. Veuillez réessayer.");
+      // Cas 1 : le QR contient une URL complète
+      if (raw.startsWith("http://") || raw.startsWith("https://")) {
+        const url = new URL(raw);
+        const urlToken = url.searchParams.get("m");
+
+        if (urlToken) {
+          token = urlToken;
+        } else {
+          // pas de ?m= dans l'URL, on garde tout le texte comme "token"
+          token = raw;
+        }
+      } else {
+        // Cas 2 : le QR contient directement le token
+        token = raw;
+      }
+
+      if (!token) {
+        setScanError("QR code invalide.");
         setScanned(false);
         return;
       }
 
-      setMerchant(merchantRow);
+      // On garde le mode actuel (redeem/purchase) dans l'URL
+      const targetMode = mode;
+      const targetUrl = `/scan?m=${encodeURIComponent(
+        token
+      )}&mode=${targetMode}`;
+
+      router.push(targetUrl);
+      // Le useEffect([searchParams]) plus haut se chargera de charger le commerçant
     } catch (err) {
       console.error(err);
-      setScanError("Erreur lors de la reconnaissance du commerçant.");
+      setScanError("Erreur lors de la lecture du QR code.");
       setScanned(false);
     }
   };
@@ -143,7 +196,7 @@ export default function ScanPage() {
     setScanError("Erreur avec la caméra. Vérifiez les autorisations.");
   };
 
-  // validation d'une réduction (mode REDEEM)
+  // 6) validation d'une réduction (mode REDEEM)
   const handleSubmitRedeem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!merchant || !wallet) {
@@ -231,16 +284,14 @@ export default function ScanPage() {
     }
   };
 
-  // contenu quand on est en mode "utiliser mes crédits"
+  // 7) contenu quand on est en mode "utiliser mes crédits"
   const renderRedeemContent = () => {
     const solde = wallet?.balance ?? 0;
 
     if (!merchant) {
       return (
         <>
-          <p>
-            Scannez le QR code du commerçant pour utiliser vos crédits.
-          </p>
+          <p>Scannez le QR code du commerçant pour utiliser vos crédits.</p>
           {wallet && solde < MIN_REDEEM_BALANCE && (
             <p style={{ color: "red", marginTop: 8 }}>
               Il faut au moins {MIN_REDEEM_BALANCE.toFixed(2)} € de cagnotte
@@ -299,7 +350,7 @@ export default function ScanPage() {
     );
   };
 
-  // mode achat classique (placeholder)
+  // 8) mode achat classique (placeholder)
   const renderPurchaseContent = () => {
     return (
       <>
@@ -317,7 +368,7 @@ export default function ScanPage() {
     );
   };
 
-  // popup de confirmation + compte à rebours
+  // 9) popup de confirmation + compte à rebours
   const renderPopup = () => {
     if (!showPopup || !merchant) return null;
 
