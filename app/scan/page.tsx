@@ -59,6 +59,9 @@ function ScanPageInner() {
   const [popupAmount, setPopupAmount] = useState<number>(0);
   const [popupDate, setPopupDate] = useState<string>("");
 
+  // pour Safari / Chrome : possibilité de basculer avant / arrière
+  const [useBackCamera, setUseBackCamera] = useState(true);
+
   // 1) mode = redeem ou purchase, lu depuis l'URL (?mode=redeem|purchase)
   useEffect(() => {
     const m = searchParams.get("mode");
@@ -152,51 +155,69 @@ function ScanPageInner() {
   }, [showPopup]);
 
   // 5) quand un QR est scanné dans l'appli
-  // - si le QR contient une URL complète => on y navigue directement
-  // - sinon on considère que c'est le qr_token et on reconstruit /scan?m=TOKEN
-  const handleScan = (result: any) => {
-    if (!result || !result.text || scanned) return;
+  // - si le QR contient une URL complète => on récupère ?m=
+  // - sinon on considère que c'est directement le qr_token
+  const handleScan = async (result: any) => {
+    if (!result || !result.text) return;
 
     const raw = String(result.text).trim();
+
+    // si on a déjà un commerçant, on ignore les scans suivants
+    if (scanned && merchant) return;
+
     setScanned(true);
     setScanError(null);
 
-    try {
-      let token: string | null = null;
+    let tokenCandidate = raw;
 
-      // Cas 1 : le QR contient une URL complète
-      if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    // Cas 1 : le QR contient une URL complète
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      try {
         const url = new URL(raw);
         const urlToken = url.searchParams.get("m");
-
-        if (urlToken) {
-          token = urlToken;
-        } else {
-          // pas de ?m= dans l'URL, on garde tout le texte comme "token"
-          token = raw;
-        }
-      } else {
-        // Cas 2 : le QR contient directement le token
-        token = raw;
+        if (urlToken) tokenCandidate = urlToken;
+      } catch (e) {
+        console.error(e);
       }
+    }
 
-      if (!token) {
-        setScanError("QR code invalide.");
+    if (!tokenCandidate) {
+      setScanError("QR code invalide.");
+      setScanned(false);
+      return;
+    }
+
+    try {
+      // On va chercher le commerçant DIRECTEMENT ici
+      const { data: merchantRow, error: merchantError } = await supabase
+        .from("merchants")
+        .select("id, name, qr_token")
+        .eq("qr_token", tokenCandidate)
+        .maybeSingle();
+
+      if (merchantError || !merchantRow) {
+        console.error(merchantError);
+        setScanError("Commerçant introuvable. Veuillez réessayer.");
+        setMerchant(null);
         setScanned(false);
         return;
       }
 
-      // On garde le mode actuel (redeem/purchase) dans l'URL
-      const targetMode = mode;
-      const targetUrl = `/scan?m=${encodeURIComponent(
-        token
-      )}&mode=${targetMode}`;
+      setMerchant(merchantRow);
 
-      router.push(targetUrl);
-      // Le useEffect([searchParams]) plus haut se chargera de charger le commerçant
+      // On met l'URL à jour pour cohérence (/scan?m=...&mode=...)
+      try {
+        const params = new URLSearchParams(window.location.search);
+        params.set("m", tokenCandidate);
+        params.set("mode", mode);
+        const newUrl = `/scan?${params.toString()}`;
+        window.history.replaceState(null, "", newUrl);
+      } catch (e) {
+        console.error(e);
+      }
     } catch (err) {
       console.error(err);
-      setScanError("Erreur lors de la lecture du QR code.");
+      setScanError("Erreur lors de la reconnaissance du commerçant.");
       setScanned(false);
     }
   };
@@ -309,15 +330,31 @@ function ScanPageInner() {
             </p>
           )}
           {scanError && <p style={{ color: "red" }}>{scanError}</p>}
+
           <div style={{ maxWidth: 400, marginTop: 20 }}>
             <QrScanner
+              key={useBackCamera ? "back-redeem" : "front-redeem"}
               delay={300}
               onScan={handleScan}
               onError={handleError}
               style={{ width: "100%" }}
-              constraints={{ video: { facingMode: "environment" } }}
+              constraints={{
+                video: {
+                  facingMode: useBackCamera ? "environment" : "user",
+                },
+              }}
             />
           </div>
+
+          <button
+            type="button"
+            style={{ marginTop: 12 }}
+            onClick={() => setUseBackCamera((prev) => !prev)}
+          >
+            {useBackCamera
+              ? "Utiliser la caméra avant"
+              : "Utiliser la caméra arrière"}
+          </button>
         </>
       );
     }
@@ -366,16 +403,32 @@ function ScanPageInner() {
     return (
       <>
         <p>Mode achat : scannez le QR code pour enregistrer un achat.</p>
+        {scanError && <p style={{ color: "red" }}>{scanError}</p>}
+
         <div style={{ maxWidth: 400, marginTop: 20 }}>
           <QrScanner
+            key={useBackCamera ? "back-purchase" : "front-purchase"}
             delay={300}
             onScan={handleScan}
             onError={handleError}
             style={{ width: "100%" }}
-            constraints={{ video: { facingMode: "environment" } }}
+            constraints={{
+              video: {
+                facingMode: useBackCamera ? "environment" : "user",
+              },
+            }}
           />
         </div>
-        {scanError && <p style={{ color: "red" }}>{scanError}</p>}
+
+        <button
+          type="button"
+          style={{ marginTop: 12 }}
+          onClick={() => setUseBackCamera((prev) => !prev)}
+        >
+          {useBackCamera
+            ? "Utiliser la caméra avant"
+            : "Utiliser la caméra arrière"}
+        </button>
       </>
     );
   };
