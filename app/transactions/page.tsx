@@ -4,15 +4,15 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 export const dynamic = "force-dynamic";
 
-
 interface Transaction {
   id: string;
-  amount: number;
-  cashback_amount: number;
+  purchase_amount: number;
+  cashback_to_user: number;
   donation_amount: number;
+  cashback_total: number;
   created_at: string;
-  spa_name?: string | null;
-  merchant_name?: string | null;
+  merchant_name: string | null;
+  spa_name: string | null;
 }
 
 export default function TransactionsPage() {
@@ -28,27 +28,16 @@ export default function TransactionsPage() {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
+
       if (userError || !user) {
         setLoading(false);
         return;
       }
 
-      const userId = user.id;
-
       const { data, error } = await supabase
-        .from("transactions")
-        .select(
-          `
-          id,
-          amount,
-          cashback_amount,
-          donation_amount,
-          created_at,
-          spa:spas(name),
-          merchant:merchants(name)
-        `
-        )
-        .eq("user_id", userId)
+        .from("client_transactions_history")
+        .select("*")
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -60,12 +49,13 @@ export default function TransactionsPage() {
       const mapped =
         data?.map((row: any) => ({
           id: row.id,
-          amount: Number(row.amount) || 0,
-          cashback_amount: Number(row.cashback_amount) || 0,
+          purchase_amount: Number(row.purchase_amount) || 0,
+          cashback_to_user: Number(row.cashback_to_user) || 0,
           donation_amount: Number(row.donation_amount) || 0,
+          cashback_total: Number(row.cashback_total) || 0,
           created_at: row.created_at,
-          spa_name: row.spa?.name ?? null,
-          merchant_name: row.merchant?.name ?? null,
+          merchant_name: row.merchant_name ?? null,
+          spa_name: row.spa_name ?? null,
         })) ?? [];
 
       setTransactions(mapped);
@@ -123,12 +113,17 @@ export default function TransactionsPage() {
             </div>
 
             <div style={{ textAlign: "right" }}>
-              <p style={{ fontWeight: 700 }}>{tx.amount.toFixed(2)} €</p>
+              <p style={{ fontWeight: 700 }}>
+                {tx.purchase_amount.toFixed(2)} €
+              </p>
               <p style={{ fontSize: 13, color: "#0ea5e9" }}>
-                Cashback : {tx.cashback_amount.toFixed(2)} €
+                Cashback reçu : {tx.cashback_to_user.toFixed(2)} €
               </p>
               <p style={{ fontSize: 13, color: "#16a34a" }}>
                 Don SPA : {tx.donation_amount.toFixed(2)} €
+              </p>
+              <p style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                Cashback total généré : {tx.cashback_total.toFixed(2)} €
               </p>
             </div>
           </div>
