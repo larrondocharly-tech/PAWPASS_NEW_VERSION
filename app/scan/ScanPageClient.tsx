@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
+import ScanInner from "./scan-inner"; // flux normal (montant achat, SPA, etc.)
 
 // On importe le scanner en dynamique pour éviter les problèmes SSR
 const QrScanner = dynamicImport(() => import("react-qr-scanner"), {
@@ -22,7 +23,7 @@ type Mode = "scan" | "redeem";
 interface Merchant {
   id: string;
   name: string;
-  cashback_rate?: number; // en %, si tu l'as dans la BDD
+  cashback_rate?: number;
 }
 
 export default function ScanPageClient() {
@@ -42,7 +43,7 @@ export default function ScanPageClient() {
   // =========================
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [minRedeemAmount, setMinRedeemAmount] = useState<number>(5); // seuil par défaut : 5€
+  const [minRedeemAmount, setMinRedeemAmount] = useState<number>(5);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,30 +54,17 @@ export default function ScanPageClient() {
   // =========================
   // UTILISATION DES CRÉDITS
   // =========================
-
-  // Montant que le commerçant saisit comme réduction
   const [redeemAmount, setRedeemAmount] = useState<string>("");
-
-  // Popup après validation de la réduction
   const [showRedeemConfirmation, setShowRedeemConfirmation] =
     useState<boolean>(false);
-
-  // Étapes dans le flux "utiliser mes crédits"
-  // 1) CONFIRM = popup "Réduction validée"
-  // 2) REMAINING = popup "Prix restant à payer"
   const [redeemStep, setRedeemStep] = useState<"CONFIRM" | "REMAINING">(
     "CONFIRM"
   );
-
-  // Montant restant à payer après réduction
   const [remainingAmount, setRemainingAmount] = useState<string>("");
-
-  // Cashback calculé sur le montant restant
   const [remainingCashback, setRemainingCashback] = useState<number>(0);
 
   // =========================
-  // CHARGEMENT DU CONTEXTE (UTILISATEUR + MARCHAND + WALLET)
-  // uniquement quand on est en mode redeem ET qu'on a un code m=
+  // CHARGEMENT CONTEXTE (mode=redeem)
   // =========================
   useEffect(() => {
     const loadContext = async () => {
@@ -86,7 +74,6 @@ export default function ScanPageClient() {
       setError(null);
 
       try {
-        // 1) Récupérer l'utilisateur
         const {
           data: { user },
           error: userError,
@@ -98,7 +85,6 @@ export default function ScanPageClient() {
           return;
         }
 
-        // 2) Récupérer le marchand à partir du code
         const { data: merchantData, error: merchantError } = await supabase
           .from("merchants")
           .select("id, name, cashback_rate, min_redeem_amount")
@@ -126,7 +112,6 @@ export default function ScanPageClient() {
           });
         }
 
-        // 3) Récupérer le wallet de l'utilisateur
         const { data: walletData, error: walletError } = await supabase
           .from("wallets")
           .select("balance")
@@ -149,7 +134,7 @@ export default function ScanPageClient() {
   }, [mode, merchantCode, supabase]);
 
   // =========================
-  // CALCUL DU CASHBACK SUR LE MONTANT RESTANT (flux crédits)
+  // CALCUL CASHBACK (prix restant)
   // =========================
   useEffect(() => {
     if (!merchant || !merchant.cashback_rate) {
@@ -173,7 +158,6 @@ export default function ScanPageClient() {
   // =========================
   // GESTION DU SCAN QR
   // =========================
-
   const handleScan = (data: any) => {
     if (!data || scanned) return;
 
@@ -187,27 +171,23 @@ export default function ScanPageClient() {
     setScanned(true);
 
     try {
-      // Si le QR code pointe déjà vers une URL
       if (text.startsWith("http://") || text.startsWith("https://")) {
         const url = new URL(text);
         const m =
           url.searchParams.get("m") || url.searchParams.get("code") || "";
 
         if (mode === "redeem") {
-          // Utiliser mes crédits : on reste sur /scan et on passe mode=redeem&m=
           const codeToUse = m || text;
           router.push(
             `/scan?mode=redeem&m=${encodeURIComponent(codeToUse)}`
           );
         } else {
-          // Scan normal : on reste sur /scan et on passe m=
           const codeToUse = m || text;
           router.push(`/scan?m=${encodeURIComponent(codeToUse)}`);
         }
         return;
       }
 
-      // Sinon on considère que le QR contient directement le code marchand
       if (mode === "redeem") {
         router.push(`/scan?mode=redeem&m=${encodeURIComponent(text)}`);
       } else {
@@ -226,9 +206,8 @@ export default function ScanPageClient() {
   };
 
   // =========================
-  // VALIDATION DE LA RÉDUCTION (UTILISER MES CRÉDITS)
+  // VALIDATION RÉDUCTION (crédits)
   // =========================
-
   const handleValidateRedeem = () => {
     if (!redeemAmount) return;
 
@@ -260,7 +239,7 @@ export default function ScanPageClient() {
   // RENDU
   // =========================
 
-  // 1) MODE REDEEM, SANS CODE → SCANNER
+  // --------- MODE REDEEM, SANS CODE → SCANNER ----------
   if (mode === "redeem" && !merchantCode) {
     return (
       <div
@@ -315,7 +294,7 @@ export default function ScanPageClient() {
     );
   }
 
-  // 2) MODE REDEEM, AVEC CODE → FORMULAIRE UTILISATION CRÉDITS + POPUPS
+  // --------- MODE REDEEM, AVEC CODE → FORMULAIRE + POPUPS ----------
   if (mode === "redeem" && merchantCode) {
     return (
       <div
@@ -583,55 +562,15 @@ export default function ScanPageClient() {
     );
   }
 
-  // 3) MODE SCAN NORMAL
+  // --------- MODE SCAN NORMAL ----------
   if (mode === "scan") {
-    // Si on a déjà un code marchand dans l'URL → écran simple "commerçant reconnu"
+    // Si on a déjà un code marchand dans l'URL → on laisse ScanInner gérer tout le flux
     if (merchantCode) {
-      return (
-        <div
-          style={{
-            minHeight: "100vh",
-            padding: 16,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 16,
-          }}
-        >
-          <h1 style={{ fontSize: 22, fontWeight: 700, textAlign: "center" }}>
-            Commerçant reconnu
-          </h1>
-          <p style={{ textAlign: "center" }}>
-            Code du commerçant :{" "}
-            <strong>{merchantCode}</strong>
-          </p>
-          <p style={{ textAlign: "center", maxWidth: 320 }}>
-            Cette page servira à saisir le montant de l&apos;achat et à
-            calculer automatiquement le cashback.
-          </p>
-
-          <button
-            onClick={() => router.push("/scan")}
-            style={{
-              marginTop: 8,
-              padding: "10px 18px",
-              borderRadius: 999,
-              border: "none",
-              fontWeight: 600,
-              fontSize: 16,
-              cursor: "pointer",
-              backgroundColor: "#0f766e",
-              color: "white",
-            }}
-          >
-            Retourner au scanner
-          </button>
-        </div>
-      );
+      // ScanInner lit lui-même le ?m= dans l’URL comme avant
+      return <ScanInner />;
     }
 
-    // Sinon on affiche le scanner
+    // Sinon : simple scanner
     return (
       <div
         style={{
@@ -685,6 +624,5 @@ export default function ScanPageClient() {
     );
   }
 
-  // Sécurité : au cas où
   return null;
 }
