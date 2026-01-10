@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
 import { createClient } from "@/lib/supabaseClient";
-import ScanInner from "./scan-inner"; // composant pour le scan normal quand le commerçant est reconnu
+import ScanInner from "./scan-inner"; // composant pour le flux normal
 
 // On importe le scanner en dynamique pour éviter les problèmes SSR
 const QrScanner = dynamicImport(() => import("react-qr-scanner"), {
@@ -32,10 +32,15 @@ export default function ScanPageClient() {
   const supabase = createClient();
 
   // =========================
+  // MODE & CODE MARCHAND
+  // =========================
+  const modeParam = searchParams.get("mode");
+  const mode: Mode = modeParam === "redeem" ? "redeem" : "scan";
+  const merchantCode = searchParams.get("m");
+
+  // =========================
   // ÉTATS GÉNÉRAUX
   // =========================
-  const [mode, setMode] = useState<Mode>("scan");
-  const [merchantCode, setMerchantCode] = useState<string | null>(null);
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [minRedeemAmount, setMinRedeemAmount] = useState<number>(5); // seuil par défaut : 5€
@@ -43,7 +48,7 @@ export default function ScanPageClient() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Pour éviter plusieurs scans
+  // Pour éviter plusieurs scans dans la même session
   const [scanned, setScanned] = useState(false);
 
   // =========================
@@ -69,26 +74,6 @@ export default function ScanPageClient() {
 
   // Cashback calculé sur le montant restant
   const [remainingCashback, setRemainingCashback] = useState<number>(0);
-
-  // =========================
-  // INIT : LECTURE DES PARAMS URL
-  // =========================
-  useEffect(() => {
-    const modeParam = searchParams.get("mode");
-    const mParam = searchParams.get("m");
-
-    if (modeParam === "redeem") {
-      setMode("redeem");
-    } else {
-      setMode("scan");
-    }
-
-    if (mParam) {
-      setMerchantCode(mParam);
-    } else {
-      setMerchantCode(null);
-    }
-  }, [searchParams]);
 
   // =========================
   // CHARGEMENT DU CONTEXTE (UTILISATEUR + MARCHAND + WALLET)
@@ -210,13 +195,13 @@ export default function ScanPageClient() {
           url.searchParams.get("m") || url.searchParams.get("code") || "";
 
         if (mode === "redeem") {
-          // Utiliser mes crédits
+          // Utiliser mes crédits : on reste sur /scan et on passe mode=redeem&m=
           const codeToUse = m || text;
           router.push(
             `/scan?mode=redeem&m=${encodeURIComponent(codeToUse)}`
           );
         } else {
-          // Scan normal -> on reste sur /scan et on passe le code en ?m=
+          // Scan normal : on reste sur /scan et on passe m=
           const codeToUse = m || text;
           router.push(`/scan?m=${encodeURIComponent(codeToUse)}`);
         }
@@ -267,8 +252,6 @@ export default function ScanPageClient() {
       return;
     }
 
-    // Ici, tu as sûrement déjà un appel Supabase qui gère la réduction.
-    // On se contente d'afficher la popup de confirmation.
     setError(null);
     setRedeemStep("CONFIRM");
     setShowRedeemConfirmation(true);
