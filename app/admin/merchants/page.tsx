@@ -112,9 +112,7 @@ export default function AdminMerchantsPage() {
     }
 
     setMerchants((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, cashback_rate: newRate } : m
-      )
+      prev.map((m) => (m.id === id ? { ...m, cashback_rate: newRate } : m))
     );
     setSavingId(null);
   };
@@ -122,7 +120,10 @@ export default function AdminMerchantsPage() {
   // =========================
   // ACTIVER / DÉSACTIVER
   // =========================
-  const handleToggleActive = async (id: string, currentActive: boolean | null) => {
+  const handleToggleActive = async (
+    id: string,
+    currentActive: boolean | null
+  ) => {
     const nextActive = !currentActive;
 
     setError(null);
@@ -141,10 +142,37 @@ export default function AdminMerchantsPage() {
     }
 
     setMerchants((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, is_active: nextActive } : m
-      )
+      prev.map((m) => (m.id === id ? { ...m, is_active: nextActive } : m))
     );
+    setSavingId(null);
+  };
+
+  // =========================
+  // SUPPRIMER UN COMMERÇANT
+  // =========================
+  const handleDeleteMerchant = async (id: string) => {
+    const ok = window.confirm(
+      "Es-tu sûr de vouloir supprimer ce commerçant ? Cette action est définitive."
+    );
+    if (!ok) return;
+
+    setError(null);
+    setSavingId(id);
+
+    const { error: deleteError } = await supabase
+      .from("merchants")
+      .delete()
+      .eq("id", id);
+
+    if (deleteError) {
+      console.error(deleteError);
+      setError("Erreur lors de la suppression du commerçant.");
+      setSavingId(null);
+      return;
+    }
+
+    // On enlève le commerçant de la liste locale
+    setMerchants((prev) => prev.filter((m) => m.id !== id));
     setSavingId(null);
   };
 
@@ -156,7 +184,8 @@ export default function AdminMerchantsPage() {
       <div className="card" style={{ marginBottom: 24 }}>
         <h2>Gérer les commerçants</h2>
         <p className="helper">
-          Activez/désactivez les comptes et ajustez le pourcentage de cashback.
+          Activez/désactivez les comptes, ajustez le pourcentage de cashback et
+          supprimez les commerces si nécessaire.
         </p>
       </div>
 
@@ -184,6 +213,7 @@ export default function AdminMerchantsPage() {
                 <th>Cashback (%)</th>
                 <th>Actif ?</th>
                 <th>Créé le</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -199,9 +229,7 @@ export default function AdminMerchantsPage() {
                     <td>{m.name ?? "—"}</td>
                     <td>{m.city ?? "—"}</td>
                     <td>{m.address ?? "—"}</td>
-                    <td style={{ fontSize: 12 }}>
-                      {m.qr_token ?? "—"}
-                    </td>
+                    <td style={{ fontSize: 12 }}>{m.qr_token ?? "—"}</td>
                     <td>
                       <div
                         style={{
@@ -231,9 +259,7 @@ export default function AdminMerchantsPage() {
                         className="button secondary"
                         type="button"
                         disabled={savingId === m.id}
-                        onClick={() =>
-                          handleToggleActive(m.id, m.is_active)
-                        }
+                        onClick={() => handleToggleActive(m.id, m.is_active)}
                       >
                         {savingId === m.id
                           ? "Mise à jour…"
@@ -244,6 +270,24 @@ export default function AdminMerchantsPage() {
                     </td>
                     <td>
                       {new Date(m.created_at).toLocaleString("fr-FR")}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        disabled={savingId === m.id}
+                        onClick={() => handleDeleteMerchant(m.id)}
+                        style={{
+                          backgroundColor: "#dc2626",
+                          color: "#fff",
+                          border: "none",
+                          padding: "6px 10px",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {savingId === m.id ? "Suppression…" : "Supprimer"}
+                      </button>
                     </td>
                   </tr>
                 );
