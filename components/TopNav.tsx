@@ -72,9 +72,8 @@ export default function TopNav({ title }: TopNavProps) {
     return pathname === href || pathname.startsWith(href + '/');
   };
 
-  // rôle pour l'overlay (il attend 'client' | 'merchant')
-  const overlayRole: 'client' | 'merchant' =
-    role === 'merchant' ? 'merchant' : 'client';
+  // Rôle pour l'overlay : on force "client" pour avoir le menu complet partout
+  const overlayRole: 'client' | 'merchant' = 'client';
 
   return (
     <>
