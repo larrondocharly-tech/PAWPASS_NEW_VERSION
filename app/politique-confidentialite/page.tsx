@@ -6,7 +6,6 @@ export const dynamic = "force-dynamic";
 export default function PolitiqueConfidentialitePage() {
   return (
     <main className="container" style={{ maxWidth: 800 }}>
-      <TopNav title="Politique de confidentialité" />
 
       <section className="card" style={{ marginBottom: 24 }}>
         <h1>Politique de confidentialité</h1>

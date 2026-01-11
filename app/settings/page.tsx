@@ -118,7 +118,6 @@ export default function SettingsPage() {
 
   return (
     <div className="container">
-      <TopNav title="Paramètres" />
 
       <div className="card">
         <h2>Mon profil</h2>

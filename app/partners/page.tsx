@@ -60,7 +60,6 @@ export default function PartnersPage() {
 
   return (
     <main className="container">
-      <TopNav title="Nos commerçants partenaires" />
 
       <section className="card" style={{ marginBottom: 24 }}>
         <h1>Nos commerçants partenaires</h1>

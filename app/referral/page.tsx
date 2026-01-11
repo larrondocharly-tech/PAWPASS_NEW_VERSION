@@ -60,7 +60,6 @@ export default function ReferralPage() {
 
   return (
     <main className="container">
-      <TopNav title="Parrainer un ami" />
 
       <section className="card" style={{ marginBottom: 24 }}>
         <h1>Parrainer un ami</h1>

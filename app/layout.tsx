@@ -1,44 +1,45 @@
-// app/layout.tsx
-import "./globals.css";
-import type { ReactNode } from "react";
-import { Inter } from "next/font/google";
+import './globals.css';
+import type { ReactNode } from 'react';
+import SiteFooter from '@/components/SiteFooter';
+import { Inter } from 'next/font/google';
+import TopNav from '@/components/TopNav';
 
-import TopNav from "@/components/TopNav";
-import SiteFooter from "@/components/SiteFooter";
-
-// Police Inter une seule fois
 const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  weight: ["400", "500", "600", "700"],
+  subsets: ['latin'],
+  variable: '--font-sans',
+  weight: ['400', '500', '600', '700'],
 });
 
 export const metadata = {
-  title: "PawPass",
-  description: "Cashback solidaire pour les clients et commerçants.",
+  title: 'PawPass',
+  description: 'Cashback solidaire pour les clients et commerçants.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={inter.variable}>
-      <body className="bg-[#FAFAF5] min-h-screen">
-
-        {/* --- VERSION MOBILE --- */}
-        <div className="block md:hidden min-h-screen flex flex-col">
+      <body
+        style={{
+          margin: 0,
+          backgroundColor: '#FAFAF5',
+        }}
+      >
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {/* HEADER GLOBAL — ICI LE SEUL TopNav */}
           <TopNav />
-          <main className="flex-1 px-4 py-4">{children}</main>
+
+          {/* CONTENU */}
+          <main style={{ flex: 1 }}>{children}</main>
+
+          {/* FOOTER */}
           <SiteFooter />
         </div>
-
-        {/* --- VERSION DESKTOP (ordi) --- */}
-        <div className="hidden md:flex min-h-screen flex-col">
-          <TopNav />
-          <main className="flex-1 px-8 py-8 max-w-5xl w-full mx-auto">
-            {children}
-          </main>
-          <SiteFooter />
-        </div>
-
       </body>
     </html>
   );

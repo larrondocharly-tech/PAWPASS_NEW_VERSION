@@ -6,7 +6,6 @@ export const dynamic = "force-dynamic";
 export default function MentionsLegalesPage() {
   return (
     <main className="container" style={{ maxWidth: 800 }}>
-      <TopNav title="Mentions légales" />
 
       <section className="card" style={{ marginBottom: 24 }}>
         <h1>Mentions légales</h1>

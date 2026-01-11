@@ -83,7 +83,6 @@ export default async function AdminSpasPage() {
 
   return (
     <div className="container">
-      {/* plus de <TopNav /> ici : le header global vient de app/layout.tsx */}
 
       {/* barre d’onglets admin */}
       <nav

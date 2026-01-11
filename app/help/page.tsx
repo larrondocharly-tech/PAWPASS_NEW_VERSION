@@ -1,60 +1,74 @@
-"use client";
+// app/help/page.tsx
 
-import Link from 'next/link';
-import TopNav from '@/components/TopNav';
-import { createClient } from '@/lib/supabaseClient';
 export const dynamic = "force-dynamic";
 
 export default function HelpPage() {
-  const supabase = createClient();
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
   return (
-    <div className="container">
-      <TopNav title="Comment fonctionne PawPass ?" />
+    <main
+      className="container"
+      style={{ maxWidth: 900, margin: "24px auto", padding: "0 16px" }}
+    >
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h1>Comment fonctionne PawPass ?</h1>
+        <p className="helper">
+          PawPass vous permet de gagner du cashback chez les commerçants
+          partenaires et de soutenir des refuges pour animaux à chaque achat.
+        </p>
+      </section>
 
-      <div className="grid grid-2">
+      <div className="grid grid-2" style={{ gap: 16 }}>
         <div className="card">
-          <h2>Après paiement</h2>
-          <p className="helper">💳 Cashback après l’achat</p>
-          <ol>
-            <li>Vous payez normalement chez le commerçant.</li>
-            <li>Vous scannez le QR PawPass.</li>
-            <li>Vous saisissez le montant.</li>
-            <li>Vous recevez du cashback en crédits PawPass.</li>
-          </ol>
-        </div>
-
-        <div className="card">
-          <h2>Avant paiement</h2>
-          <p className="helper">🎟️ Réduction immédiate</p>
-          <ol>
-            <li>Vous scannez le QR avant de payer.</li>
-            <li>Vous choisissez combien utiliser de votre cagnotte.</li>
-            <li>Un écran de réduction s’affiche avec un timer.</li>
-            <li>Vous montrez l’écran au commerçant, qui applique la remise.</li>
-          </ol>
-        </div>
-
-        <div className="card">
-          <h2>Dons aux SPA</h2>
-          <p className="helper">🐾 Soutenir les associations</p>
+          <h2>1. Créez votre compte</h2>
           <p>
-            Vous pouvez choisir de donner une partie ou la totalité de vos crédits à une SPA
-            partenaire. PawPass collecte les crédits et les reverse aux associations dans un second
-            temps.
+            Inscrivez-vous gratuitement sur PawPass, puis connectez-vous pour
+            accéder à votre tableau de bord, scanner les QR codes et suivre
+            votre cagnotte.
+          </p>
+        </div>
+
+        <div className="card">
+          <h2>2. Scannez chez les commerçants</h2>
+          <p>
+            En caisse, scannez le QR code du commerce avec l&apos;onglet
+            &laquo;&nbsp;Scanner&nbsp;&raquo; de l&apos;application pour
+            enregistrer vos achats et déclencher le cashback.
+          </p>
+        </div>
+
+        <div className="card">
+          <h2>3. Gagnez du cashback</h2>
+          <p>
+            Une partie du montant de vos achats est reversée sur votre cagnotte
+            PawPass. Le pourcentage dépend du commerçant partenaire.
+          </p>
+        </div>
+
+        <div className="card">
+          <h2>4. Soutenez une SPA</h2>
+          <p>
+            À chaque transaction, une partie de votre cashback peut être donnée
+            à une SPA partenaire. Vous choisissez à qui vous souhaitez donner.
+          </p>
+        </div>
+
+        <div className="card">
+          <h2>5. Utilisez vos crédits</h2>
+          <p>
+            Quand votre cagnotte atteint le seuil minimum, utilisez
+            l&apos;onglet &laquo;&nbsp;Utiliser mes crédits&nbsp;&raquo; pour
+            obtenir une réduction immédiate chez un commerçant partenaire.
+          </p>
+        </div>
+
+        <div className="card">
+          <h2>6. Suivez votre historique</h2>
+          <p>
+            Dans l&apos;onglet &laquo;&nbsp;Historique&nbsp;&raquo;, retrouvez
+            toutes vos transactions, le cashback gagné et les dons effectués aux
+            refuges.
           </p>
         </div>
       </div>
-
-      <div style={{ marginTop: 24 }}>
-        <Link className="button" href="/scan">
-          Revenir au scan
-        </Link>
-      </div>
-    </div>
+    </main>
   );
 }

@@ -7,7 +7,6 @@ export const dynamic = "force-dynamic";
 export default function HowItWorksPage() {
   return (
     <main className="container">
-      <TopNav title="Comment fonctionne PawPass ?" />
 
       <section className="card" style={{ marginBottom: 24 }}>
         <h1>Comment fonctionne PawPass ?</h1>

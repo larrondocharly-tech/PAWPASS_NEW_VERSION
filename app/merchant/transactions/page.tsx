@@ -84,7 +84,6 @@ export default function MerchantTransactionsPage() {
 
   return (
     <div className="container">
-      <TopNav title="Transactions commerçant" />
 
       <div className="card">
         <h2>Historique des transactions</h2>
