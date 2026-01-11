@@ -1,246 +1,104 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-interface ExistingApplication {
-  id: string;
-  status: string | null;
-  created_at: string;
-}
-
-export default function MerchantRequestPage() {
-  const supabase = createClient();
+export default function MerchantRegistrationPage() {
   const router = useRouter();
+  const supabase = createClient();
 
-  const [loading, setLoading] = useState(true);
-  const [existingApp, setExistingApp] = useState<ExistingApplication | null>(
-    null
-  );
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
-  const [businessName, setBusinessName] = useState("");
-  const [city, setCity] = useState("");
-  const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState("");
-  const [message, setMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        router.replace("/login");
-        return;
-      }
-
-      // vérifier s'il y a déjà une demande
-      const { data: appData, error: appError } = await supabase
-        .from("merchant_applications")
-        .select("id,status,created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (appError && appError.code !== "PGRST116") {
-        console.error(appError);
-      }
-
-      if (appData) {
-        setExistingApp({
-          id: appData.id,
-          status: appData.status ?? null,
-          created_at: appData.created_at,
-        });
-      }
-
-      setLoading(false);
-    };
-
-    void load();
-  }, [router, supabase]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
+    setLoading(true);
     setError(null);
-    setSuccess(null);
 
-    if (!businessName.trim() || !city.trim()) {
-      setError("Nom du commerce et ville sont obligatoires.");
-      return;
-    }
+    const form = new FormData(e.target);
+    const business_name = form.get("business_name")?.toString() || "";
+    const city = form.get("city")?.toString() || "";
+    const address = form.get("address")?.toString() || null;
+    const phone = form.get("phone")?.toString() || null;
+    const message = form.get("message")?.toString() || null;
 
-    setSubmitting(true);
-
+    // Vérifier session
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setError("Vous devez être connecté pour faire une demande.");
-      setSubmitting(false);
+      setError("Vous devez être connecté.");
+      setLoading(false);
       return;
     }
 
+    // INSERT DEMANDE DANS merchant_applications
     const { error: insertError } = await supabase
       .from("merchant_applications")
       .insert({
         user_id: user.id,
-        business_name: businessName.trim(),
-        city: city.trim(),
-        address: address.trim() || null,
-        phone: phone.trim() || null,
-        message: message.trim() || null,
+        business_name,
+        city,
+        address,
+        phone,
+        message,
         status: "pending",
       });
 
     if (insertError) {
       console.error(insertError);
-      setError("Erreur lors de l'envoi de la demande commerçant.");
-      setSubmitting(false);
+      setError(
+        "Erreur lors de l’envoi de la demande : " + insertError.message
+      );
+      setLoading(false);
       return;
     }
 
-    setSuccess(
-      "Votre demande a été envoyée. Elle est en attente de validation."
-    );
-    setExistingApp({
-      id: "new",
-      status: "pending",
-      created_at: new Date().toISOString(),
-    });
-    setSubmitting(false);
+    setLoading(false);
+    router.replace("/dashboard?merchant_request=sent");
   };
-
-  if (loading) {
-    return (
-      <div className="container">
-        <div className="card">
-          <p className="helper">Chargement…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (existingApp) {
-    return (
-      <div className="container">
-        <div className="card">
-          <h2>Devenir commerçant partenaire</h2>
-          <p className="helper">
-            Votre demande a été enregistrée le{" "}
-            {new Date(existingApp.created_at).toLocaleString("fr-FR")}.
-          </p>
-          <p style={{ marginTop: 8 }}>
-            Statut :{" "}
-            <strong>
-              {existingApp.status === "approved"
-                ? "Approuvée"
-                : existingApp.status === "rejected"
-                ? "Refusée"
-                : "En attente"}
-            </strong>
-          </p>
-          <p className="helper" style={{ marginTop: 12 }}>
-            Vous serez informé dès qu&apos;un administrateur aura traité votre
-            demande.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="container">
-      <div className="card">
-        <h2>Devenir commerçant partenaire</h2>
-        <p className="helper">
-          Remplissez ce formulaire pour demander la création d&apos;un compte
-          commerçant. Un administrateur validera votre demande.
-        </p>
+      <h1>Devenir commerçant partenaire</h1>
 
-        {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
-        {success && (
-          <p className="success" style={{ marginTop: 12 }}>{success}</p>
-        )}
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
-        <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
-          <label className="label" htmlFor="businessName">
-            Nom du commerce
-            <input
-              id="businessName"
-              className="input"
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              required
-            />
-          </label>
+      <form onSubmit={handleSubmit}>
+        <label>
+          Nom du commerce
+          <input name="business_name" required />
+        </label>
 
-          <label className="label" htmlFor="city">
-            Ville
-            <input
-              id="city"
-              className="input"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              required
-            />
-          </label>
+        <label>
+          Ville
+          <input name="city" required />
+        </label>
 
-          <label className="label" htmlFor="address">
-            Adresse (optionnel)
-            <input
-              id="address"
-              className="input"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </label>
+        <label>
+          Adresse (optionnel)
+          <input name="address" />
+        </label>
 
-          <label className="label" htmlFor="phone">
-            Téléphone (optionnel)
-            <input
-              id="phone"
-              className="input"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </label>
+        <label>
+          Téléphone (optionnel)
+          <input name="phone" />
+        </label>
 
-          <label className="label" htmlFor="message">
-            Message (optionnel)
-            <textarea
-              id="message"
-              className="input"
-              style={{ minHeight: 80, resize: "vertical" }}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-            />
-          </label>
+        <label>
+          Message (optionnel)
+          <textarea name="message" />
+        </label>
 
-          <button
-            className="button"
-            type="submit"
-            disabled={submitting}
-            style={{ marginTop: 16 }}
-          >
-            {submitting ? "Envoi en cours..." : "Envoyer ma demande"}
-          </button>
-        </form>
-      </div>
+        <button type="submit" disabled={loading}>
+          {loading ? "Envoi..." : "Envoyer ma demande"}
+        </button>
+      </form>
     </div>
   );
 }
