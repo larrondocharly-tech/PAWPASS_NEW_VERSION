@@ -1,643 +1,176 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
+import QRCode from "react-qr-code";
 
-export const dynamic = "force-dynamic";
-
-interface Profile {
-  role: string | null;
-  merchant_id: string | null;
-  merchant_code: string | null;
-}
-
-interface MerchantInfo {
-  id: string;
-  name: string | null;
-  city: string | null;
-  address: string | null;
-  qr_token: string | null;
-  cashback_rate: number | null;
-}
-
-interface ExistingApplication {
-  id: string;
-  status: string | null;
-  created_at: string;
-}
-
-interface MerchantStats {
-  totalRevenue: number;
-  totalCashback: number;
-  txCount: number;
-}
-
-type ViewMode = "merchant" | "applicationStatus" | "form";
-
-export default function MerchantPage() {
+export default function MerchantDashboard() {
   const supabase = createClient();
-  const router = useRouter();
 
+  const [merchant, setMerchant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
 
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [merchant, setMerchant] = useState<MerchantInfo | null>(null);
-  const [stats, setStats] = useState<MerchantStats | null>(null);
-  const [existingApp, setExistingApp] = useState<ExistingApplication | null>(
-    null
-  );
+  // Stats
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [totalGenerated, setTotalGenerated] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const [businessName, setBusinessName] = useState("");
-  const [city, setCity] = useState("");
-  const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState("");
-  const [message, setMessage] = useState("");
-
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  // ------------------------
-  // CHARGEMENT INITIAL
-  // ------------------------
   useEffect(() => {
-    const load = async () => {
+    const loadData = async () => {
       setLoading(true);
-      setError(null);
 
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        router.replace("/login");
-        return;
-      }
+      if (!user) return;
 
       // 1) Charger le profil
-      const { data: profileData, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
-        .select("role, merchant_id, merchant_code")
+        .select("merchant_id")
         .eq("id", user.id)
-        .maybeSingle();
+        .single();
 
-      if (profileError) {
-        console.error(profileError);
-        setError("Erreur lors du chargement de votre profil.");
+      if (!profile?.merchant_id) {
+        setMerchant(null);
         setLoading(false);
         return;
       }
 
-      const currentProfile: Profile = {
-        role: profileData?.role ?? null,
-        merchant_id: profileData?.merchant_id ?? null,
-        merchant_code: profileData?.merchant_code ?? null,
-      };
+      // 2) Charger les infos du commerçant
+      const { data: merchantData } = await supabase
+        .from("merchants")
+        .select("*")
+        .eq("id", profile.merchant_id)
+        .single();
 
-      setProfile(currentProfile);
+      setMerchant(merchantData);
 
-      // 2) Si déjà commerçant → on charge le commerce + stats
-      if (
-        currentProfile.role?.toLowerCase() === "merchant" &&
-        currentProfile.merchant_id
-      ) {
-        const { data: merchantData, error: merchantError } = await supabase
-          .from("merchants")
-          .select(
-            "id, name, city, address, qr_token, cashback_rate"
-          )
-          .eq("id", currentProfile.merchant_id)
-          .maybeSingle();
+      // 3) Charger les transactions liées à ce commerçant
+      const { data: tx } = await supabase
+        .from("transactions")
+        .select("amount, cashback_amount, donation_amount")
+        .eq("merchant_id", profile.merchant_id)
+        .eq("status", "approved");
 
-        if (merchantError) {
-          console.error(merchantError);
-          setError("Erreur lors du chargement des informations commerçant.");
-          setLoading(false);
-          return;
-        }
+      if (tx && tx.length > 0) {
+        let total = 0;
+        let generated = 0;
 
-        if (merchantData) {
-          const m = merchantData as MerchantInfo;
-          setMerchant(m);
-
-          // Charger les stats de transactions pour ce commerce
-          const { data: txData, error: txError, count } = await supabase
-            .from("transactions")
-            .select("amount, cashback_amount, donation_amount", {
-              count: "exact",
-            })
-            .eq("merchant_id", m.id)
-            .eq("status", "approved"); // on compte uniquement les transactions validées
-
-          if (txError) {
-            console.error(txError);
-          } else {
-            const list = (txData ?? []) as {
-              amount: number | null;
-              cashback_amount: number | null;
-              donation_amount: number | null;
-            }[];
-
-            const totalRevenue = list.reduce((sum, tx) => {
-              return sum + (tx.amount ?? 0);
-            }, 0);
-
-            const totalCashback = list.reduce((sum, tx) => {
-              const cb = tx.cashback_amount ?? 0;
-              const don = tx.donation_amount ?? 0;
-              return sum + cb + don;
-            }, 0);
-
-            setStats({
-              totalRevenue,
-              totalCashback,
-              txCount: count ?? list.length,
-            });
-          }
-        }
-
-        setLoading(false);
-        return; // on reste en "merchant view"
-      }
-
-      // 3) Sinon, vérifier s'il existe déjà une demande
-      const { data: appData, error: appError } = await supabase
-        .from("merchant_applications")
-        .select("id,status,created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (appError && appError.code !== "PGRST116") {
-        console.error(appError);
-      }
-
-      if (appData) {
-        setExistingApp({
-          id: appData.id,
-          status: appData.status ?? null,
-          created_at: appData.created_at,
+        tx.forEach((t) => {
+          total += t.amount || 0;
+          generated += (t.cashback_amount || 0) + (t.donation_amount || 0);
         });
+
+        setTotalAmount(total);
+        setTotalGenerated(generated);
+        setTotalCount(tx.length);
       }
 
       setLoading(false);
     };
 
-    void load();
-  }, [router, supabase]);
+    loadData();
+  }, []);
 
-  // ------------------------
-  // SOUMISSION DEMANDE
-  // ------------------------
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
+  if (loading) return <p style={{ padding: 20 }}>Chargement...</p>;
 
-    if (!businessName.trim() || !city.trim()) {
-      setError("Nom du commerce et ville sont obligatoires.");
-      return;
-    }
-
-    setSubmitting(true);
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      setError("Vous devez être connecté pour faire une demande.");
-      setSubmitting(false);
-      return;
-    }
-
-    const { error: insertError } = await supabase
-      .from("merchant_applications")
-      .insert({
-        user_id: user.id,
-        business_name: businessName.trim(),
-        city: city.trim(),
-        address: address.trim() || null,
-        phone: phone.trim() || null,
-        message: message.trim() || null,
-        status: "pending",
-      });
-
-    if (insertError) {
-      console.error(insertError);
-      setError("Erreur lors de l'envoi de la demande commerçant.");
-      setSubmitting(false);
-      return;
-    }
-
-    setSuccess(
-      "Votre demande a été envoyée. Elle est maintenant en attente de validation par l'équipe PawPass."
-    );
-    setExistingApp({
-      id: "new",
-      status: "pending",
-      created_at: new Date().toISOString(),
-    });
-    setSubmitting(false);
-  };
-
-  // ------------------------
-  // DÉTERMINER LA VUE
-  // ------------------------
-  let view: ViewMode = "form";
-
-  if (
-    profile?.role?.toLowerCase() === "merchant" &&
-    merchant
-  ) {
-    view = "merchant";
-  } else if (existingApp) {
-    view = "applicationStatus";
-  }
-
-  const formatEuro = (v: number) =>
-    v.toLocaleString("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
-  // ------------------------
-  // RENDUS
-  // ------------------------
-
-  if (loading) {
+  if (!merchant)
     return (
-      <div className="container">
-        <div
-          className="card"
-          style={{ maxWidth: 520, margin: "40px auto" }}
-        >
-          <p className="helper">Chargement…</p>
-        </div>
+      <div style={{ padding: 20 }}>
+        <h2>Devenir commerçant partenaire</h2>
+        <p>Votre compte n’est pas encore validé comme commerçant.</p>
       </div>
     );
-  }
 
-  // --- VUE COMMERÇANT DÉJÀ VALIDÉ ---
-  if (view === "merchant" && merchant) {
-    const code = merchant.qr_token || profile?.merchant_code || "—";
-    const scanUrl =
-      code && code !== "—"
-        ? `https://pawpass.fr/scan?m=${encodeURIComponent(code)}`
-        : null;
-    const qrImageUrl = scanUrl
-      ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
-          scanUrl
-        )}`
-      : null;
+  const scanUrl = `https://pawpass.fr/scan?m=${merchant.qr_token}`;
 
-    return (
-      <div className="container">
-        <div
-          className="card"
-          style={{ maxWidth: 800, margin: "40px auto" }}
-        >
-          <h1 style={{ fontSize: 24, marginBottom: 8 }}>
-            Espace commerçant
-          </h1>
-          <p className="helper" style={{ marginBottom: 16 }}>
-            Vous êtes déjà commerçant partenaire PawPass. Utilisez ce code
-            pour vos affiches et pour permettre à vos clients de scanner
-            votre QR code en boutique.
-          </p>
-
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 24,
-              alignItems: "flex-start",
-            }}
-          >
-            {qrImageUrl && (
-              <div>
-                <img
-                  src={qrImageUrl}
-                  alt="QR code PawPass"
-                  style={{
-                    width: 220,
-                    height: 220,
-                    borderRadius: 16,
-                    backgroundColor: "#fff",
-                    padding: 8,
-                    boxShadow: "0 4px 10px rgba(0,0,0,0.08)",
-                  }}
-                />
-              </div>
-            )}
-
-            <div style={{ flex: 1, minWidth: 260 }}>
-              <div>
-                <h2 style={{ fontSize: 18, marginBottom: 4 }}>
-                  {merchant.name || "Commerce sans nom"}
-                </h2>
-                <p className="helper">
-                  {merchant.city || "Ville inconnue"}
-                  {merchant.address ? ` · ${merchant.address}` : ""}
-                </p>
-              </div>
-
-              <div style={{ marginTop: 16 }}>
-                <p style={{ marginBottom: 8 }}>
-                  <strong>Code commerçant :</strong>
-                </p>
-                <p
-                  style={{
-                    fontFamily: "monospace",
-                    padding: "8px 12px",
-                    borderRadius: 999,
-                    backgroundColor: "#f3f4f6",
-                    display: "inline-block",
-                    marginBottom: 12,
-                  }}
-                >
-                  {code}
-                </p>
-
-                {scanUrl && (
-                  <>
-                    <p style={{ marginBottom: 8 }}>
-                      <strong>URL à encoder dans le QR :</strong>
-                    </p>
-                    <p
-                      style={{
-                        fontFamily: "monospace",
-                        padding: "8px 12px",
-                        borderRadius: 12,
-                        backgroundColor: "#f3f4f6",
-                        wordBreak: "break-all",
-                      }}
-                    >
-                      {scanUrl}
-                    </p>
-                  </>
-                )}
-
-                {typeof merchant.cashback_rate === "number" && (
-                  <p className="helper" style={{ marginTop: 12 }}>
-                    Taux de cashback actuel :{" "}
-                    <strong>{merchant.cashback_rate}%</strong>
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* --- STATISTIQUES PAWPASS --- */}
-          {stats && (
-            <div
-              style={{
-                marginTop: 24,
-                paddingTop: 16,
-                borderTop: "1px solid #e5e7eb",
-              }}
-            >
-              <h2 style={{ fontSize: 18, marginBottom: 12 }}>
-                Statistiques PawPass
-              </h2>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 16,
-                }}
-              >
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 12,
-                    backgroundColor: "#ecfdf3",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 13,
-                      marginBottom: 4,
-                      color: "#047857",
-                    }}
-                  >
-                    CA généré avec PawPass
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 20,
-                      fontWeight: 700,
-                      margin: 0,
-                    }}
-                  >
-                    {formatEuro(stats.totalRevenue)}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 12,
-                    backgroundColor: "#eff6ff",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 13,
-                      marginBottom: 4,
-                      color: "#1d4ed8",
-                    }}
-                  >
-                    Cashback + dons générés
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 20,
-                      fontWeight: 700,
-                      margin: 0,
-                    }}
-                  >
-                    {formatEuro(stats.totalCashback)}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 12,
-                    backgroundColor: "#fefce8",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: 13,
-                      marginBottom: 4,
-                      color: "#92400e",
-                    }}
-                  >
-                    Nombre de transactions
-                  </p>
-                  <p
-                    style={{
-                      fontSize: 20,
-                      fontWeight: 700,
-                      margin: 0,
-                    }}
-                  >
-                    {stats.txCount}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // --- VUE STATUT DE DEMANDE ---
-  if (view === "applicationStatus" && existingApp) {
-    return (
-      <div className="container">
-        <div
-          className="card"
-          style={{ maxWidth: 520, margin: "40px auto" }}
-        >
-          <h1 style={{ fontSize: 24, marginBottom: 12 }}>
-            Devenir commerçant partenaire
-          </h1>
-          <p className="helper">
-            Votre demande a été enregistrée le{" "}
-            {new Date(existingApp.created_at).toLocaleString("fr-FR")}.
-          </p>
-
-          <p style={{ marginTop: 16 }}>
-            Statut de votre demande :{" "}
-            <strong>
-              {existingApp.status === "approved"
-                ? "Approuvée"
-                : existingApp.status === "rejected"
-                ? "Refusée"
-                : "En attente de validation"}
-            </strong>
-          </p>
-
-          <p className="helper" style={{ marginTop: 12 }}>
-            Vous serez informé dès qu&apos;un administrateur aura traité votre
-            demande. En attendant, vous pouvez continuer à utiliser PawPass en
-            tant que client.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // --- FORMULAIRE DE DEMANDE ---
   return (
-    <div className="container">
-      <div
-        className="card"
-        style={{ maxWidth: 520, margin: "40px auto" }}
-      >
-        <h1 style={{ fontSize: 24, marginBottom: 8 }}>
-          Devenir commerçant partenaire
-        </h1>
-        <p className="helper" style={{ marginBottom: 16 }}>
-          Remplissez ce formulaire pour demander la création d&apos;un compte
-          commerçant PawPass. Un administrateur validera votre demande et vous
-          recevrez un QR code à afficher dans votre boutique.
-        </p>
+    <div style={{ padding: "20px", maxWidth: 900, margin: "0 auto" }}>
+      <h1>Espace commerçant</h1>
 
-        {error && (
-          <p className="error" style={{ marginBottom: 12 }}>
-            {error}
+      <p>
+        Vous êtes déjà commerçant partenaire PawPass. Utilisez ce code pour vos
+        affiches et pour permettre à vos clients de scanner votre QR code en
+        boutique.
+      </p>
+
+      <div style={{ display: "flex", gap: 30 }}>
+        <QRCode value={scanUrl} size={180} />
+        <div>
+          <h2>{merchant.name}</h2>
+          <p>
+            {merchant.city} · {merchant.address}
           </p>
-        )}
-        {success && (
-          <p className="success" style={{ marginBottom: 12 }}>
-            {success}
+
+          <p>
+            <strong>Code commerçant :</strong> {merchant.qr_token}
           </p>
-        )}
 
-        <form onSubmit={handleSubmit}>
-          <label className="label" htmlFor="businessName">
-            Nom du commerce
-            <input
-              id="businessName"
-              name="business_name"
-              className="input"
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              placeholder="Ex : Boulangerie du Marché"
-              required
-            />
-          </label>
+          <p>
+            <strong>URL à encoder dans le QR :</strong>
+          </p>
+          <input
+            type="text"
+            value={scanUrl}
+            readOnly
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "6px",
+              border: "1px solid #ccc",
+            }}
+          />
 
-          <label className="label" htmlFor="city">
-            Ville
-            <input
-              id="city"
-              name="city"
-              className="input"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Ex : Bayonne"
-              required
-            />
-          </label>
+          <p style={{ marginTop: 10 }}>
+            <strong>Taux de cashback actuel :</strong>{" "}
+            {merchant.cashback_rate * 100}%
+          </p>
+        </div>
+      </div>
 
-          <label className="label" htmlFor="address">
-            Adresse (optionnel)
-            <input
-              id="address"
-              name="address"
-              className="input"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Ex : 12 rue des Commerces"
-            />
-          </label>
+      <h2 style={{ marginTop: 40 }}>Statistiques PawPass</h2>
 
-          <label className="label" htmlFor="phone">
-            Téléphone (optionnel)
-            <input
-              id="phone"
-              name="phone"
-              className="input"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Ex : 06 12 34 56 78"
-            />
-          </label>
+      <div style={{ display: "flex", gap: 20 }}>
+        <div
+          style={{
+            flex: 1,
+            padding: 15,
+            borderRadius: 10,
+            background: "#E5F8E8",
+          }}
+        >
+          <h3>CA généré avec PawPass</h3>
+          <p style={{ fontSize: 26, fontWeight: "bold" }}>
+            {totalAmount.toFixed(2)} €
+          </p>
+        </div>
 
-          <label className="label" htmlFor="message">
-            Message (optionnel)
-            <textarea
-              id="message"
-              name="message"
-              className="input"
-              style={{ minHeight: 90, resize: "vertical" }}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Ex : Horaires, précisions sur votre activité…"
-            />
-          </label>
+        <div
+          style={{
+            flex: 1,
+            padding: 15,
+            borderRadius: 10,
+            background: "#E8F0FF",
+          }}
+        >
+          <h3>Cashback + dons générés</h3>
+          <p style={{ fontSize: 26, fontWeight: "bold" }}>
+            {totalGenerated.toFixed(2)} €
+          </p>
+        </div>
 
-          <button
-            className="button"
-            type="submit"
-            disabled={submitting}
-            style={{ marginTop: 16, width: "100%" }}
-          >
-            {submitting ? "Envoi de la demande…" : "Envoyer ma demande"}
-          </button>
-        </form>
+        <div
+          style={{
+            flex: 1,
+            padding: 15,
+            borderRadius: 10,
+            background: "#FFF5D6",
+          }}
+        >
+          <h3>Nombre de transactions</h3>
+          <p style={{ fontSize: 26, fontWeight: "bold" }}>{totalCount}</p>
+        </div>
       </div>
     </div>
   );
