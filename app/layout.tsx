@@ -14,6 +14,16 @@ const inter = Inter({
 export const metadata = {
   title: "PawPass",
   description: "Cashback solidaire pour les clients et commerçants.",
+
+  // 🔥 AJOUT IMPORTANT POUR ICÔNE PWA
+  manifest: "/manifest.json",
+
+  // 🔥 Conseillé pour iPhone/iPad
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+    shortcut: "/icon-192.png"
+  }
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
