@@ -29,7 +29,7 @@ export default function MentionsLegalesPage() {
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2>Contact</h2>
-        <p>contact@pawpass.app</p>
+        <p>contact.pawpass@gmail.com</p>
       </section>
 
       <section className="card">

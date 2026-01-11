@@ -225,7 +225,6 @@ export default function LandingPage() {
           <Link href="/faq">FAQ</Link>
           <Link href="/contact">Contact</Link>
           <Link href="/mentions-legales">Mentions légales</Link>
-          <Link href="/cgu">CGU</Link>
           <Link href="/politique-confidentialite">Politique de confidentialité</Link>
         </div>
       </footer>

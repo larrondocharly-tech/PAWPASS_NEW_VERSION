@@ -9,7 +9,6 @@ const navItems = [
   { href: "/", label: "Accueil" },
   { href: "/scan", label: "Scanner" },
   { href: "/dashboard", label: "Mon compte" },
-  { href: "/cgu", label: "CGU" },
 ];
 
 export default function TopNav() {

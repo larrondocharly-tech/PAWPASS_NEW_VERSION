@@ -22,7 +22,7 @@ export default function ContactPage() {
         <p>
           Écrivez-nous à&nbsp;:
           <br />
-          <strong>contact@pawpass.fr</strong>
+          <strong>contact.pawpass@gmail.com</strong>
         </p>
       </section>
 

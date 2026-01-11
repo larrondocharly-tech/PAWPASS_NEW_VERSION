@@ -14,7 +14,6 @@ export default function SiteFooter() {
           <Link href="/mentions-legales">Mentions légales</Link>
           <Link href="/contact">Contact</Link>
           <Link href="/faq">FAQ</Link>
-          <Link href="/cgu">CGU</Link>
         </div>
       </div>
     </footer>
