@@ -6,20 +6,38 @@ import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
+interface Profile {
+  role: string | null;
+  merchant_id: string | null;
+  merchant_code: string | null;
+}
+
+interface MerchantInfo {
+  id: string;
+  name: string | null;
+  city: string | null;
+  address: string | null;
+  qr_token: string | null;
+  cashback_rate: number | null;
+}
+
 interface ExistingApplication {
   id: string;
   status: string | null;
   created_at: string;
 }
 
-export default function MerchantRegistrationPage() {
+type ViewMode = "merchant" | "applicationStatus" | "form";
+
+export default function MerchantPage() {
   const supabase = createClient();
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [merchant, setMerchant] = useState<MerchantInfo | null>(null);
   const [existingApp, setExistingApp] = useState<ExistingApplication | null>(
     null
   );
@@ -30,7 +48,12 @@ export default function MerchantRegistrationPage() {
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
 
-  // Charger éventuelle demande déjà existante
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // ------------------------
+  // CHARGEMENT INITIAL
+  // ------------------------
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -46,6 +69,56 @@ export default function MerchantRegistrationPage() {
         return;
       }
 
+      // 1) Charger le profil
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, merchant_id, merchant_code")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error(profileError);
+        setError("Erreur lors du chargement de votre profil.");
+        setLoading(false);
+        return;
+      }
+
+      const currentProfile: Profile = {
+        role: profileData?.role ?? null,
+        merchant_id: profileData?.merchant_id ?? null,
+        merchant_code: profileData?.merchant_code ?? null,
+      };
+
+      setProfile(currentProfile);
+
+      // 2) Si déjà commerçant → on charge le commerce
+      if (
+        currentProfile.role?.toLowerCase() === "merchant" &&
+        currentProfile.merchant_id
+      ) {
+        const { data: merchantData, error: merchantError } = await supabase
+          .from("merchants")
+          .select(
+            "id, name, city, address, qr_token, cashback_rate"
+          )
+          .eq("id", currentProfile.merchant_id)
+          .maybeSingle();
+
+        if (merchantError) {
+          console.error(merchantError);
+          setError("Erreur lors du chargement des informations commerçant.");
+          setLoading(false);
+          return;
+        }
+
+        if (merchantData) {
+          setMerchant(merchantData as MerchantInfo);
+          setLoading(false);
+          return; // on reste en "merchant view"
+        }
+      }
+
+      // 3) Sinon, vérifier s'il existe déjà une demande
       const { data: appData, error: appError } = await supabase
         .from("merchant_applications")
         .select("id,status,created_at")
@@ -72,6 +145,9 @@ export default function MerchantRegistrationPage() {
     void load();
   }, [router, supabase]);
 
+  // ------------------------
+  // SOUMISSION DEMANDE
+  // ------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -125,15 +201,30 @@ export default function MerchantRegistrationPage() {
     setSubmitting(false);
   };
 
+  // ------------------------
+  // DÉTERMINER LA VUE
+  // ------------------------
+  let view: ViewMode = "form";
+
+  if (
+    profile?.role?.toLowerCase() === "merchant" &&
+    merchant
+  ) {
+    view = "merchant";
+  } else if (existingApp) {
+    view = "applicationStatus";
+  }
+
+  // ------------------------
+  // RENDUS
+  // ------------------------
+
   if (loading) {
     return (
       <div className="container">
         <div
           className="card"
-          style={{
-            maxWidth: 520,
-            margin: "40px auto",
-          }}
+          style={{ maxWidth: 520, margin: "40px auto" }}
         >
           <p className="helper">Chargement…</p>
         </div>
@@ -141,18 +232,135 @@ export default function MerchantRegistrationPage() {
     );
   }
 
-  // Si une demande existe déjà : on affiche juste le statut
-  if (existingApp) {
+  // --- VUE COMMERÇANT DÉJÀ VALIDÉ ---
+  if (view === "merchant" && merchant) {
+    const code = merchant.qr_token || profile?.merchant_code || "—";
+    const scanUrl =
+      code && code !== "—"
+        ? `https://pawpass.fr/scan?m=${encodeURIComponent(code)}`
+        : null;
+    const qrImageUrl = scanUrl
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+          scanUrl
+        )}`
+      : null;
+
     return (
       <div className="container">
         <div
           className="card"
-          style={{
-            maxWidth: 520,
-            margin: "40px auto",
-          }}
+          style={{ maxWidth: 620, margin: "40px auto" }}
         >
           <h1 style={{ fontSize: 24, marginBottom: 8 }}>
+            Espace commerçant
+          </h1>
+          <p className="helper" style={{ marginBottom: 16 }}>
+            Vous êtes déjà commerçant partenaire PawPass. Utilisez ce code
+            pour vos affiches et pour permettre à vos clients de scanner
+            votre QR code en boutique.
+          </p>
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+            }}
+          >
+            <div>
+              <h2 style={{ fontSize: 18, marginBottom: 4 }}>
+                {merchant.name || "Commerce sans nom"}
+              </h2>
+              <p className="helper">
+                {merchant.city || "Ville inconnue"}
+                {merchant.address ? ` · ${merchant.address}` : ""}
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 24,
+                alignItems: "center",
+              }}
+            >
+              {qrImageUrl && (
+                <div>
+                  <img
+                    src={qrImageUrl}
+                    alt="QR code PawPass"
+                    style={{
+                      width: 220,
+                      height: 220,
+                      borderRadius: 16,
+                      backgroundColor: "#fff",
+                      padding: 8,
+                      boxShadow: "0 4px 10px rgba(0,0,0,0.08)",
+                    }}
+                  />
+                </div>
+              )}
+
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <p style={{ marginBottom: 8 }}>
+                  <strong>Code commerçant :</strong>
+                </p>
+                <p
+                  style={{
+                    fontFamily: "monospace",
+                    padding: "8px 12px",
+                    borderRadius: 999,
+                    backgroundColor: "#f3f4f6",
+                    display: "inline-block",
+                    marginBottom: 12,
+                  }}
+                >
+                  {code}
+                </p>
+
+                {scanUrl && (
+                  <>
+                    <p style={{ marginBottom: 8 }}>
+                      <strong>URL à encoder dans le QR :</strong>
+                    </p>
+                    <p
+                      style={{
+                        fontFamily: "monospace",
+                        padding: "8px 12px",
+                        borderRadius: 12,
+                        backgroundColor: "#f3f4f6",
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {scanUrl}
+                    </p>
+                  </>
+                )}
+
+                {typeof merchant.cashback_rate === "number" && (
+                  <p className="helper" style={{ marginTop: 12 }}>
+                    Taux de cashback actuel :{" "}
+                    <strong>{merchant.cashback_rate}%</strong>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- VUE STATUT DE DEMANDE ---
+  if (view === "applicationStatus" && existingApp) {
+    return (
+      <div className="container">
+        <div
+          className="card"
+          style={{ maxWidth: 520, margin: "40px auto" }}
+        >
+          <h1 style={{ fontSize: 24, marginBottom: 12 }}>
             Devenir commerçant partenaire
           </h1>
           <p className="helper">
@@ -181,15 +389,12 @@ export default function MerchantRegistrationPage() {
     );
   }
 
-  // Formulaire principal
+  // --- FORMULAIRE DE DEMANDE ---
   return (
     <div className="container">
       <div
         className="card"
-        style={{
-          maxWidth: 520,
-          margin: "40px auto",
-        }}
+        style={{ maxWidth: 520, margin: "40px auto" }}
       >
         <h1 style={{ fontSize: 24, marginBottom: 8 }}>
           Devenir commerçant partenaire
@@ -201,18 +406,12 @@ export default function MerchantRegistrationPage() {
         </p>
 
         {error && (
-          <p
-            className="error"
-            style={{ marginBottom: 12 }}
-          >
+          <p className="error" style={{ marginBottom: 12 }}>
             {error}
           </p>
         )}
         {success && (
-          <p
-            className="success"
-            style={{ marginBottom: 12 }}
-          >
+          <p className="success" style={{ marginBottom: 12 }}>
             {success}
           </p>
         )}
