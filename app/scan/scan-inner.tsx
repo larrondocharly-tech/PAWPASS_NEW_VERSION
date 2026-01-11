@@ -33,10 +33,11 @@ export default function ScanInner() {
   // Choix limité : 50% ou 100%
   const [donationPercent, setDonationPercent] = useState<50 | 100>(50);
 
-  // Fichier ticket (photo / PDF)
+  // Ticket de caisse (photo / pdf)
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
 
-  // errorMsg: erreurs de validation (montant vide, SPA non choisie, ticket manquant, etc.)
+  // errorMsg: erreurs de validation (montant vide, SPA non choisie, etc.)
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // error: erreurs venant de Supabase (RPC / trigger 2h / autres)
   const [error, setError] = useState<string | null>(null);
@@ -115,9 +116,60 @@ export default function ScanInner() {
   };
 
   // =========================
+  // Upload du ticket dans le bucket "receipts"
+  // =========================
+  const uploadReceiptIfNeeded = async (
+    userId: string,
+    amountNumber: number
+  ): Promise<string | null> => {
+    // Si montant <= 50€ → ticket facultatif
+    if (amountNumber <= 50) {
+      // S'il n'y a pas de fichier, on ne fait rien
+      if (!receiptFile) return null;
+      // S'il y a un fichier même pour < 50€, on peut l'uploader quand même
+    } else {
+      // Montant > 50€ → ticket obligatoire
+      if (!receiptFile) {
+        setErrorMsg("Ticket de caisse obligatoire pour les achats > 50€.");
+        return null;
+      }
+    }
+
+    if (!receiptFile) {
+      return null;
+    }
+
+    setIsUploadingReceipt(true);
+
+    const ext = receiptFile.name.split(".").pop() || "jpg";
+    const fileName = `${Date.now()}.${ext}`;
+    const filePath = `${userId}/${fileName}`;
+
+    const { data, error: uploadError } = await supabase.storage
+      .from("receipts")
+      .upload(filePath, receiptFile, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    setIsUploadingReceipt(false);
+
+    if (uploadError || !data) {
+      console.error("Upload ticket error:", uploadError);
+      setError(
+        "Impossible d'envoyer le ticket. Vérifiez le fichier et réessayez."
+      );
+      return null;
+    }
+
+    // On stocke simplement le path (admin pourra générer une URL signée)
+    return data.path;
+  };
+
+  // =========================
   // Soumission du formulaire (création transaction)
   // =========================
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setError(null);
@@ -135,13 +187,9 @@ export default function ScanInner() {
       return;
     }
 
-    const numericAmount = parseFloat(amount);
-
-    // Règle : au-delà de 50€, ticket obligatoire
-    if (numericAmount > 50 && !receiptFile) {
-      setErrorMsg(
-        "Pour tout achat supérieur à 50 €, le ticket de caisse est obligatoire. Ajoutez une photo ou un PDF."
-      );
+    const amountNumber = parseFloat(amount.replace(",", "."));
+    if (Number.isNaN(amountNumber) || amountNumber <= 0) {
+      setErrorMsg("Montant invalide.");
       return;
     }
 
@@ -153,52 +201,32 @@ export default function ScanInner() {
       return;
     }
 
-    // 1) Upload du ticket si présent
-    let receiptUrl: string | null = null;
-
-    if (receiptFile) {
-      const fileExt = receiptFile.name.split(".").pop() ?? "jpg";
-      const fileName = `${auth.user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `receipts/${fileName}`; // dossier dans le bucket "receipts"
-
-      const { error: uploadError } = await supabase.storage
-        .from("receipts") // <-- adapte le nom du bucket si besoin
-        .upload(filePath, receiptFile);
-
-      if (uploadError) {
-        console.error(uploadError);
-        setErrorMsg(
-          "Impossible d'envoyer le ticket. Vérifiez le fichier et réessayez."
-        );
-        return;
-      }
-
-      // On stocke simplement le chemin dans le bucket
-      receiptUrl = filePath;
+    // Gestion du ticket de caisse / upload
+    const receiptPath = await uploadReceiptIfNeeded(auth.user.id, amountNumber);
+    if (amountNumber > 50 && !receiptPath) {
+      // erreur déjà affichée (absence de fichier ou upload raté)
+      return;
     }
 
-    // 2) Appel de la fonction SQL avec le chemin du ticket (ou null)
     const { error: rpcError } = await supabase.rpc(
       "apply_cashback_transaction",
       {
         p_merchant_code: merchantCode,
-        p_amount: numericAmount,
+        p_amount: amountNumber,
         p_spa_id: selectedSpaId,
         p_use_wallet: false,
         p_wallet_spent: 0,
         p_donation_percent: donationPercent,
-        p_receipt_image_url: receiptUrl, // <-- maintenant on envoie le ticket
+        p_receipt_image_url: receiptPath ?? null,
       }
     );
 
     if (rpcError) {
       console.error(rpcError);
 
-      // Cas spécifique : trigger de protection "double scan < 2h"
-      if (
-        rpcError.message &&
-        rpcError.message.toUpperCase().includes("DOUBLE_SCAN_2H")
-      ) {
+      const msg = rpcError.message.toUpperCase();
+
+      if (msg.includes("DOUBLE_SCAN_2H")) {
         setError(
           "Vous avez déjà enregistré un achat chez ce commerçant il y a moins de 2 heures. " +
             "Pour éviter les abus, un seul scan est autorisé toutes les 2 heures pour un même commerçant."
@@ -206,7 +234,13 @@ export default function ScanInner() {
         return;
       }
 
-      // Autres erreurs Supabase : on affiche le message brut pour debug
+      if (msg.includes("RECEIPT_REQUIRED")) {
+        setError(
+          "Ticket requis pour les achats de plus de 50€. Merci d'ajouter une photo ou un PDF."
+        );
+        return;
+      }
+
       setError(
         `Erreur lors de l'enregistrement de la transaction : ${rpcError.message}`
       );
@@ -257,6 +291,7 @@ export default function ScanInner() {
         <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
           <h2>{merchantFound.name}</h2>
 
+          {/* Montant */}
           <input
             type="number"
             placeholder="Montant"
@@ -265,36 +300,42 @@ export default function ScanInner() {
             style={{ width: "100%", padding: 10, marginTop: 10 }}
           />
 
-          {/* Upload du ticket */}
-          <label
-            style={{
-              display: "block",
-              marginTop: 10,
-              fontWeight: 600,
-              marginBottom: 4,
-            }}
-          >
-            Ticket de caisse (photo ou PDF)
-          </label>
-          <input
-            type="file"
-            accept="image/*,application/pdf"
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
-              setReceiptFile(file);
-            }}
-            style={{ marginBottom: 8 }}
-          />
-          {parseFloat(amount || "0") > 50 && (
-            <p style={{ fontSize: 12, color: "#b45309" }}>
+          {/* Ticket de caisse */}
+          <div style={{ marginTop: 16 }}>
+            <label
+              style={{
+                display: "block",
+                fontWeight: 600,
+                marginBottom: 8,
+              }}
+            >
+              Ticket de caisse (photo ou PDF)
+            </label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setReceiptFile(file);
+              }}
+              style={{ marginBottom: 4 }}
+            />
+            <p
+              style={{
+                fontSize: 12,
+                color: "#92400E",
+                marginTop: 4,
+              }}
+            >
               Obligatoire pour les achats &gt; 50 €.
             </p>
-          )}
+          </div>
 
+          {/* Refuge */}
           <label
             style={{
               fontWeight: 600,
-              marginTop: 10,
+              marginTop: 16,
               display: "block",
             }}
           >
@@ -314,6 +355,7 @@ export default function ScanInner() {
             ))}
           </select>
 
+          {/* Don 50 / 100 % */}
           <label
             style={{
               display: "block",
@@ -372,15 +414,17 @@ export default function ScanInner() {
 
           <button
             type="submit"
+            disabled={isUploadingReceipt}
             style={{
               marginTop: 20,
               padding: "10px 20px",
               background: "#0A8F44",
               color: "white",
               borderRadius: 8,
+              opacity: isUploadingReceipt ? 0.7 : 1,
             }}
           >
-            Valider
+            {isUploadingReceipt ? "Envoi du ticket..." : "Valider"}
           </button>
         </form>
       )}
