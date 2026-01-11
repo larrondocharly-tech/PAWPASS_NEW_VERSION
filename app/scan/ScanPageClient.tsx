@@ -26,6 +26,8 @@ interface Merchant {
   cashback_rate?: number;
 }
 
+const RECEIPT_THRESHOLD = 50; // seuil à partir duquel on demande une validation admin
+
 export default function ScanPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -43,7 +45,8 @@ export default function ScanPageClient() {
   // =========================
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [minRedeemAmount, setMinRedeemAmount] = useState<number>(5);
+  const [minRedeemAmount, setMinRedeemAmount] = useState<number>(5); // utilisé pour l'info, plus pour le blocage
+  const [userId, setUserId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +65,7 @@ export default function ScanPageClient() {
   );
   const [remainingAmount, setRemainingAmount] = useState<string>("");
   const [remainingCashback, setRemainingCashback] = useState<number>(0);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
 
   // =========================
   // CHARGEMENT CONTEXTE (mode=redeem)
@@ -84,6 +88,8 @@ export default function ScanPageClient() {
           setLoading(false);
           return;
         }
+
+        setUserId(user.id);
 
         const { data: merchantData, error: merchantError } = await supabase
           .from("merchants")
@@ -124,6 +130,8 @@ export default function ScanPageClient() {
 
         if (walletData && typeof walletData.balance === "number") {
           setWalletBalance(walletData.balance);
+        } else {
+          setWalletBalance(0);
         }
       } finally {
         setLoading(false);
@@ -178,9 +186,7 @@ export default function ScanPageClient() {
 
         if (mode === "redeem") {
           const codeToUse = m || text;
-          router.push(
-            `/scan?mode=redeem&m=${encodeURIComponent(codeToUse)}`
-          );
+          router.push(`/scan?mode=redeem&m=${encodeURIComponent(codeToUse)}`);
         } else {
           const codeToUse = m || text;
           router.push(`/scan?m=${encodeURIComponent(codeToUse)}`);
@@ -208,31 +214,165 @@ export default function ScanPageClient() {
   // =========================
   // VALIDATION RÉDUCTION (crédits)
   // =========================
-  const handleValidateRedeem = () => {
+  const handleValidateRedeem = async () => {
     if (!redeemAmount) return;
 
     const raw = redeemAmount.replace(",", ".");
     const amount = Number(raw);
 
-    if (isNaN(amount) || amount <= 0) return;
+    if (isNaN(amount) || amount <= 0) {
+      setError("Veuillez saisir un montant de réduction valide.");
+      return;
+    }
 
-    if (amount < minRedeemAmount) {
+    if (walletBalance === null) {
+      setError("Votre cagnotte n'a pas pu être chargée.");
+      return;
+    }
+
+    // NOUVELLE RÈGLE : seuil sur la cagnotte, pas sur le montant de réduction
+    if (walletBalance < 5) {
       setError(
-        `Montant minimum pour utiliser vos crédits : ${minRedeemAmount.toFixed(
-          2
-        )} €`
+        "Vous devez avoir au moins 5 € dans votre cagnotte pour utiliser vos crédits."
       );
       return;
     }
 
-    if (walletBalance !== null && amount > walletBalance) {
+    if (amount > walletBalance) {
       setError("Montant supérieur à votre solde disponible.");
       return;
     }
 
+    if (!userId) {
+      setError("Utilisateur introuvable. Veuillez vous reconnecter.");
+      return;
+    }
+
     setError(null);
-    setRedeemStep("CONFIRM");
-    setShowRedeemConfirmation(true);
+    setActionLoading(true);
+
+    try {
+      // On débite immédiatement la cagnotte du montant de la réduction
+      const newBalance = Number((walletBalance - amount).toFixed(2));
+
+      const { error: walletUpdateError } = await supabase
+        .from("wallets")
+        .update({ balance: newBalance })
+        .eq("user_id", userId);
+
+      if (walletUpdateError) {
+        console.error(walletUpdateError);
+        setError("Erreur lors de la mise à jour de votre cagnotte.");
+        return;
+      }
+
+      setWalletBalance(newBalance);
+      setRedeemStep("CONFIRM");
+      setShowRedeemConfirmation(true);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // =========================
+  // VALIDATION DU MONTANT RESTANT À PAYER
+  // =========================
+  const handleConfirmRemaining = async () => {
+    const raw = remainingAmount.replace(",", ".");
+    const val = Number(raw);
+
+    if (isNaN(val) || val <= 0) {
+      setError("Veuillez saisir un montant restant valide.");
+      return;
+    }
+
+    if (!userId) {
+      setError("Utilisateur introuvable. Veuillez vous reconnecter.");
+      return;
+    }
+
+    if (!merchant || !merchant.id) {
+      setError("Commerçant introuvable.");
+      return;
+    }
+
+    setError(null);
+    setActionLoading(true);
+
+    try {
+      if (val >= RECEIPT_THRESHOLD) {
+        // CAS 1 : montant restant >= 50 €
+        // → on crée une transaction en attente de validation admin
+        const { error: txError } = await supabase.from("transactions").insert({
+          user_id: userId,
+          merchant_id: merchant.id,
+          amount: val,
+          cashback_amount: 0,
+          donation_amount: 0,
+          status: "pending_admin", // à adapter si ton statut est différent
+        });
+
+        if (txError) {
+          console.error(txError);
+          setError(
+            "Erreur lors de l'enregistrement de la transaction. Votre réduction a bien été appliquée, mais le cashback n'a pas pu être enregistré."
+          );
+          return;
+        }
+
+        // Ici, tu pourras plus tard rediriger vers une page d'upload de ticket si tu en as une
+        // ex: router.push(`/upload-ticket?amount=${val}&merchant=${merchant.id}`);
+      } else {
+        // CAS 2 : montant restant < 50 €
+        // → cashback automatique
+
+        const cashbackRate = merchant.cashback_rate ?? 2; // % par défaut si non défini
+        const cashback = Number(((val * cashbackRate) / 100).toFixed(2));
+        const donation = Number((cashback / 2).toFixed(2));
+
+        // 1) Crédite la cagnotte du cashback
+        let currentBalance = walletBalance ?? 0;
+        const newBalance = Number((currentBalance + cashback).toFixed(2));
+
+        const { error: walletUpdateError } = await supabase
+          .from("wallets")
+          .update({ balance: newBalance })
+          .eq("user_id", userId);
+
+        if (walletUpdateError) {
+          console.error(walletUpdateError);
+          setError(
+            "Erreur lors de la mise à jour de votre cagnotte après cashback."
+          );
+          return;
+        }
+
+        setWalletBalance(newBalance);
+
+        // 2) Enregistre la transaction
+        const { error: txError } = await supabase.from("transactions").insert({
+          user_id: userId,
+          merchant_id: merchant.id,
+          amount: val,
+          cashback_amount: cashback,
+          donation_amount: donation,
+          status: "validated_auto", // à adapter si besoin
+        });
+
+        if (txError) {
+          console.error(txError);
+          setError(
+            "Erreur lors de l'enregistrement de la transaction. La cagnotte a été mise à jour, mais le détail n'a pas été sauvegardé."
+          );
+          return;
+        }
+      }
+
+      setShowRedeemConfirmation(false);
+      router.push("/dashboard");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   // =========================
@@ -321,7 +461,15 @@ export default function ScanPageClient() {
         )}
 
         <p style={{ textAlign: "center", marginTop: -8 }}>
-          Montant minimum pour utiliser vos crédits :{" "}
+          Vous pouvez utiliser vos crédits dès que votre cagnotte atteint{" "}
+          <strong>5,00 €</strong>. Le montant de la réduction peut être
+          inférieur (1 €, 2 €, …) tant qu&apos;il ne dépasse pas votre
+          solde.
+        </p>
+
+        <p style={{ textAlign: "center", fontSize: 13, color: "#64748b" }}>
+          Paramètre marchand (info) : montant minimum recommandé pour une
+          réduction :{" "}
           <strong>{minRedeemAmount.toFixed(2)} €</strong>
         </p>
 
@@ -356,7 +504,7 @@ export default function ScanPageClient() {
             step="0.01"
             value={redeemAmount}
             onChange={(e) => setRedeemAmount(e.target.value)}
-            placeholder="Ex : 5.00"
+            placeholder="Ex : 1.00"
             style={{
               width: "100%",
               padding: "10px 12px",
@@ -369,6 +517,7 @@ export default function ScanPageClient() {
 
         <button
           onClick={handleValidateRedeem}
+          disabled={actionLoading}
           style={{
             marginTop: 16,
             padding: "10px 18px",
@@ -376,12 +525,13 @@ export default function ScanPageClient() {
             border: "none",
             fontWeight: 600,
             fontSize: 16,
-            cursor: "pointer",
+            cursor: actionLoading ? "not-allowed" : "pointer",
             backgroundColor: "#0f766e",
             color: "white",
+            opacity: actionLoading ? 0.7 : 1,
           }}
         >
-          Valider la réduction
+          {actionLoading ? "Validation..." : "Valider la réduction"}
         </button>
 
         {/* POPUP 1 : RÉDUCTION VALIDÉE */}
@@ -427,9 +577,9 @@ export default function ScanPageClient() {
                 Montant de la réduction :{" "}
                 <strong>
                   {redeemAmount
-                    ? Number(
-                        redeemAmount.replace(",", ".")
-                      ).toFixed(2)
+                    ? Number(redeemAmount.replace(",", ".")).toFixed(
+                        2
+                      )
                     : "0.00"}{" "}
                   €
                 </strong>
@@ -535,11 +685,21 @@ export default function ScanPageClient() {
                 </p>
               )}
 
+              {error && (
+                <p
+                  style={{
+                    color: "#b91c1c",
+                    fontSize: 13,
+                    marginBottom: 8,
+                  }}
+                >
+                  {error}
+                </p>
+              )}
+
               <button
-                onClick={() => {
-                  setShowRedeemConfirmation(false);
-                  router.push("/dashboard");
-                }}
+                onClick={handleConfirmRemaining}
+                disabled={actionLoading}
                 style={{
                   width: "100%",
                   padding: "10px 18px",
@@ -547,13 +707,16 @@ export default function ScanPageClient() {
                   border: "none",
                   fontWeight: 600,
                   fontSize: 16,
-                  cursor: "pointer",
+                  cursor: actionLoading ? "not-allowed" : "pointer",
                   backgroundColor: "#0f766e",
                   color: "white",
                   marginTop: 8,
+                  opacity: actionLoading ? 0.7 : 1,
                 }}
               >
-                Valider et retourner au tableau de bord
+                {actionLoading
+                  ? "Enregistrement..."
+                  : "Valider et retourner au tableau de bord"}
               </button>
             </div>
           </div>
