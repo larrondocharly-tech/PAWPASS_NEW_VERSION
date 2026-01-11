@@ -1,11 +1,10 @@
 // app/layout.tsx
 import "./globals.css";
 import type { ReactNode } from "react";
-import SiteFooter from "@/components/SiteFooter";
 import { Inter } from "next/font/google";
 import TopNav from "@/components/TopNav";
+import SiteFooter from "@/components/SiteFooter";
 
-// Police Inter
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
@@ -33,13 +32,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             flexDirection: "column",
           }}
         >
-          {/* HEADER GLOBAL : barre de menus */}
+          {/* BARRE DE MENU GLOBALE */}
           <TopNav />
 
           {/* CONTENU DES PAGES */}
           <main style={{ flex: 1 }}>{children}</main>
 
-          {/* FOOTER */}
+          {/* FOOTER GLOBAL */}
           <SiteFooter />
         </div>
       </body>
