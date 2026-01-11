@@ -121,23 +121,28 @@ export default function AdminTransactionsPage() {
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
-  const handleUpdateStatus = async (txId: string, newStatus: "approved" | "rejected") => {
+  // Validation / refus d'une transaction par l'admin
+  // -> appelle la fonction SQL admin_set_transaction_status
+  const handleUpdateStatus = async (
+    txId: string,
+    newStatus: "approved" | "rejected"
+  ) => {
     try {
       setActionLoadingId(txId);
       setError(null);
 
-      const { error } = await supabase
-        .from("transactions")
-        .update({ status: newStatus })
-        .eq("id", txId);
+      const { error } = await supabase.rpc("admin_set_transaction_status", {
+        p_tx_id: txId,
+        p_new_status: newStatus,
+      });
 
       if (error) {
-        console.error("Erreur mise à jour statut:", error);
+        console.error("Erreur mise à jour statut (RPC):", error);
         setError(error.message);
         return;
       }
 
-      // Met à jour localement sans recharger toute la page
+      // Met à jour localement sans recharger la page
       setTransactions((prev) =>
         prev.map((tx) =>
           tx.id === txId ? { ...tx, status: newStatus } : tx
@@ -262,7 +267,9 @@ export default function AdminTransactionsPage() {
                         <div style={{ display: "flex", gap: 8 }}>
                           <button
                             type="button"
-                            onClick={() => handleUpdateStatus(tx.id, "approved")}
+                            onClick={() =>
+                              handleUpdateStatus(tx.id, "approved")
+                            }
                             disabled={isLoadingRow}
                             style={{
                               padding: "6px 10px",
@@ -278,7 +285,9 @@ export default function AdminTransactionsPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleUpdateStatus(tx.id, "rejected")}
+                            onClick={() =>
+                              handleUpdateStatus(tx.id, "rejected")
+                            }
                             disabled={isLoadingRow}
                             style={{
                               padding: "6px 10px",
