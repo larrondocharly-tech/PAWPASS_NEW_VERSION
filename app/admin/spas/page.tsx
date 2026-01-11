@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabaseClient";
-import TopNav from "@/components/TopNav";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 import { addSpaAction } from "./addSpaAction";
 import { deleteSpaAction } from "./deleteSpaAction";
 
@@ -14,8 +14,30 @@ interface SpaRow {
   created_at: string;
 }
 
+// ----- Supabase server-side pour lire la session depuis les cookies -----
+function createSupabaseServerClient() {
+  const cookieStore = cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        // pour cette page on ne modifie pas les cookies → no-op
+        set() {},
+        remove() {},
+      },
+    }
+  );
+}
+
+// ----- Vérification admin côté serveur -----
 const requireAdmin = async () => {
-  const supabase = createClient();
+  const supabase = createSupabaseServerClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -24,11 +46,16 @@ const requireAdmin = async () => {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .maybeSingle();
+
+  if (error) {
+    console.error("Erreur chargement profil admin:", error);
+    redirect("/login");
+  }
 
   if (profile?.role?.toLowerCase() !== "admin") {
     redirect("/dashboard");
@@ -37,7 +64,7 @@ const requireAdmin = async () => {
   return supabase;
 };
 
-const fetchSpas = async (supabase: ReturnType<typeof createClient>) => {
+const fetchSpas = async (supabase: ReturnType<typeof createSupabaseServerClient>) => {
   const { data, error } = await supabase
     .from("spas")
     .select("id,name,city,created_at")
@@ -56,9 +83,9 @@ export default async function AdminSpasPage() {
 
   return (
     <div className="container">
-      <TopNav title="Admin PawPass" />
+      {/* plus de <TopNav /> ici : le header global vient de app/layout.tsx */}
 
-      {/* barre d’onglets admin globale */}
+      {/* barre d’onglets admin */}
       <nav
         style={{
           marginBottom: 24,
