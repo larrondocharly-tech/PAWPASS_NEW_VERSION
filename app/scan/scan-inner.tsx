@@ -177,7 +177,8 @@ export default function ScanInner() {
       return;
     }
 
-    // Succès : retour au tableau de bord
+    // Succès : message de remerciement puis retour au tableau de bord
+    alert("Merci pour votre don ! ❤️");
     router.push("/dashboard");
   };
 
