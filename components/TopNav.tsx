@@ -1,64 +1,321 @@
-// app/cgu/page.tsx
+"use client";
 
-export const dynamic = "force-dynamic";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { createClient } from "@/lib/supabaseClient";
 
-export default function CguPage() {
+const navItems = [
+  { href: "/", label: "Accueil" },
+  { href: "/scan", label: "Scanner" },
+  { href: "/dashboard", label: "Mon compte" },
+  { href: "/cgu", label: "CGU" },
+];
+
+export default function TopNav() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
+
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Erreur déconnexion", e);
+    } finally {
+      setPanelOpen(false);
+      router.push("/");
+    }
+  };
+
   return (
-    <main
-      className="container"
-      style={{ maxWidth: 800, margin: "24px auto", padding: "0 16px" }}
-    >
-      <section className="card" style={{ marginBottom: 24 }}>
-        <h1>Conditions Générales d&apos;Utilisation</h1>
-        <p className="helper">
-          Dernière mise à jour : 11/01/2026
-        </p>
-      </section>
+    <>
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          backgroundColor: "#FFFFFF",
+          borderBottom: "1px solid #E5E7EB",
+        }}
+      >
+        <nav
+          style={{
+            maxWidth: 960,
+            margin: "0 auto",
+            padding: "8px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+          }}
+        >
+          {/* Logo / titre */}
+          <Link
+            href="/"
+            style={{
+              fontWeight: 700,
+              fontSize: 20,
+              textDecoration: "none",
+              color: "#111827",
+            }}
+          >
+            PawPass
+          </Link>
 
-      <section className="card" style={{ marginBottom: 24 }}>
-        <h2>1. Objet</h2>
-        <p>
-          Ces Conditions Générales d&apos;Utilisation (CGU) encadrent
-          l&apos;utilisation de l&apos;application PawPass par les
-          utilisateurs particuliers et les commerçants partenaires.
-        </p>
-      </section>
+          {/* Liens + bouton "Mon compte" */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              fontSize: 14,
+            }}
+          >
+            {navItems.map((item) => {
+              const isActive =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname?.startsWith(item.href);
 
-      <section className="card" style={{ marginBottom: 24 }}>
-        <h2>2. Fonctionnement de PawPass</h2>
-        <p>
-          PawPass permet aux utilisateurs de cumuler du cashback chez les
-          commerçants partenaires et de reverser une partie de ce cashback à
-          des associations de protection animale.
-        </p>
-      </section>
+              // On ne rend pas le lien "Mon compte" en double : il sera dans le panneau
+              if (item.href === "/dashboard") {
+                return null;
+              }
 
-      <section className="card" style={{ marginBottom: 24 }}>
-        <h2>3. Responsabilités</h2>
-        <p>
-          PawPass met tout en œuvre pour assurer le bon fonctionnement du
-          service mais ne peut être tenu responsable des interruptions liées
-          à des problèmes techniques indépendants de sa volonté.
-        </p>
-      </section>
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    textDecoration: "none",
+                    border: isActive
+                      ? "1px solid #111827"
+                      : "1px solid transparent",
+                    backgroundColor: isActive ? "#111827" : "transparent",
+                    color: isActive ? "#FFFFFF" : "#374151",
+                    fontWeight: isActive ? 600 : 400,
+                    transition:
+                      "background-color 0.15s ease, color 0.15s ease",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
 
-      <section className="card" style={{ marginBottom: 24 }}>
-        <h2>4. Données personnelles</h2>
-        <p>
-          Les données collectées via l&apos;application sont utilisées
-          uniquement pour le fonctionnement du service et ne sont pas
-          revendues à des tiers. Vous pouvez demander la suppression de vos
-          données à tout moment.
-        </p>
-      </section>
+            {/* Bouton pour ouvrir le panneau "Mon compte" */}
+            <button
+              type="button"
+              onClick={() => setPanelOpen(true)}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 999,
+                border: "1px solid #111827",
+                backgroundColor: pathname?.startsWith("/dashboard")
+                  ? "#111827"
+                  : "#F9FAFB",
+                color: pathname?.startsWith("/dashboard")
+                  ? "#FFFFFF"
+                  : "#111827",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
+              Mon compte
+            </button>
+          </div>
+        </nav>
+      </header>
 
-      <section className="card" style={{ marginBottom: 24 }}>
-        <h2>5. Contact</h2>
-        <p>
-          Pour toute question liée aux présentes CGU, vous pouvez contacter
-          l&apos;équipe PawPass via l&apos;adresse indiquée dans l&apos;application.
-        </p>
-      </section>
-    </main>
+      {/* Panneau latéral "Mon compte" */}
+      {panelOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 60,
+            display: "flex",
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(15,23,42,0.35)",
+          }}
+          onClick={() => setPanelOpen(false)}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 400,
+              backgroundColor: "#FFFFFF",
+              height: "100%",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+              display: "flex",
+              flexDirection: "column",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header du panneau */}
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid #E5E7EB",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 18,
+                  fontWeight: 700,
+                }}
+              >
+                Mon compte
+              </h2>
+              <button
+                type="button"
+                onClick={() => setPanelOpen(false)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  fontSize: 20,
+                  cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Contenu du panneau */}
+            <div
+              style={{
+                padding: "12px 16px",
+                overflowY: "auto",
+                flex: 1,
+              }}
+            >
+              {/* Dashboard */}
+              <Link
+                href="/dashboard"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>🏠</span>
+                <span>Tableau de bord</span>
+              </Link>
+
+{/* QR Code */}
+              <Link
+  href="/merchant"
+  onClick={() => setPanelOpen(false)}
+  style={rowStyle}
+>
+  <span>📱</span>
+  <span>Mon QR Code</span>
+</Link>
+
+              <Link
+                href="/commerces"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>🛍️</span>
+                <span>Commerçants partenaires</span>
+              </Link>
+
+              <Link
+                href="/parrainage"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>🤝</span>
+                <span>Parrainer un ami</span>
+              </Link>
+
+              <Link
+                href="/comment-ca-marche"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>❓</span>
+                <span>Comment ça marche ?</span>
+              </Link>
+
+              <Link
+                href="/faq"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>📚</span>
+                <span>FAQ</span>
+              </Link>
+
+              <Link
+                href="/contact"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>✉️</span>
+                <span>Contact</span>
+              </Link>
+
+              <Link
+                href="/mentions-legales"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>📄</span>
+                <span>Mentions légales</span>
+              </Link>
+            </div>
+
+            {/* Bouton de déconnexion */}
+            <div
+              style={{
+                padding: "12px 16px 16px 16px",
+                borderTop: "1px solid #F3F4F6",
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "none",
+                  backgroundColor: "#FEE2E2",
+                  color: "#B91C1C",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Déconnexion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
+
+const rowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "10px 12px",
+  borderRadius: 10,
+  textDecoration: "none",
+  color: "#111827",
+  fontSize: 14,
+  fontWeight: 600,
+  marginBottom: 6,
+  backgroundColor: "#F9FAFB",
+};
