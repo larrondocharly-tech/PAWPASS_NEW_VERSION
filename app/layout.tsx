@@ -1,6 +1,7 @@
 // app/layout.tsx
 import "./globals.css";
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import TopNav from "@/components/TopNav";
 import SiteFooter from "@/components/SiteFooter";
@@ -11,19 +12,20 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
 });
 
-export const metadata = {
+// ⬇⬇⬇ IMPORTANT : ici on ajoute les icônes, dont l'icône iPhone
+export const metadata: Metadata = {
   title: "PawPass",
   description: "Cashback solidaire pour les clients et commerçants.",
-
-  // 🔥 AJOUT IMPORTANT POUR ICÔNE PWA
-  manifest: "/manifest.json",
-
-  // 🔥 Conseillé pour iPhone/iPad
   icons: {
-    icon: "/icon-192.png",
-    apple: "/icon-192.png",
-    shortcut: "/icon-192.png"
-  }
+    icon: [
+      { url: "/icon-192.png" },
+      { url: "/icon-512.png", sizes: "512x512" },
+    ],
+    apple: [
+      // utilisé par “Ajouter à l’écran d’accueil” sur iPhone
+      { url: "/icon-192.png" },
+    ],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
