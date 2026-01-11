@@ -1,60 +1,57 @@
-"use client";
+// app/faq/page.tsx
 
-import TopNav from '@/components/TopNav';
 export const dynamic = "force-dynamic";
-
-const faqItems = [
-  {
-    question: 'PawPass, c’est quoi ?',
-    answer:
-      'PawPass est une app de cashback solidaire qui permet de gagner des crédits et de soutenir des SPA partenaires.'
-  },
-  {
-    question: 'D’où vient l’argent du cashback ?',
-    answer:
-      'Le cashback est financé par les commerçants partenaires, comme une remise fidélité. PawPass ne prélève rien sur le compte bancaire des utilisateurs.'
-  },
-  {
-    question: 'Est-ce que PawPass est gratuit pour les utilisateurs ?',
-    answer:
-      'Oui, l’inscription et l’utilisation sont gratuites pour les clients (hors éventuelle offre premium à venir).'
-  },
-  {
-    question: 'Comment sont reversés les dons aux SPA ?',
-    answer:
-      'Les dons sont cumulés en crédits, puis PawPass organise un reversement périodique et transparent aux associations partenaires.'
-  },
-  {
-    question: 'Est-ce que je peux utiliser ma cagnotte en réduction ?',
-    answer:
-      'Oui, avec le mode « Avant paiement », vous pouvez transformer vos crédits en réduction immédiate chez les commerçants partenaires.'
-  },
-  {
-    question: 'Que se passe-t-il si mon coupon de réduction expire ?',
-    answer:
-      'Le coupon expiré n’est plus utilisable. Vos crédits restent disponibles tant que la réduction n’a pas été consommée.'
-  }
-];
 
 export default function FaqPage() {
   return (
-    <main className="container">
-      <TopNav title="FAQ" />
-
+    <main
+      className="container"
+      style={{ maxWidth: 800, margin: "24px auto", padding: "0 16px" }}
+    >
       <section className="card" style={{ marginBottom: 24 }}>
-        <h1>FAQ – Questions fréquentes</h1>
-        <p className="helper">Trouvez rapidement les réponses aux questions les plus courantes.</p>
+        <h1>FAQ - Questions fréquentes</h1>
+        <p className="helper">
+          Retrouvez ici les réponses aux questions les plus fréquentes sur
+          l&apos;utilisation de PawPass.
+        </p>
       </section>
 
-      <section className="grid" style={{ gap: 16 }}>
-        {faqItems.map((item) => (
-          <div key={item.question} className="card">
-            <h3 style={{ marginTop: 0 }}>{item.question}</h3>
-            <p className="helper" style={{ margin: 0 }}>
-              {item.answer}
-            </p>
-          </div>
-        ))}
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>Comment je gagne du cashback ?</h2>
+        <p>
+          En scannant le QR code d&apos;un commerçant partenaire avant de
+          payer ou en enregistrant vos achats via l&apos;application, vous
+          cumulez du cashback sur votre cagnotte PawPass.
+        </p>
+      </section>
+
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>Comment fonctionnent les dons aux SPA ?</h2>
+        <p>
+          À chaque achat, une partie de votre cashback peut être reversée à
+          une SPA partenaire. Vous choisissez l&apos;association et le
+          pourcentage reversé dans l&apos;application.
+        </p>
+      </section>
+
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>Quand puis-je utiliser ma cagnotte ?</h2>
+        <p>
+          Dès que votre cagnotte atteint le montant minimum défini dans
+          l&apos;application, vous pouvez l&apos;utiliser chez les
+          commerçants partenaires pour obtenir une réduction immédiate en
+          caisse.
+        </p>
+      </section>
+
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>Je suis commerçant, comment devenir partenaire ?</h2>
+        <p>
+          Vous pouvez faire une demande directement depuis l&apos;onglet
+          &laquo;&nbsp;Mon QR code&nbsp;&raquo; si vous avez un compte, ou
+          via la page &laquo;&nbsp;Devenir commerçant partenaire&nbsp;&raquo;.
+          Un administrateur validera ensuite votre demande.
+        </p>
       </section>
     </main>
   );
