@@ -27,6 +27,12 @@ interface ExistingApplication {
   created_at: string;
 }
 
+interface MerchantStats {
+  totalRevenue: number;
+  totalCashback: number;
+  txCount: number;
+}
+
 type ViewMode = "merchant" | "applicationStatus" | "form";
 
 export default function MerchantPage() {
@@ -38,6 +44,7 @@ export default function MerchantPage() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [merchant, setMerchant] = useState<MerchantInfo | null>(null);
+  const [stats, setStats] = useState<MerchantStats | null>(null);
   const [existingApp, setExistingApp] = useState<ExistingApplication | null>(
     null
   );
@@ -91,7 +98,7 @@ export default function MerchantPage() {
 
       setProfile(currentProfile);
 
-      // 2) Si déjà commerçant → on charge le commerce
+      // 2) Si déjà commerçant → on charge le commerce + stats
       if (
         currentProfile.role?.toLowerCase() === "merchant" &&
         currentProfile.merchant_id
@@ -112,10 +119,47 @@ export default function MerchantPage() {
         }
 
         if (merchantData) {
-          setMerchant(merchantData as MerchantInfo);
-          setLoading(false);
-          return; // on reste en "merchant view"
+          const m = merchantData as MerchantInfo;
+          setMerchant(m);
+
+          // Charger les stats de transactions pour ce commerce
+          const { data: txData, error: txError, count } = await supabase
+            .from("transactions")
+            .select("amount, cashback_amount, donation_amount", {
+              count: "exact",
+            })
+            .eq("merchant_id", m.id)
+            .eq("status", "approved"); // on compte uniquement les transactions validées
+
+          if (txError) {
+            console.error(txError);
+          } else {
+            const list = (txData ?? []) as {
+              amount: number | null;
+              cashback_amount: number | null;
+              donation_amount: number | null;
+            }[];
+
+            const totalRevenue = list.reduce((sum, tx) => {
+              return sum + (tx.amount ?? 0);
+            }, 0);
+
+            const totalCashback = list.reduce((sum, tx) => {
+              const cb = tx.cashback_amount ?? 0;
+              const don = tx.donation_amount ?? 0;
+              return sum + cb + don;
+            }, 0);
+
+            setStats({
+              totalRevenue,
+              totalCashback,
+              txCount: count ?? list.length,
+            });
+          }
         }
+
+        setLoading(false);
+        return; // on reste en "merchant view"
       }
 
       // 3) Sinon, vérifier s'il existe déjà une demande
@@ -215,6 +259,14 @@ export default function MerchantPage() {
     view = "applicationStatus";
   }
 
+  const formatEuro = (v: number) =>
+    v.toLocaleString("fr-FR", {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
   // ------------------------
   // RENDUS
   // ------------------------
@@ -249,7 +301,7 @@ export default function MerchantPage() {
       <div className="container">
         <div
           className="card"
-          style={{ maxWidth: 620, margin: "40px auto" }}
+          style={{ maxWidth: 800, margin: "40px auto" }}
         >
           <h1 style={{ fontSize: 24, marginBottom: 8 }}>
             Espace commerçant
@@ -263,46 +315,40 @@ export default function MerchantPage() {
           <div
             style={{
               display: "flex",
-              flexDirection: "column",
-              gap: 16,
+              flexWrap: "wrap",
+              gap: 24,
+              alignItems: "flex-start",
             }}
           >
-            <div>
-              <h2 style={{ fontSize: 18, marginBottom: 4 }}>
-                {merchant.name || "Commerce sans nom"}
-              </h2>
-              <p className="helper">
-                {merchant.city || "Ville inconnue"}
-                {merchant.address ? ` · ${merchant.address}` : ""}
-              </p>
-            </div>
+            {qrImageUrl && (
+              <div>
+                <img
+                  src={qrImageUrl}
+                  alt="QR code PawPass"
+                  style={{
+                    width: 220,
+                    height: 220,
+                    borderRadius: 16,
+                    backgroundColor: "#fff",
+                    padding: 8,
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.08)",
+                  }}
+                />
+              </div>
+            )}
 
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 24,
-                alignItems: "center",
-              }}
-            >
-              {qrImageUrl && (
-                <div>
-                  <img
-                    src={qrImageUrl}
-                    alt="QR code PawPass"
-                    style={{
-                      width: 220,
-                      height: 220,
-                      borderRadius: 16,
-                      backgroundColor: "#fff",
-                      padding: 8,
-                      boxShadow: "0 4px 10px rgba(0,0,0,0.08)",
-                    }}
-                  />
-                </div>
-              )}
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <div>
+                <h2 style={{ fontSize: 18, marginBottom: 4 }}>
+                  {merchant.name || "Commerce sans nom"}
+                </h2>
+                <p className="helper">
+                  {merchant.city || "Ville inconnue"}
+                  {merchant.address ? ` · ${merchant.address}` : ""}
+                </p>
+              </div>
 
-              <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ marginTop: 16 }}>
                 <p style={{ marginBottom: 8 }}>
                   <strong>Code commerçant :</strong>
                 </p>
@@ -347,6 +393,109 @@ export default function MerchantPage() {
               </div>
             </div>
           </div>
+
+          {/* --- STATISTIQUES PAWPASS --- */}
+          {stats && (
+            <div
+              style={{
+                marginTop: 24,
+                paddingTop: 16,
+                borderTop: "1px solid #e5e7eb",
+              }}
+            >
+              <h2 style={{ fontSize: 18, marginBottom: 12 }}>
+                Statistiques PawPass
+              </h2>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 16,
+                }}
+              >
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    backgroundColor: "#ecfdf3",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 13,
+                      marginBottom: 4,
+                      color: "#047857",
+                    }}
+                  >
+                    CA généré avec PawPass
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      margin: 0,
+                    }}
+                  >
+                    {formatEuro(stats.totalRevenue)}
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    backgroundColor: "#eff6ff",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 13,
+                      marginBottom: 4,
+                      color: "#1d4ed8",
+                    }}
+                  >
+                    Cashback + dons générés
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      margin: 0,
+                    }}
+                  >
+                    {formatEuro(stats.totalCashback)}
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    backgroundColor: "#fefce8",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 13,
+                      marginBottom: 4,
+                      color: "#92400e",
+                    }}
+                  >
+                    Nombre de transactions
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      margin: 0,
+                    }}
+                  >
+                    {stats.txCount}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
