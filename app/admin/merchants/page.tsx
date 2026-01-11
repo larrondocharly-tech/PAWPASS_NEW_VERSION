@@ -6,40 +6,35 @@ import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-interface Profile {
-  role: string | null;
-}
-
-interface ExistingApplication {
+interface MerchantRow {
   id: string;
-  status: string | null;
+  name: string | null;
+  city: string | null;
+  address: string | null;
+  qr_token: string | null;
+  cashback_rate: number | null;
+  is_active: boolean | null;
   created_at: string;
 }
 
-export default function MerchantPage() {
+export default function AdminMerchantsPage() {
   const supabase = createClient();
   const router = useRouter();
 
+  const [merchants, setMerchants] = useState<MerchantRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [existingApp, setExistingApp] = useState<ExistingApplication | null>(
-    null
-  );
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
-  const [businessName, setBusinessName] = useState("");
-  const [city, setCity] = useState("");
-  const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState("");
-  const [message, setMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
+  // =========================
+  // CHARGEMENT + VÉRIF ADMIN
+  // =========================
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setError(null);
 
+      // 1) Vérifier l'utilisateur
       const {
         data: { user },
         error: userError,
@@ -50,234 +45,213 @@ export default function MerchantPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
+      // 2) Vérifier le rôle admin
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .maybeSingle();
 
       if (profileError) {
-        setError(profileError.message);
+        console.error(profileError);
+        setError("Erreur lors du chargement du profil.");
         setLoading(false);
         return;
       }
 
-      setProfile({ role: profileData?.role ?? null });
-
-      // Si déjà merchant → on peut rediriger vers un dashboard commerçant
-      if (profileData?.role === "merchant") {
+      if (!profile || profile.role?.toLowerCase() !== "admin") {
         router.replace("/dashboard");
         return;
       }
 
-      // Vérifier s'il existe déjà une demande
-      const { data: appData, error: appError } = await supabase
-        .from("merchant_applications")
-        .select("id,status,created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // 3) Charger la liste des commerçants
+      const { data, error: merchantsError } = await supabase
+        .from("merchants")
+        .select(
+          "id,name,city,address,qr_token,cashback_rate,is_active,created_at"
+        )
+        .order("created_at", { ascending: false });
 
-      if (appError && appError.code !== "PGRST116") {
-        // PGRST116 = no rows found
-        console.error(appError);
+      if (merchantsError) {
+        console.error(merchantsError);
+        setError("Erreur lors du chargement des commerçants.");
+        setLoading(false);
+        return;
       }
 
-      if (appData) {
-        setExistingApp({
-          id: appData.id,
-          status: appData.status ?? null,
-          created_at: appData.created_at,
-        });
-      }
-
+      setMerchants((data ?? []) as MerchantRow[]);
       setLoading(false);
     };
 
     void load();
-  }, [supabase, router]);
+  }, [router, supabase]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // =========================
+  // MÀJ TAUX DE CASHBACK
+  // =========================
+  const handleUpdateCashback = async (id: string, newRateStr: string) => {
+    const newRate = Number(newRateStr.replace(",", "."));
+    if (isNaN(newRate) || newRate < 0) {
+      setError("Taux de cashback invalide.");
+      return;
+    }
+
     setError(null);
-    setSuccess(null);
+    setSavingId(id);
 
-    if (!businessName.trim() || !city.trim()) {
-      setError("Nom du commerce et ville sont obligatoires.");
+    const { error: updateError } = await supabase
+      .from("merchants")
+      .update({ cashback_rate: newRate })
+      .eq("id", id);
+
+    if (updateError) {
+      console.error(updateError);
+      setError("Erreur lors de la mise à jour du cashback.");
+      setSavingId(null);
       return;
     }
 
-    setSubmitting(true);
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      setError("Vous devez être connecté pour faire une demande.");
-      setSubmitting(false);
-      return;
-    }
-
-    // Insertion dans merchant_applications avec statut pending
-    const { error: insertError } = await supabase
-      .from("merchant_applications")
-      .insert({
-        user_id: user.id,
-        business_name: businessName.trim(),
-        city: city.trim(),
-        address: address.trim() || null,
-        phone: phone.trim() || null,
-        message: message.trim() || null,
-        status: "pending",
-      });
-
-    if (insertError) {
-      console.error(insertError);
-      setError("Erreur lors de l'envoi de la demande commerçant.");
-      setSubmitting(false);
-      return;
-    }
-
-    // Optionnel : marquer le profil comme "pending_merchant"
-    const { error: profileUpdateError } = await supabase
-      .from("profiles")
-      .update({ role: "pending_merchant" })
-      .eq("id", user.id);
-
-    if (profileUpdateError) {
-      console.error(profileUpdateError);
-    }
-
-    setSuccess("Votre demande a été envoyée. Elle est en attente de validation.");
-    setExistingApp({
-      id: "new",
-      status: "pending",
-      created_at: new Date().toISOString(),
-    });
-    setSubmitting(false);
+    setMerchants((prev) =>
+      prev.map((m) =>
+        m.id === id ? { ...m, cashback_rate: newRate } : m
+      )
+    );
+    setSavingId(null);
   };
 
-  if (loading) {
-    return (
-      <div className="container">
-        <div className="card">
-          <p className="helper">Chargement...</p>
-        </div>
-      </div>
-    );
-  }
+  // =========================
+  // ACTIVER / DÉSACTIVER
+  // =========================
+  const handleToggleActive = async (id: string, currentActive: boolean | null) => {
+    const nextActive = !currentActive;
 
-  // Si une demande existe déjà
-  if (existingApp) {
-    return (
-      <div className="container">
-        <div className="card">
-          <h2>Demande commerçant</h2>
-          <p className="helper">
-            Votre demande a été enregistrée le{" "}
-            {new Date(existingApp.created_at).toLocaleString("fr-FR")}.
-          </p>
-          <p style={{ marginTop: 8 }}>
-            Statut :{" "}
-            <strong>
-              {existingApp.status === "approved"
-                ? "Approuvée"
-                : existingApp.status === "rejected"
-                ? "Refusée"
-                : "En attente"}
-            </strong>
-          </p>
-          <p className="helper" style={{ marginTop: 12 }}>
-            Vous serez informé dès qu&apos;un administrateur aura traité votre
-            demande.
-          </p>
-        </div>
-      </div>
-    );
-  }
+    setError(null);
+    setSavingId(id);
 
-  // Formulaire de demande
+    const { error: updateError } = await supabase
+      .from("merchants")
+      .update({ is_active: nextActive })
+      .eq("id", id);
+
+    if (updateError) {
+      console.error(updateError);
+      setError("Erreur lors de la mise à jour de l'état du commerçant.");
+      setSavingId(null);
+      return;
+    }
+
+    setMerchants((prev) =>
+      prev.map((m) =>
+        m.id === id ? { ...m, is_active: nextActive } : m
+      )
+    );
+    setSavingId(null);
+  };
+
+  // =========================
+  // RENDU
+  // =========================
   return (
     <div className="container">
-      <div className="card">
-        <h2>Devenir commerçant partenaire</h2>
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h2>Gérer les commerçants</h2>
         <p className="helper">
-          Remplissez ce formulaire pour demander la création d&apos;un compte
-          commerçant. Un administrateur validera votre demande.
+          Activez/désactivez les comptes et ajustez le pourcentage de cashback.
         </p>
-
-        {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
-        {success && (
-          <p className="success" style={{ marginTop: 12 }}>{success}</p>
-        )}
-
-        <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
-          <label className="label" htmlFor="businessName">
-            Nom du commerce
-            <input
-              id="businessName"
-              className="input"
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              required
-            />
-          </label>
-
-          <label className="label" htmlFor="city">
-            Ville
-            <input
-              id="city"
-              className="input"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              required
-            />
-          </label>
-
-          <label className="label" htmlFor="address">
-            Adresse (optionnel)
-            <input
-              id="address"
-              className="input"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </label>
-
-          <label className="label" htmlFor="phone">
-            Téléphone (optionnel)
-            <input
-              id="phone"
-              className="input"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </label>
-
-          <label className="label" htmlFor="message">
-            Message (optionnel)
-            <textarea
-              id="message"
-              className="input"
-              style={{ minHeight: 80, resize: "vertical" }}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-            />
-          </label>
-
-          <button
-            className="button"
-            type="submit"
-            disabled={submitting}
-            style={{ marginTop: 16 }}
-          >
-            {submitting ? "Envoi en cours..." : "Envoyer ma demande"}
-          </button>
-        </form>
       </div>
+
+      {loading ? (
+        <div className="card">
+          <p className="helper">Chargement…</p>
+        </div>
+      ) : error ? (
+        <div className="card">
+          <p className="error">{error}</p>
+        </div>
+      ) : merchants.length === 0 ? (
+        <div className="card">
+          <p className="helper">Aucun commerçant trouvé.</p>
+        </div>
+      ) : (
+        <div className="card">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Ville</th>
+                <th>Adresse</th>
+                <th>QR / Code</th>
+                <th>Cashback (%)</th>
+                <th>Actif ?</th>
+                <th>Créé le</th>
+              </tr>
+            </thead>
+            <tbody>
+              {merchants.map((m) => {
+                const rateStr =
+                  typeof m.cashback_rate === "number"
+                    ? m.cashback_rate.toString()
+                    : "";
+                const active = !!m.is_active;
+
+                return (
+                  <tr key={m.id}>
+                    <td>{m.name ?? "—"}</td>
+                    <td>{m.city ?? "—"}</td>
+                    <td>{m.address ?? "—"}</td>
+                    <td style={{ fontSize: 12 }}>
+                      {m.qr_token ?? "—"}
+                    </td>
+                    <td>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <input
+                          defaultValue={rateStr}
+                          onBlur={(e) =>
+                            handleUpdateCashback(m.id, e.target.value)
+                          }
+                          style={{
+                            width: 70,
+                            padding: "4px 6px",
+                            borderRadius: 8,
+                            border: "1px solid #cbd5f5",
+                            fontSize: 13,
+                          }}
+                        />
+                        <span style={{ fontSize: 13 }}>%</span>
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={savingId === m.id}
+                        onClick={() =>
+                          handleToggleActive(m.id, m.is_active)
+                        }
+                      >
+                        {savingId === m.id
+                          ? "Mise à jour…"
+                          : active
+                          ? "Désactiver"
+                          : "Activer"}
+                      </button>
+                    </td>
+                    <td>
+                      {new Date(m.created_at).toLocaleString("fr-FR")}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
