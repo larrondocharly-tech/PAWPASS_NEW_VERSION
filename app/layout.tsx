@@ -1,45 +1,51 @@
 // app/layout.tsx
-import './globals.css';
-import type { ReactNode } from 'react';
-import SiteFooter from '@/components/SiteFooter';
-import { Inter } from 'next/font/google';
-import TopNav from '@/components/TopNav';
+import "./globals.css";
+import type { ReactNode } from "react";
+import SiteFooter from "@/components/SiteFooter";
+import { Inter } from "next/font/google";
+import TopNav from "@/components/TopNav";
 
 // Police Inter une seule fois
 const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-sans',
-  weight: ['400', '500', '600', '700'],
+  subsets: ["latin"],
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata = {
-  title: 'PawPass',
-  description: 'Cashback solidaire pour les clients et commerçants.',
+  title: "PawPass",
+  description: "Cashback solidaire pour les clients et commerçants.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={inter.variable}>
-      <body
-        style={{
-          margin: 0,
-          backgroundColor: '#FAFAF5',
-        }}
-      >
-        <div
-          style={{
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {/* HEADER GLOBAL */}
+      <body className="bg-[#FAFAF5] min-h-screen">
+        {/* --- VERSION MOBILE (téléphone) --- */}
+        <div className="block md:hidden min-h-screen flex flex-col">
+          {/* Header global */}
           <TopNav />
 
-          {/* CONTENU DES PAGES */}
-          <main style={{ flex: 1 }}>{children}</main>
+          {/* Contenu des pages */}
+          <main className="flex-1 px-4 py-4">
+            {children}
+          </main>
 
-          {/* FOOTER */}
+          {/* Footer */}
+          <SiteFooter />
+        </div>
+
+        {/* --- VERSION DESKTOP (ordi) --- */}
+        <div className="hidden md:flex min-h-screen flex-col">
+          {/* Header global */}
+          <TopNav />
+
+          {/* Contenu des pages, centré et plus large */}
+          <main className="flex-1 px-8 py-8 max-w-5xl w-full mx-auto">
+            {children}
+          </main>
+
+          {/* Footer */}
           <SiteFooter />
         </div>
       </body>
