@@ -1,88 +1,56 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-interface MerchantRow {
-  id: string;
-  name: string | null;
-  city: string | null;
-  address: string | null;
-  created_at: string;
-  is_active: boolean | null;
-  cashback_rate: number | null;
+interface Profile {
+  role: string | null;
 }
 
-const formatCashbackPercent = (rate: number | null) => {
-  const percent = Math.round((rate ?? 0) * 1000) / 10;
-  return percent.toString();
-};
+interface ExistingApplication {
+  id: string;
+  status: string | null;
+  created_at: string;
+}
 
-export default function AdminMerchantsPage() {
+export default function MerchantPage() {
   const supabase = createClient();
   const router = useRouter();
-  const pathname = usePathname();
 
-  const [merchants, setMerchants] = useState<MerchantRow[]>([]);
-  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [existingApp, setExistingApp] = useState<ExistingApplication | null>(
+    null
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const [businessName, setBusinessName] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
-  const [cashbackPercent, setCashbackPercent] = useState("5");
-
-  const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editCity, setEditCity] = useState("");
-  const [editAddress, setEditAddress] = useState("");
-  const [editCashbackPercent, setEditCashbackPercent] = useState("");
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
-
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchMerchants = async () => {
-    const { data, error: fetchError } = await supabase
-      .from("merchants")
-      .select("id,name,city,address,created_at,is_active,cashback_rate")
-      .order("created_at", { ascending: false });
-
-    if (fetchError) {
-      console.error(fetchError);
-      setError(fetchError.message);
-      return;
-    }
-
-    setMerchants(data ?? []);
-  };
+  const [phone, setPhone] = useState("");
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const loadAdminData = async () => {
-      setIsLoading(true);
+    const load = async () => {
+      setLoading(true);
       setError(null);
-      setHasCheckedAccess(false);
-      setIsAuthorized(false);
 
-      // 1) Vérifier la session
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (!user) {
-        setHasCheckedAccess(true);
+      if (userError || !user) {
         router.replace("/login");
         return;
       }
 
-      // 2) Vérifier le rôle admin
-      const { data: profile, error: profileError } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
@@ -90,455 +58,226 @@ export default function AdminMerchantsPage() {
 
       if (profileError) {
         setError(profileError.message);
-        setHasCheckedAccess(true);
-        setIsLoading(false);
+        setLoading(false);
         return;
       }
 
-      if (profile?.role?.toLowerCase() !== "admin") {
-        setHasCheckedAccess(true);
+      setProfile({ role: profileData?.role ?? null });
+
+      // Si déjà merchant → on peut rediriger vers un dashboard commerçant
+      if (profileData?.role === "merchant") {
         router.replace("/dashboard");
         return;
       }
 
-      // 3) Autorisé : charger les commerçants
-      setHasCheckedAccess(true);
-      setIsAuthorized(true);
+      // Vérifier s'il existe déjà une demande
+      const { data: appData, error: appError } = await supabase
+        .from("merchant_applications")
+        .select("id,status,created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      await fetchMerchants();
-      setIsLoading(false);
+      if (appError && appError.code !== "PGRST116") {
+        // PGRST116 = no rows found
+        console.error(appError);
+      }
+
+      if (appData) {
+        setExistingApp({
+          id: appData.id,
+          status: appData.status ?? null,
+          created_at: appData.created_at,
+        });
+      }
+
+      setLoading(false);
     };
 
-    void loadAdminData();
-  }, [router, supabase]);
+    void load();
+  }, [supabase, router]);
 
-  const handleAddMerchant = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+    setSuccess(null);
 
-    const trimmedName = name.trim();
-    const trimmedCity = city.trim();
-    const trimmedAddress = address.trim();
-    const percentValue = Number.parseFloat(cashbackPercent);
-
-    if (!trimmedName || !trimmedCity || Number.isNaN(percentValue)) {
-      setError(
-        "Veuillez renseigner un nom, une ville et un pourcentage valide."
-      );
+    if (!businessName.trim() || !city.trim()) {
+      setError("Nom du commerce et ville sont obligatoires.");
       return;
     }
 
-    setIsSubmitting(true);
+    setSubmitting(true);
 
-    const qrToken = crypto.randomUUID();
-    const cashbackRate = percentValue / 100;
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    const { error: insertError } = await supabase.from("merchants").insert({
-      qr_token: qrToken,
-      name: trimmedName,
-      city: trimmedCity,
-      address: trimmedAddress || null,
-      cashback_rate: cashbackRate,
-      is_active: true,
-    });
+    if (userError || !user) {
+      setError("Vous devez être connecté pour faire une demande.");
+      setSubmitting(false);
+      return;
+    }
+
+    // Insertion dans merchant_applications avec statut pending
+    const { error: insertError } = await supabase
+      .from("merchant_applications")
+      .insert({
+        user_id: user.id,
+        business_name: businessName.trim(),
+        city: city.trim(),
+        address: address.trim() || null,
+        phone: phone.trim() || null,
+        message: message.trim() || null,
+        status: "pending",
+      });
 
     if (insertError) {
       console.error(insertError);
-      setError(insertError.message);
-      setIsSubmitting(false);
+      setError("Erreur lors de l'envoi de la demande commerçant.");
+      setSubmitting(false);
       return;
     }
 
-    setName("");
-    setCity("");
-    setAddress("");
-    setCashbackPercent("5");
-    await fetchMerchants();
-    setIsSubmitting(false);
-  };
+    // Optionnel : marquer le profil comme "pending_merchant"
+    const { error: profileUpdateError } = await supabase
+      .from("profiles")
+      .update({ role: "pending_merchant" })
+      .eq("id", user.id);
 
-  const handleStartEdit = (merchant: MerchantRow) => {
-    setEditingId(merchant.id);
-    setEditName(merchant.name ?? "");
-    setEditCity(merchant.city ?? "");
-    setEditAddress(merchant.address ?? "");
-    setEditCashbackPercent(formatCashbackPercent(merchant.cashback_rate));
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setEditName("");
-    setEditCity("");
-    setEditAddress("");
-    setEditCashbackPercent("");
-  };
-
-  const handleSaveEdit = async (merchantId: string) => {
-    setError(null);
-
-    const trimmedName = editName.trim();
-    const trimmedCity = editCity.trim();
-    const trimmedAddress = editAddress.trim();
-    const percentValue = Number.parseFloat(editCashbackPercent);
-
-    if (!trimmedName || !trimmedCity || Number.isNaN(percentValue)) {
-      setError(
-        "Veuillez renseigner un nom, une ville et un pourcentage valide."
-      );
-      return;
+    if (profileUpdateError) {
+      console.error(profileUpdateError);
     }
 
-    setIsSavingEdit(true);
-
-    const cashbackRate = percentValue / 100;
-    const { error: updateError } = await supabase
-      .from("merchants")
-      .update({
-        name: trimmedName,
-        city: trimmedCity,
-        address: trimmedAddress || null,
-        cashback_rate: cashbackRate,
-      })
-      .eq("id", merchantId);
-
-    if (updateError) {
-      console.error(updateError);
-      setError(updateError.message);
-      setIsSavingEdit(false);
-      return;
-    }
-
-    await fetchMerchants();
-    setIsSavingEdit(false);
-    handleCancelEdit();
+    setSuccess("Votre demande a été envoyée. Elle est en attente de validation.");
+    setExistingApp({
+      id: "new",
+      status: "pending",
+      created_at: new Date().toISOString(),
+    });
+    setSubmitting(false);
   };
 
-  const handleToggleActive = async (merchant: MerchantRow) => {
-    setError(null);
-    setTogglingId(merchant.id);
-
-    const nextActive = !(merchant.is_active ?? true);
-
-    const { error: toggleError } = await supabase
-      .from("merchants")
-      .update({ is_active: nextActive })
-      .eq("id", merchant.id);
-
-    if (toggleError) {
-      console.error(toggleError);
-      setError(toggleError.message);
-      setTogglingId(null);
-      return;
-    }
-
-    await fetchMerchants();
-    setTogglingId(null);
-  };
-
-  const isMerchantsActive = pathname.startsWith("/admin/merchants");
-  const isApplicationsActive = pathname.startsWith(
-    "/admin/merchant-applications"
-  );
-
-  return (
-    <div className="container">
-      {/* TopNav est déjà dans app/layout.tsx */}
-
-      {!hasCheckedAccess ? (
-        <div className="card" style={{ marginBottom: 24 }}>
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="card">
           <p className="helper">Chargement...</p>
         </div>
-      ) : !isAuthorized ? (
-        error ? (
-          <div className="card" style={{ marginBottom: 24 }}>
-            <p className="error">{error}</p>
-          </div>
-        ) : null
-      ) : (
-        <>
-          {/* Onglets locaux : commerçants / demandes */}
-          <div
-            className="card"
-            style={{
-              marginBottom: 24,
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
+      </div>
+    );
+  }
+
+  // Si une demande existe déjà
+  if (existingApp) {
+    return (
+      <div className="container">
+        <div className="card">
+          <h2>Demande commerçant</h2>
+          <p className="helper">
+            Votre demande a été enregistrée le{" "}
+            {new Date(existingApp.created_at).toLocaleString("fr-FR")}.
+          </p>
+          <p style={{ marginTop: 8 }}>
+            Statut :{" "}
+            <strong>
+              {existingApp.status === "approved"
+                ? "Approuvée"
+                : existingApp.status === "rejected"
+                ? "Refusée"
+                : "En attente"}
+            </strong>
+          </p>
+          <p className="helper" style={{ marginTop: 12 }}>
+            Vous serez informé dès qu&apos;un administrateur aura traité votre
+            demande.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Formulaire de demande
+  return (
+    <div className="container">
+      <div className="card">
+        <h2>Devenir commerçant partenaire</h2>
+        <p className="helper">
+          Remplissez ce formulaire pour demander la création d&apos;un compte
+          commerçant. Un administrateur validera votre demande.
+        </p>
+
+        {error && <p className="error" style={{ marginTop: 12 }}>{error}</p>}
+        {success && (
+          <p className="success" style={{ marginTop: 12 }}>{success}</p>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ marginTop: 16 }}>
+          <label className="label" htmlFor="businessName">
+            Nom du commerce
+            <input
+              id="businessName"
+              className="input"
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
+              required
+            />
+          </label>
+
+          <label className="label" htmlFor="city">
+            Ville
+            <input
+              id="city"
+              className="input"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              required
+            />
+          </label>
+
+          <label className="label" htmlFor="address">
+            Adresse (optionnel)
+            <input
+              id="address"
+              className="input"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </label>
+
+          <label className="label" htmlFor="phone">
+            Téléphone (optionnel)
+            <input
+              id="phone"
+              className="input"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </label>
+
+          <label className="label" htmlFor="message">
+            Message (optionnel)
+            <textarea
+              id="message"
+              className="input"
+              style={{ minHeight: 80, resize: "vertical" }}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+            />
+          </label>
+
+          <button
+            className="button"
+            type="submit"
+            disabled={submitting}
+            style={{ marginTop: 16 }}
           >
-            <Link
-              className={isMerchantsActive ? "button" : "button secondary"}
-              href="/admin/merchants"
-            >
-              Tous les commerces
-            </Link>
-            <Link
-              className={
-                isApplicationsActive ? "button" : "button secondary"
-              }
-              href="/admin/merchant-applications"
-            >
-              Nouveaux commerçants
-            </Link>
-          </div>
-
-          <div className="card" style={{ marginBottom: 24 }}>
-            <h2>Gestion des commerçants</h2>
-            <p className="helper">
-              Ajoutez, modifiez ou désactivez les commerces partenaires.
-            </p>
-          </div>
-
-          {/* Formulaire d'ajout */}
-          <div className="card" style={{ marginBottom: 24 }}>
-            <h3>Ajouter un commerce partenaire</h3>
-            <form onSubmit={handleAddMerchant}>
-              <label className="label" htmlFor="merchantName">
-                Nom
-                <input
-                  id="merchantName"
-                  className="input"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  required
-                />
-              </label>
-
-              <label className="label" htmlFor="merchantCity">
-                Ville
-                <input
-                  id="merchantCity"
-                  className="input"
-                  value={city}
-                  onChange={(event) => setCity(event.target.value)}
-                  required
-                />
-              </label>
-
-              <label className="label" htmlFor="merchantAddress">
-                Adresse
-                <input
-                  id="merchantAddress"
-                  className="input"
-                  value={address}
-                  onChange={(event) => setAddress(event.target.value)}
-                />
-              </label>
-
-              <label className="label" htmlFor="merchantCashback">
-                Pourcentage de cashback
-                <input
-                  id="merchantCashback"
-                  className="input"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.1"
-                  value={cashbackPercent}
-                  onChange={(event) =>
-                    setCashbackPercent(event.target.value)
-                  }
-                  required
-                />
-              </label>
-
-              {error && <p className="error">{error}</p>}
-
-              <button
-                className="button"
-                type="submit"
-                disabled={isSubmitting}
-                style={{ marginTop: 12 }}
-              >
-                {isSubmitting ? "Ajout en cours..." : "Ajouter le commerce"}
-              </button>
-            </form>
-          </div>
-
-          {/* Liste des commerçants */}
-          <div className="card">
-            <h3>Liste des commerces</h3>
-            {isLoading ? (
-              <p className="helper">Chargement...</p>
-            ) : merchants.length === 0 ? (
-              <p className="helper">Aucun commerce trouvé.</p>
-            ) : (
-              <div style={{ display: "grid", gap: 16 }}>
-                {merchants.map((merchant) => {
-                  const isEditing = editingId === merchant.id;
-
-                  return (
-                    <div
-                      key={merchant.id}
-                      className="card"
-                      style={{ padding: 16 }}
-                    >
-                      {isEditing ? (
-                        <div style={{ display: "grid", gap: 12 }}>
-                          <label
-                            className="label"
-                            htmlFor={`edit-name-${merchant.id}`}
-                          >
-                            Nom
-                            <input
-                              id={`edit-name-${merchant.id}`}
-                              className="input"
-                              value={editName}
-                              onChange={(event) =>
-                                setEditName(event.target.value)
-                              }
-                              required
-                            />
-                          </label>
-
-                          <label
-                            className="label"
-                            htmlFor={`edit-city-${merchant.id}`}
-                          >
-                            Ville
-                            <input
-                              id={`edit-city-${merchant.id}`}
-                              className="input"
-                              value={editCity}
-                              onChange={(event) =>
-                                setEditCity(event.target.value)
-                              }
-                              required
-                            />
-                          </label>
-
-                          <label
-                            className="label"
-                            htmlFor={`edit-address-${merchant.id}`}
-                          >
-                            Adresse
-                            <input
-                              id={`edit-address-${merchant.id}`}
-                              className="input"
-                              value={editAddress}
-                              onChange={(event) =>
-                                setEditAddress(event.target.value)
-                              }
-                            />
-                          </label>
-
-                          <label
-                            className="label"
-                            htmlFor={`edit-cashback-${merchant.id}`}
-                          >
-                            Pourcentage de cashback
-                            <input
-                              id={`edit-cashback-${merchant.id}`}
-                              className="input"
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              step="0.1"
-                              value={editCashbackPercent}
-                              onChange={(event) =>
-                                setEditCashbackPercent(event.target.value)
-                              }
-                              required
-                            />
-                          </label>
-
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 12,
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <button
-                              className="button"
-                              type="button"
-                              onClick={() =>
-                                void handleSaveEdit(merchant.id)
-                              }
-                              disabled={isSavingEdit}
-                            >
-                              {isSavingEdit
-                                ? "Enregistrement..."
-                                : "Enregistrer"}
-                            </button>
-                            <button
-                              className="button secondary"
-                              type="button"
-                              onClick={handleCancelEdit}
-                              disabled={isSavingEdit}
-                            >
-                              Annuler
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <h4 style={{ marginTop: 0 }}>
-                            {merchant.name ?? "Commerce partenaire"}
-                          </h4>
-                          <p className="helper" style={{ marginTop: 4 }}>
-                            {merchant.city ?? "Ville non renseignée"}
-                          </p>
-                          {merchant.address && (
-                            <p
-                              className="helper"
-                              style={{ marginTop: 4, fontSize: "0.9rem" }}
-                            >
-                              {merchant.address}
-                            </p>
-                          )}
-                          <p style={{ marginTop: 8 }}>
-                            {formatCashbackPercent(
-                              merchant.cashback_rate
-                            )}
-                            % de cashback
-                          </p>
-                          <p className="helper" style={{ marginTop: 4 }}>
-                            {merchant.is_active ? "Actif" : "Inactif"}
-                          </p>
-
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 12,
-                              flexWrap: "wrap",
-                              marginTop: 12,
-                            }}
-                          >
-                            <button
-                              className="button secondary"
-                              type="button"
-                              onClick={() =>
-                                handleStartEdit(merchant)
-                              }
-                            >
-                              Modifier
-                            </button>
-                            <button
-                              className="button secondary"
-                              type="button"
-                              onClick={() =>
-                                void handleToggleActive(merchant)
-                              }
-                              disabled={togglingId === merchant.id}
-                            >
-                              {merchant.is_active
-                                ? "Désactiver"
-                                : "Réactiver"}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </>
-      )}
+            {submitting ? "Envoi en cours..." : "Envoyer ma demande"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
