@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabaseClient';
 import QRCodeCard from '@/components/QRCodeCard';
-import TopNav from '@/components/TopNav';
 import { formatCurrency } from '@/lib/utils';
+
 export const dynamic = "force-dynamic";
 
 interface MerchantProfile {
@@ -143,7 +143,7 @@ export default function MerchantPage() {
   if (!merchant) {
     return (
       <div className="container">
-        <TopNav title="Mon QR commerçant" />
+        <h1>Mon QR commerçant</h1>
         <div className="card">Chargement…</div>
       </div>
     );
@@ -151,25 +151,34 @@ export default function MerchantPage() {
 
   return (
     <div className="container">
-      <TopNav title="Mon QR commerçant" />
+      <h1>Mon QR commerçant</h1>
 
       <div className="grid grid-2">
-
         {/* ---------------- QR CODE ---------------- */}
         <QRCodeCard value={qrValue} title="QR PawPass · Commerçant" />
 
-        {/* ---------------- STATISTIQUES ---------------- */}
+        {/* ---------------- STATISTIQUES DU MOIS ---------------- */}
         <div className="card">
-          <h2>Statistiques</h2>
+          <h2>Statistiques du mois</h2>
 
           <p>
-            <strong>Transactions ce mois-ci :</strong>{" "}
+            <strong>Transactions :</strong>{" "}
             {stats?.month_transactions ?? 0}
           </p>
 
           <p>
-            <strong>Cashback distribué (mois) :</strong>{" "}
+            <strong>Volume généré :</strong>{" "}
+            {formatCurrency(stats?.month_volume ?? 0)}
+          </p>
+
+          <p>
+            <strong>Cashback distribué :</strong>{" "}
             {formatCurrency(stats?.month_cashback ?? 0)}
+          </p>
+
+          <p>
+            <strong>Dons vers les refuges :</strong>{" "}
+            {formatCurrency(stats?.month_donations ?? 0)}
           </p>
 
           <p>
@@ -201,22 +210,8 @@ export default function MerchantPage() {
         </div>
       </div>
 
-      {/* ---------------- RÉSUMÉ DU MOIS ---------------- */}
-      <div className="grid grid-2" style={{ marginTop: 24 }}>
-        <div className="card">
-          <h3>Résumé du mois</h3>
-          <p>
-            Vous avez généré environ{" "}
-            <strong>{formatCurrency(stats?.month_profit_pawpass ?? 0)}</strong>{" "}
-            de chiffre d’affaires grâce à PawPass.
-          </p>
-          <p className="helper">
-            Basé sur {formatCurrency(stats?.month_cashback ?? 0)} de cashback
-            distribué.
-          </p>
-        </div>
-
-        {/* ---------------- TOTAUX ---------------- */}
+      {/* ---------------- TOTAUX CUMULÉS ---------------- */}
+      <div style={{ marginTop: 24 }}>
         <div className="card">
           <h3>Totaux cumulés</h3>
 
@@ -238,6 +233,11 @@ export default function MerchantPage() {
           <p>
             <strong>Dons totaux :</strong>{" "}
             {formatCurrency(stats?.total_donations ?? 0)}
+          </p>
+
+          <p>
+            <strong>CA total PawPass :</strong>{" "}
+            {formatCurrency(stats?.total_profit_pawpass ?? 0)}
           </p>
         </div>
       </div>
