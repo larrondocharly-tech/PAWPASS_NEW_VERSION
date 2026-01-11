@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
-import TopNav from "@/components/TopNav";
 
 export const dynamic = "force-dynamic";
 
@@ -245,7 +244,7 @@ export default function AdminMerchantsPage() {
 
   return (
     <div className="container">
-      <TopNav title="Admin PawPass" />
+      {/* TopNav est déjà dans app/layout.tsx */}
 
       {!hasCheckedAccess ? (
         <div className="card" style={{ marginBottom: 24 }}>

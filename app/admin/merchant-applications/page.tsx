@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
-import TopNav from "@/components/TopNav";
 
 export const dynamic = "force-dynamic";
 
@@ -178,7 +177,7 @@ export default function AdminMerchantApplicationsPage() {
 
   return (
     <div className="container">
-      <TopNav title="Demandes commerçants" />
+      {/* TopNav est déjà dans app/layout.tsx */}
 
       <div className="card" style={{ marginBottom: 24 }}>
         <h2>Demandes commerçants</h2>

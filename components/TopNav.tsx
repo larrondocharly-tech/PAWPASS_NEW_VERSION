@@ -3,11 +3,9 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createClient } from '@/lib/supabaseClient';
 import AccountMenuOverlay from '@/components/AccountMenuOverlay';
-
-type AppRole = 'user' | 'merchant' | 'admin' | null;
 
 interface TopNavProps {
   title?: string;
@@ -18,49 +16,35 @@ export default function TopNav({ title }: TopNavProps) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [role, setRole] = useState<AppRole>(null);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
-  // Charge le rôle depuis la table profiles
-  useEffect(() => {
-    const loadRole = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+  // ==========================
+  //   Pages "privées" = user connecté
+  // ==========================
+const isPrivatePage =
+  pathname.startsWith('/dashboard') ||
+  pathname.startsWith('/scan') ||
+  pathname.startsWith('/transactions') ||
+  pathname.startsWith('/admin') ||
+  pathname.startsWith('/merchant');
 
-      if (!user) {
-        setRole(null);
-        return;
-      }
 
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Erreur chargement rôle :', error);
-        setRole(null);
-      } else {
-        setRole((profile?.role as AppRole) ?? null);
-      }
-    };
-
-    loadRole();
-  }, [supabase]);
-
-  // Déconnexion
+  // ==========================
+  //   Déconnexion
+  // ==========================
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut();
-      router.push('/login');
+      setIsAccountMenuOpen(false);
+      router.push('/'); // retour page d'accueil
     } catch (e) {
       console.error('Erreur déconnexion :', e);
     }
   };
 
-  // liens principaux
+  // ==========================
+  //   Navigation principale
+  // ==========================
   const navItems = [
     { href: '/dashboard', label: 'Tableau de bord' },
     { href: '/scan', label: 'Scanner' },
@@ -72,7 +56,7 @@ export default function TopNav({ title }: TopNavProps) {
     return pathname === href || pathname.startsWith(href + '/');
   };
 
-  // Rôle pour l'overlay : on force "client" pour avoir le menu complet partout
+  // Ton overlay est actuellement en mode "client"
   const overlayRole: 'client' | 'merchant' = 'client';
 
   return (
@@ -148,7 +132,7 @@ export default function TopNav({ title }: TopNavProps) {
             </div>
           </Link>
 
-          {/* Nav + bouton Menu compte */}
+          {/* Nav + (éventuellement) bouton Menu */}
           <div
             style={{
               display: 'flex',
@@ -158,7 +142,6 @@ export default function TopNav({ title }: TopNavProps) {
               fontWeight: 500,
             }}
           >
-            {/* Liens de navigation */}
             <nav
               style={{
                 display: 'flex',
@@ -184,35 +167,43 @@ export default function TopNav({ title }: TopNavProps) {
               ))}
             </nav>
 
-            {/* Bouton pour ouvrir le menu compte (déconnexion, etc.) */}
-            <button
-              type="button"
-              onClick={() => setIsAccountMenuOpen(true)}
-              style={{
-                borderRadius: 999,
-                border: '1px solid #E5E7EB',
-                padding: '6px 14px',
-                fontSize: 13,
-                fontWeight: 500,
-                color: '#374151',
-                backgroundColor: '#F9FAFB',
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
-                cursor: 'pointer',
-              }}
-            >
-              Menu
-            </button>
+            {/* BOUTON MENU :
+                - affiché UNIQUEMENT sur les pages privées
+                - donc uniquement quand, dans ta logique, le user est "connecté" */}
+            {isPrivatePage && (
+              <button
+                type="button"
+                onClick={() => setIsAccountMenuOpen(true)}
+                style={{
+                  borderRadius: 999,
+                  border: '1px solid #E5E7EB',
+                  padding: '6px 14px',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: '#374151',
+                  backgroundColor: '#F9FAFB',
+                  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+                  cursor: 'pointer',
+                }}
+              >
+                Menu
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Overlay du compte (à droite, avec déconnexion) */}
-      <AccountMenuOverlay
-        isOpen={isAccountMenuOpen}
-        onClose={() => setIsAccountMenuOpen(false)}
-        role={overlayRole}
-        onSignOut={handleSignOut}
-      />
+      {/* Overlay compte :
+          - rendu uniquement sur les pages privées
+          - contient le bouton Déconnexion -> retour à "/" */}
+      {isPrivatePage && (
+        <AccountMenuOverlay
+          isOpen={isAccountMenuOpen}
+          onClose={() => setIsAccountMenuOpen(false)}
+          role={overlayRole}
+          onSignOut={handleSignOut}
+        />
+      )}
     </>
   );
 }
