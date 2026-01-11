@@ -33,7 +33,10 @@ export default function ScanInner() {
   // Choix limité : 50% ou 100%
   const [donationPercent, setDonationPercent] = useState<50 | 100>(50);
 
-  // errorMsg: erreurs de validation (montant vide, SPA non choisie, etc.)
+  // Fichier ticket (photo / PDF)
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+
+  // errorMsg: erreurs de validation (montant vide, SPA non choisie, ticket manquant, etc.)
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // error: erreurs venant de Supabase (RPC / trigger 2h / autres)
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +135,16 @@ export default function ScanInner() {
       return;
     }
 
+    const numericAmount = parseFloat(amount);
+
+    // Règle : au-delà de 50€, ticket obligatoire
+    if (numericAmount > 50 && !receiptFile) {
+      setErrorMsg(
+        "Pour tout achat supérieur à 50 €, le ticket de caisse est obligatoire. Ajoutez une photo ou un PDF."
+      );
+      return;
+    }
+
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) {
       router.push(
@@ -140,18 +153,41 @@ export default function ScanInner() {
       return;
     }
 
+    // 1) Upload du ticket si présent
+    let receiptUrl: string | null = null;
+
+    if (receiptFile) {
+      const fileExt = receiptFile.name.split(".").pop() ?? "jpg";
+      const fileName = `${auth.user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `receipts/${fileName}`; // dossier dans le bucket "receipts"
+
+      const { error: uploadError } = await supabase.storage
+        .from("receipts") // <-- adapte le nom du bucket si besoin
+        .upload(filePath, receiptFile);
+
+      if (uploadError) {
+        console.error(uploadError);
+        setErrorMsg(
+          "Impossible d'envoyer le ticket. Vérifiez le fichier et réessayez."
+        );
+        return;
+      }
+
+      // On stocke simplement le chemin dans le bucket
+      receiptUrl = filePath;
+    }
+
+    // 2) Appel de la fonction SQL avec le chemin du ticket (ou null)
     const { error: rpcError } = await supabase.rpc(
       "apply_cashback_transaction",
       {
         p_merchant_code: merchantCode,
-        p_amount: parseFloat(amount),
+        p_amount: numericAmount,
         p_spa_id: selectedSpaId,
         p_use_wallet: false,
         p_wallet_spent: 0,
         p_donation_percent: donationPercent,
-        // très important : on envoie explicitement null pour choisir
-        // la version de la fonction qui a p_receipt_image_url
-        p_receipt_image_url: null,
+        p_receipt_image_url: receiptUrl, // <-- maintenant on envoie le ticket
       }
     );
 
@@ -228,6 +264,32 @@ export default function ScanInner() {
             onChange={(e) => setAmount(e.target.value)}
             style={{ width: "100%", padding: 10, marginTop: 10 }}
           />
+
+          {/* Upload du ticket */}
+          <label
+            style={{
+              display: "block",
+              marginTop: 10,
+              fontWeight: 600,
+              marginBottom: 4,
+            }}
+          >
+            Ticket de caisse (photo ou PDF)
+          </label>
+          <input
+            type="file"
+            accept="image/*,application/pdf"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              setReceiptFile(file);
+            }}
+            style={{ marginBottom: 8 }}
+          />
+          {parseFloat(amount || "0") > 50 && (
+            <p style={{ fontSize: 12, color: "#b45309" }}>
+              Obligatoire pour les achats &gt; 50 €.
+            </p>
+          )}
 
           <label
             style={{
