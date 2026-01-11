@@ -1,9 +1,10 @@
 // app/layout.tsx
 import "./globals.css";
 import type { ReactNode } from "react";
-import SiteFooter from "@/components/SiteFooter";
 import { Inter } from "next/font/google";
+
 import TopNav from "@/components/TopNav";
+import SiteFooter from "@/components/SiteFooter";
 
 // Police Inter une seule fois
 const inter = Inter({
@@ -15,8 +16,6 @@ const inter = Inter({
 export const metadata = {
   title: "PawPass",
   description: "Cashback solidaire pour les clients et commerçants.",
-  manifest: "/manifest.webmanifest",
-  themeColor: "#00c896",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -31,7 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <SiteFooter />
         </div>
 
-        {/* --- VERSION DESKTOP --- */}
+        {/* --- VERSION DESKTOP (ordi) --- */}
         <div className="hidden md:flex min-h-screen flex-col">
           <TopNav />
           <main className="flex-1 px-8 py-8 max-w-5xl w-full mx-auto">
