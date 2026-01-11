@@ -15,39 +15,31 @@ const inter = Inter({
 export const metadata = {
   title: "PawPass",
   description: "Cashback solidaire pour les clients et commerçants.",
+  manifest: "/manifest.webmanifest",
+  themeColor: "#00c896",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={inter.variable}>
       <body className="bg-[#FAFAF5] min-h-screen">
-        {/* --- VERSION MOBILE (téléphone) --- */}
+
+        {/* --- VERSION MOBILE --- */}
         <div className="block md:hidden min-h-screen flex flex-col">
-          {/* Header global */}
           <TopNav />
-
-          {/* Contenu des pages */}
-          <main className="flex-1 px-4 py-4">
-            {children}
-          </main>
-
-          {/* Footer */}
+          <main className="flex-1 px-4 py-4">{children}</main>
           <SiteFooter />
         </div>
 
-        {/* --- VERSION DESKTOP (ordi) --- */}
+        {/* --- VERSION DESKTOP --- */}
         <div className="hidden md:flex min-h-screen flex-col">
-          {/* Header global */}
           <TopNav />
-
-          {/* Contenu des pages, centré et plus large */}
           <main className="flex-1 px-8 py-8 max-w-5xl w-full mx-auto">
             {children}
           </main>
-
-          {/* Footer */}
           <SiteFooter />
         </div>
+
       </body>
     </html>
   );
