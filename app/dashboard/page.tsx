@@ -1,3 +1,4 @@
+// app/dashboard/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -100,7 +101,8 @@ export default function DashboardPage() {
       }, 0);
 
       const totalDon = list.reduce((sum, tx) => {
-        const v = typeof tx.donation_amount === "number" ? tx.donation_amount : 0;
+        const v =
+          typeof tx.donation_amount === "number" ? tx.donation_amount : 0;
         return sum + v;
       }, 0);
 
