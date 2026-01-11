@@ -1,143 +1,64 @@
-"use client";
+// app/cgu/page.tsx
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabaseClient";
+export const dynamic = "force-dynamic";
 
-export default function TopNav() {
-  const pathname = usePathname();
-  const supabase = createClient();
-
-  const [role, setRole] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadProfile = async () => {
-      setLoading(true);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setRole(null);
-        setLoading(false);
-        return;
-      }
-
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!error && profile?.role) {
-        setRole(profile.role.toLowerCase());
-      } else {
-        setRole(null);
-      }
-
-      setLoading(false);
-    };
-
-    void loadProfile();
-  }, [supabase]);
-
-  const linkStyle = (active: boolean): React.CSSProperties => ({
-    textDecoration: "none",
-    fontSize: 14,
-    fontWeight: active ? 600 : 400,
-    color: active ? "#0f172a" : "#4b5563",
-  });
-
+export default function CguPage() {
   return (
-    <nav
-      style={{
-        width: "100%",
-        padding: "12px 24px",
-        borderBottom: "1px solid #e5e7eb",
-        backgroundColor: "white",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        position: "sticky",
-        top: 0,
-        zIndex: 30,
-      }}
+    <main
+      className="container"
+      style={{ maxWidth: 800, margin: "24px auto", padding: "0 16px" }}
     >
-      {/* Logo / titre */}
-      <Link href="/" style={{ textDecoration: "none" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <img
-            src="/pawpass-logo.png"
-            alt="PawPass"
-            style={{ width: 32, height: 32 }}
-          />
-          <span
-            style={{
-              fontSize: 18,
-              fontWeight: 600,
-              color: "#111827",
-              letterSpacing: -0.3,
-            }}
-          >
-            PawPass
-          </span>
-        </div>
-      </Link>
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h1>Conditions Générales d&apos;Utilisation</h1>
+        <p className="helper">
+          Dernière mise à jour : 11/01/2026
+        </p>
+      </section>
 
-      {/* Liens de navigation */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 20,
-        }}
-      >
-        <Link href="/dashboard" style={linkStyle(pathname === "/dashboard")}>
-          Tableau de bord
-        </Link>
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>1. Objet</h2>
+        <p>
+          Ces Conditions Générales d&apos;Utilisation (CGU) encadrent
+          l&apos;utilisation de l&apos;application PawPass par les
+          utilisateurs particuliers et les commerçants partenaires.
+        </p>
+      </section>
 
-        <Link href="/scan" style={linkStyle(pathname.startsWith("/scan"))}>
-          Scanner
-        </Link>
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>2. Fonctionnement de PawPass</h2>
+        <p>
+          PawPass permet aux utilisateurs de cumuler du cashback chez les
+          commerçants partenaires et de reverser une partie de ce cashback à
+          des associations de protection animale.
+        </p>
+      </section>
 
-        <Link
-          href="/history"
-          style={linkStyle(pathname.startsWith("/history"))}
-        >
-          Historique
-        </Link>
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>3. Responsabilités</h2>
+        <p>
+          PawPass met tout en œuvre pour assurer le bon fonctionnement du
+          service mais ne peut être tenu responsable des interruptions liées
+          à des problèmes techniques indépendants de sa volonté.
+        </p>
+      </section>
 
-        {/* ----- NOUVEL ONGLET : MON QR CODE (comptes marchands seulement) ----- */}
-        {!loading && role === "merchant" && (
-          <Link
-            href="/merchant"
-            style={{
-              ...linkStyle(pathname.startsWith("/merchant")),
-              color: "#0f766e", // un peu plus vert pour le différencier
-            }}
-          >
-            Mon QR code
-          </Link>
-        )}
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>4. Données personnelles</h2>
+        <p>
+          Les données collectées via l&apos;application sont utilisées
+          uniquement pour le fonctionnement du service et ne sont pas
+          revendues à des tiers. Vous pouvez demander la suppression de vos
+          données à tout moment.
+        </p>
+      </section>
 
-        {/* Bouton Menu existant (tu peux l'adapter plus tard) */}
-        <button
-          type="button"
-          style={{
-            fontSize: 14,
-            padding: "6px 12px",
-            borderRadius: 999,
-            border: "1px solid #e5e7eb",
-            backgroundColor: "#f9fafb",
-            cursor: "pointer",
-          }}
-        >
-          Menu
-        </button>
-      </div>
-    </nav>
+      <section className="card" style={{ marginBottom: 24 }}>
+        <h2>5. Contact</h2>
+        <p>
+          Pour toute question liée aux présentes CGU, vous pouvez contacter
+          l&apos;équipe PawPass via l&apos;adresse indiquée dans l&apos;application.
+        </p>
+      </section>
+    </main>
   );
 }
