@@ -80,7 +80,7 @@ export default function AdminTransactionsPage() {
     });
   };
 
-  // On gère aussi les anciens statuts "validated" / "refused"
+  // On gère aussi d'anciens statuts "validated" / "refused"
   const translateStatus = (status: string | null) => {
     switch (status) {
       case "approved":
@@ -109,6 +109,7 @@ export default function AdminTransactionsPage() {
     }
   };
 
+  // Voir le ticket
   const handleViewReceipt = async (tx: Transaction) => {
     if (!tx.receipt_image_url) return;
 
@@ -125,6 +126,7 @@ export default function AdminTransactionsPage() {
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
+  // Validation / refus par l'admin
   const handleUpdateStatus = async (
     txId: string,
     newStatus: "approved" | "rejected"
@@ -144,6 +146,7 @@ export default function AdminTransactionsPage() {
         return;
       }
 
+      // Mise à jour locale du statut
       setTransactions((prev) =>
         prev.map((tx) =>
           tx.id === txId ? { ...tx, status: newStatus } : tx
@@ -204,8 +207,21 @@ export default function AdminTransactionsPage() {
             </thead>
             <tbody>
               {transactions.map((tx) => {
-                const isPending = (tx.status ?? "pending") === "pending";
+                const status = tx.status ?? "pending";
+                const isPending = status === "pending";
                 const isLoadingRow = actionLoadingId === tx.id;
+
+                // IMPORTANT :
+                // - si la transaction n'est PAS validée (pending / refusée),
+                //   on affiche 0 € en cashback et don, même si un montant théorique existe.
+                const effectiveCashback =
+                  status === "approved" || status === "validated"
+                    ? tx.cashback_amount
+                    : 0;
+                const effectiveDonation =
+                  status === "approved" || status === "validated"
+                    ? tx.donation_amount
+                    : 0;
 
                 return (
                   <tr key={tx.id} style={{ borderTop: "1px solid #eee" }}>
@@ -222,45 +238,44 @@ export default function AdminTransactionsPage() {
                       {formatEuro(tx.amount)}
                     </td>
                     <td style={{ padding: 12 }}>
-                      {formatEuro(tx.cashback_amount)}
+                      {formatEuro(effectiveCashback)}
                     </td>
                     <td style={{ padding: 12 }}>
-                      {formatEuro(tx.donation_amount)}
+                      {formatEuro(effectiveDonation)}
                     </td>
                     <td style={{ padding: 12 }}>
-                      {tx.receipt_image_url ? (
-                        <button
-                          type="button"
-                          onClick={() => handleViewReceipt(tx)}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: 6,
-                            border: "1px solid #ccc",
-                            background: "#f9fafb",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Voir le ticket
-                        </button>
-                      ) : (
-                        <span style={{ color: "#6b7280" }}>Aucun</span>
-                      )}
-                    </td>
+  {tx.receipt_image_url ? (
+    <button
+      type="button"
+      onClick={() => handleViewReceipt(tx)}
+      style={{
+        padding: "6px 10px",
+        borderRadius: 6,
+        border: "1px solid #ccc",
+        background: "#f9fafb",
+        cursor: "pointer",
+      }}
+    >
+      Voir le ticket
+    </button>
+  ) : (
+    <span style={{ color: "#6b7280" }}>Aucun</span>
+  )}
+</td>
+
                     <td style={{ padding: 12 }}>
                       <span
                         style={{
                           padding: "3px 8px",
                           borderRadius: 999,
                           backgroundColor: "#f9fafb",
-                          color: statusColor(tx.status ?? "pending"),
-                          border: `1px solid ${statusColor(
-                            tx.status ?? "pending"
-                          )}`,
+                          color: statusColor(status),
+                          border: `1px solid ${statusColor(status)}`,
                           fontSize: 12,
                           fontWeight: 600,
                         }}
                       >
-                        {translateStatus(tx.status ?? "pending")}
+                        {translateStatus(status)}
                       </span>
                     </td>
                     <td style={{ padding: 12 }}>
