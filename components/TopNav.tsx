@@ -9,6 +9,8 @@ const navItems = [
   // Accueil pointe maintenant vers le dashboard
   { href: "/dashboard", label: "Accueil" },
   { href: "/scan", label: "Scanner" },
+  // Bouton direct vers la page de validation commerçant
+  { href: "/merchant/transactions", label: "Transactions" },
   // On garde cette entrée même si elle n'est pas rendue directement
   { href: "/dashboard", label: "Mon compte" },
 ];
@@ -219,6 +221,16 @@ export default function TopNav() {
               >
                 <span>📱</span>
                 <span>Mon QR Code</span>
+              </Link>
+
+              {/* Transactions commerçant */}
+              <Link
+                href="/merchant/transactions"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>📊</span>
+                <span>Transactions à valider</span>
               </Link>
 
               <Link
