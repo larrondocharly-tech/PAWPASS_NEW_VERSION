@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
 const navItems = [
-  { href: "/", label: "Accueil" },
+  // Accueil pointe maintenant vers le dashboard
+  { href: "/dashboard", label: "Accueil" },
   { href: "/scan", label: "Scanner" },
+  // On garde cette entrée même si elle n'est pas rendue directement
   { href: "/dashboard", label: "Mon compte" },
 ];
 
@@ -51,9 +53,9 @@ export default function TopNav() {
             gap: 16,
           }}
         >
-          {/* Logo / titre */}
+          {/* Logo / titre → renvoie désormais vers le dashboard */}
           <Link
-            href="/"
+            href="/dashboard"
             style={{
               fontWeight: 700,
               fontSize: 20,
@@ -75,18 +77,18 @@ export default function TopNav() {
           >
             {navItems.map((item) => {
               const isActive =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname?.startsWith(item.href);
+                pathname === item.href ||
+                pathname?.startsWith(item.href + "/") ||
+                pathname?.startsWith(item.href + "?");
 
               // On ne rend pas le lien "Mon compte" en double : il sera dans le panneau
-              if (item.href === "/dashboard") {
+              if (item.href === "/dashboard" && item.label === "Mon compte") {
                 return null;
               }
 
               return (
                 <Link
-                  key={item.href}
+                  key={item.label}
                   href={item.href}
                   style={{
                     padding: "6px 10px",
@@ -209,15 +211,15 @@ export default function TopNav() {
                 <span>Tableau de bord</span>
               </Link>
 
-{/* QR Code */}
+              {/* QR Code */}
               <Link
-  href="/merchant"
-  onClick={() => setPanelOpen(false)}
-  style={rowStyle}
->
-  <span>📱</span>
-  <span>Mon QR Code</span>
-</Link>
+                href="/merchant"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>📱</span>
+                <span>Mon QR Code</span>
+              </Link>
 
               <Link
                 href="/commerces"
@@ -305,7 +307,7 @@ export default function TopNav() {
   );
 }
 
-const rowStyle: React.CSSProperties = {
+const rowStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 10,
