@@ -80,11 +80,14 @@ export default function AdminTransactionsPage() {
     });
   };
 
+  // On gère aussi les anciens statuts "validated" / "refused"
   const translateStatus = (status: string | null) => {
     switch (status) {
       case "approved":
+      case "validated":
         return "Validée";
       case "rejected":
+      case "refused":
         return "Refusée";
       case "pending":
       default:
@@ -95,8 +98,10 @@ export default function AdminTransactionsPage() {
   const statusColor = (status: string | null) => {
     switch (status) {
       case "approved":
+      case "validated":
         return "#16a34a"; // vert
       case "rejected":
+      case "refused":
         return "#dc2626"; // rouge
       case "pending":
       default:
@@ -104,7 +109,6 @@ export default function AdminTransactionsPage() {
     }
   };
 
-  // Voir le ticket : génère une URL signée et ouvre dans un nouvel onglet
   const handleViewReceipt = async (tx: Transaction) => {
     if (!tx.receipt_image_url) return;
 
@@ -121,8 +125,6 @@ export default function AdminTransactionsPage() {
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
-  // Validation / refus d'une transaction par l'admin
-  // -> appelle la fonction SQL admin_set_transaction_status
   const handleUpdateStatus = async (
     txId: string,
     newStatus: "approved" | "rejected"
@@ -142,7 +144,6 @@ export default function AdminTransactionsPage() {
         return;
       }
 
-      // Met à jour localement sans recharger la page
       setTransactions((prev) =>
         prev.map((tx) =>
           tx.id === txId ? { ...tx, status: newStatus } : tx

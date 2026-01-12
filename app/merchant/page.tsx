@@ -19,6 +19,7 @@ export default function MerchantDashboard() {
     const loadData = async () => {
       setLoading(true);
 
+      // 1) Utilisateur connecté
       const {
         data: { user },
         error: userError,
@@ -29,7 +30,7 @@ export default function MerchantDashboard() {
         return;
       }
 
-      // 1) Charger le profil (pour récupérer merchant_id)
+      // 2) Profil client → merchant_id
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("merchant_id")
@@ -42,7 +43,7 @@ export default function MerchantDashboard() {
         return;
       }
 
-      // 2) Charger les infos du commerçant
+      // 3) Charger les infos commerçant
       const { data: merchantData, error: merchantError } = await supabase
         .from("merchants")
         .select("*")
@@ -57,14 +58,13 @@ export default function MerchantDashboard() {
 
       setMerchant(merchantData);
 
-      // 3) Charger les transactions liées à ce commerçant
-      // IMPORTANT : on lit maintenant dans admin_transactions_detailed
-      // en filtrant sur merchant_name, car c'est là que sont les vraies données.
+      // 4) Charger les transactions du commerçant
+      // IMPORTANT : On lit dans admin_transactions_detailed
+      //             en filtrant sur merchant_name
       const { data: tx, error: txError } = await supabase
         .from("admin_transactions_detailed")
-        .select("amount, cashback_amount, donation_amount, status, merchant_name")
-        .eq("merchant_name", merchantData.name)
-        .eq("status", "approved");
+        .select("amount, cashback_amount, donation_amount, merchant_name")
+        .eq("merchant_name", merchantData.name); // <==== PAS DE FILTRE SUR LE STATUT
 
       if (!txError && tx && tx.length > 0) {
         let total = 0;
@@ -79,7 +79,6 @@ export default function MerchantDashboard() {
         setTotalGenerated(generated);
         setTotalCount(tx.length);
       } else {
-        // aucune transaction
         setTotalAmount(0);
         setTotalGenerated(0);
         setTotalCount(0);
@@ -89,7 +88,7 @@ export default function MerchantDashboard() {
     };
 
     loadData();
-  }, [supabase]);
+  }, []);
 
   if (loading) return <p style={{ padding: 20 }}>Chargement...</p>;
 
@@ -115,6 +114,7 @@ export default function MerchantDashboard() {
 
       <div style={{ display: "flex", gap: 30, flexWrap: "wrap" }}>
         <QRCode value={scanUrl} size={180} />
+
         <div>
           <h2>{merchant.name}</h2>
           <p>
@@ -128,6 +128,7 @@ export default function MerchantDashboard() {
           <p>
             <strong>URL à encoder dans le QR :</strong>
           </p>
+
           <input
             type="text"
             value={scanUrl}
@@ -150,6 +151,7 @@ export default function MerchantDashboard() {
       <h2 style={{ marginTop: 40 }}>Statistiques PawPass</h2>
 
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+        {/* CA */}
         <div
           style={{
             flex: 1,
@@ -165,6 +167,7 @@ export default function MerchantDashboard() {
           </p>
         </div>
 
+        {/* Cashback + dons */}
         <div
           style={{
             flex: 1,
@@ -180,6 +183,7 @@ export default function MerchantDashboard() {
           </p>
         </div>
 
+        {/* Nombre de transactions */}
         <div
           style={{
             flex: 1,

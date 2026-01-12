@@ -91,34 +91,62 @@ export default function AdminMerchantApplicationsPage() {
     setError(null);
     setActionId(application.id);
 
-    // Création du commerçant
-    const qrToken = buildMerchantToken(application.user_id);
-    const { data: merchant, error: merchantError } = await supabase
+    // 1) Vérifier si un commerçant existe déjà avec même nom + ville
+    const {
+      data: existingMerchant,
+      error: existingError,
+    } = await supabase
       .from("merchants")
-      .insert({
-        name: application.business_name,
-        city: application.city,
-        address: application.address,
-        qr_token: qrToken,
-        is_active: true,
-      })
-      .select("id")
-      .single();
+      .select("id, qr_token")
+      .eq("name", application.business_name)
+      .eq("city", application.city)
+      .maybeSingle();
 
-    if (merchantError || !merchant) {
-      setError(
-        merchantError?.message ?? "Impossible de créer le commerçant."
-      );
+    if (existingError) {
+      setError(existingError.message);
       setActionId(null);
       return;
     }
 
-    // Mise à jour du profil utilisateur -> rôle merchant
+    let merchantId: string;
+    let qrToken: string;
+
+    if (existingMerchant) {
+      // On réutilise le commerçant existant (évite les doublons)
+      merchantId = existingMerchant.id;
+      qrToken = existingMerchant.qr_token;
+    } else {
+      // 2) Création du commerçant
+      qrToken = buildMerchantToken(application.user_id);
+      const { data: merchant, error: merchantError } = await supabase
+        .from("merchants")
+        .insert({
+          name: application.business_name,
+          city: application.city,
+          address: application.address,
+          qr_token: qrToken,
+          is_active: true,
+        })
+        .select("id")
+        .single();
+
+      if (merchantError || !merchant) {
+        setError(
+          merchantError?.message ?? "Impossible de créer le commerçant."
+        );
+        setActionId(null);
+        return;
+      }
+
+      merchantId = merchant.id;
+    }
+
+    // 3) Mise à jour du profil utilisateur -> rôle merchant
     const { error: profileUpdateError } = await supabase
       .from("profiles")
       .update({
         role: "merchant",
-        merchant_id: merchant.id,
+        merchant_id: merchantId,
         merchant_code: qrToken,
       })
       .eq("id", application.user_id);
@@ -129,7 +157,7 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    // Marquer la demande comme approuvée
+    // 4) Marquer la demande comme approuvée
     const { error: applicationUpdateError } = await supabase
       .from("merchant_applications")
       .update({
@@ -144,7 +172,7 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    // Retirer la demande de la liste
+    // 5) Retirer la demande de la liste
     setApplications((prev) =>
       prev.filter((item) => item.id !== application.id)
     );
@@ -177,8 +205,6 @@ export default function AdminMerchantApplicationsPage() {
 
   return (
     <div className="container">
-      {/* TopNav est déjà dans app/layout.tsx */}
-
       <div className="card" style={{ marginBottom: 24 }}>
         <h2>Demandes commerçants</h2>
         <p className="helper">Consultez et traitez les demandes en attente.</p>
