@@ -1,12 +1,9 @@
 // app/layout.tsx
-"use client";
-
 import "./globals.css";
 import type { ReactNode } from "react";
 import { Inter } from "next/font/google";
-import TopNav from "@/components/TopNav";
 import SiteFooter from "@/components/SiteFooter";
-import { usePathname } from "next/navigation";
+import { ClientHeader } from "@/components/ClientHeader";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -14,12 +11,12 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
 });
 
+export const metadata = {
+  title: "PawPass",
+  description: "Cashback solidaire pour les clients et commerçants.",
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-
-  // Pages où le header doit être masqué
-  const hiddenHeaderRoutes = ["/", "/login"];
-
   return (
     <html lang="fr" className={inter.variable}>
       <body
@@ -35,11 +32,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             flexDirection: "column",
           }}
         >
-          {/* Masquer TopNav sur certaines pages */}
-          {!hiddenHeaderRoutes.includes(pathname) && <TopNav />}
+          {/* Header conditionnel côté client */}
+          <ClientHeader />
 
+          {/* Contenu des pages */}
           <main style={{ flex: 1 }}>{children}</main>
 
+          {/* Footer global */}
           <SiteFooter />
         </div>
       </body>
