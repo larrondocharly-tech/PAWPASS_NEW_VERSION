@@ -21,43 +21,56 @@ export default function MerchantDashboard() {
 
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
-      if (!user) return;
 
-      // 1) Charger le profil
-      const { data: profile } = await supabase
+      if (userError || !user) {
+        setLoading(false);
+        return;
+      }
+
+      // 1) Charger le profil (pour récupérer merchant_id)
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("merchant_id")
         .eq("id", user.id)
         .single();
 
-      if (!profile?.merchant_id) {
+      if (profileError || !profile?.merchant_id) {
         setMerchant(null);
         setLoading(false);
         return;
       }
 
       // 2) Charger les infos du commerçant
-      const { data: merchantData } = await supabase
+      const { data: merchantData, error: merchantError } = await supabase
         .from("merchants")
         .select("*")
         .eq("id", profile.merchant_id)
         .single();
 
+      if (merchantError || !merchantData) {
+        setMerchant(null);
+        setLoading(false);
+        return;
+      }
+
       setMerchant(merchantData);
 
       // 3) Charger les transactions liées à ce commerçant
-      const { data: tx } = await supabase
-        .from("transactions")
-        .select("amount, cashback_amount, donation_amount")
-        .eq("merchant_id", profile.merchant_id)
+      // IMPORTANT : on lit maintenant dans admin_transactions_detailed
+      // en filtrant sur merchant_name, car c'est là que sont les vraies données.
+      const { data: tx, error: txError } = await supabase
+        .from("admin_transactions_detailed")
+        .select("amount, cashback_amount, donation_amount, status, merchant_name")
+        .eq("merchant_name", merchantData.name)
         .eq("status", "approved");
 
-      if (tx && tx.length > 0) {
+      if (!txError && tx && tx.length > 0) {
         let total = 0;
         let generated = 0;
 
-        tx.forEach((t) => {
+        tx.forEach((t: any) => {
           total += t.amount || 0;
           generated += (t.cashback_amount || 0) + (t.donation_amount || 0);
         });
@@ -65,13 +78,18 @@ export default function MerchantDashboard() {
         setTotalAmount(total);
         setTotalGenerated(generated);
         setTotalCount(tx.length);
+      } else {
+        // aucune transaction
+        setTotalAmount(0);
+        setTotalGenerated(0);
+        setTotalCount(0);
       }
 
       setLoading(false);
     };
 
     loadData();
-  }, []);
+  }, [supabase]);
 
   if (loading) return <p style={{ padding: 20 }}>Chargement...</p>;
 
@@ -95,7 +113,7 @@ export default function MerchantDashboard() {
         boutique.
       </p>
 
-      <div style={{ display: "flex", gap: 30 }}>
+      <div style={{ display: "flex", gap: 30, flexWrap: "wrap" }}>
         <QRCode value={scanUrl} size={180} />
         <div>
           <h2>{merchant.name}</h2>
@@ -131,10 +149,11 @@ export default function MerchantDashboard() {
 
       <h2 style={{ marginTop: 40 }}>Statistiques PawPass</h2>
 
-      <div style={{ display: "flex", gap: 20 }}>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
         <div
           style={{
             flex: 1,
+            minWidth: 200,
             padding: 15,
             borderRadius: 10,
             background: "#E5F8E8",
@@ -149,6 +168,7 @@ export default function MerchantDashboard() {
         <div
           style={{
             flex: 1,
+            minWidth: 200,
             padding: 15,
             borderRadius: 10,
             background: "#E8F0FF",
@@ -163,6 +183,7 @@ export default function MerchantDashboard() {
         <div
           style={{
             flex: 1,
+            minWidth: 200,
             padding: 15,
             borderRadius: 10,
             background: "#FFF5D6",
