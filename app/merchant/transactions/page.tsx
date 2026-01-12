@@ -24,6 +24,8 @@ interface MerchantTransaction {
   status: string | null;
 }
 
+const RECEIPT_THRESHOLD = 50; // à partir de ce montant, validation manuelle par le commerçant
+
 export default function MerchantTransactionsPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -73,13 +75,17 @@ export default function MerchantTransactionsPage() {
 
       setProfile(profileData);
 
-      // 3) Transactions de CE commerçant
+      // 3) Transactions de CE commerçant, uniquement :
+      // - montant >= RECEIPT_THRESHOLD
+      // - statut "pending" (en attente)
       const { data: transactionData, error: transactionError } = await supabase
         .from("transactions")
         .select(
           "id, amount, cashback_amount, donation_amount, created_at, receipt_image_url, status"
         )
         .eq("merchant_id", profileData.merchant_id)
+        .gte("amount", RECEIPT_THRESHOLD)
+        .eq("status", "pending")
         .order("created_at", { ascending: false });
 
       if (transactionError) {
@@ -108,7 +114,7 @@ export default function MerchantTransactionsPage() {
     });
   };
 
-  // Voir le ticket
+  // Voir le ticket (via URL signée du bucket "receipts")
   const handleViewReceipt = async (tx: MerchantTransaction) => {
     if (!tx.receipt_image_url) return;
 
@@ -145,12 +151,8 @@ export default function MerchantTransactionsPage() {
         return;
       }
 
-      // Mise à jour locale
-      setTransactions((prev) =>
-        prev.map((tx) =>
-          tx.id === txId ? { ...tx, status: newStatus } : tx
-        )
-      );
+      // On retire la transaction de la liste après traitement
+      setTransactions((prev) => prev.filter((tx) => tx.id !== txId));
     } finally {
       setActionLoadingId(null);
     }
@@ -158,16 +160,17 @@ export default function MerchantTransactionsPage() {
 
   return (
     <>
-      {/* Si tu veux garder la top nav globale */}
       <TopNav />
 
       <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
         <div className="card">
-          <h2>Transactions du commerçant</h2>
+          <h2>Transactions à valider (≥ {RECEIPT_THRESHOLD} €)</h2>
 
           {profile && (
             <p className="helper" style={{ marginTop: 4 }}>
-              Vous gérez ici les transactions de votre commerce.
+              Seules les transactions de {RECEIPT_THRESHOLD} € et plus
+              apparaissent ici. Vous devez les valider ou les refuser après
+              vérification du ticket de caisse.
             </p>
           )}
 
@@ -176,7 +179,10 @@ export default function MerchantTransactionsPage() {
           ) : error ? (
             <p className="error">Erreur : {error}</p>
           ) : transactions.length === 0 ? (
-            <p className="helper">Aucune transaction pour le moment.</p>
+            <p className="helper">
+              Aucune transaction à valider pour le moment (≥{" "}
+              {RECEIPT_THRESHOLD} €).
+            </p>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="table">
@@ -187,14 +193,11 @@ export default function MerchantTransactionsPage() {
                     <th>Cashback client</th>
                     <th>Don SPA</th>
                     <th>Ticket</th>
-                    <th>Statut</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {transactions.map((tx) => {
-                    const status = tx.status ?? "pending";
-                    const isPending = status === "pending";
                     const isLoadingRow = actionLoadingId === tx.id;
 
                     return (
@@ -224,84 +227,52 @@ export default function MerchantTransactionsPage() {
                           )}
                         </td>
                         <td>
-                          <span
+                          <div
                             style={{
-                              padding: "3px 8px",
-                              borderRadius: 999,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              background: "#f9fafb",
-                              border: "1px solid #d1d5db",
-                              color:
-                                status === "approved"
-                                  ? "#16a34a"
-                                  : status === "rejected"
-                                  ? "#dc2626"
-                                  : "#92400e",
+                              display: "flex",
+                              gap: 8,
+                              flexWrap: "wrap",
                             }}
                           >
-                            {status === "approved"
-                              ? "Validée"
-                              : status === "rejected"
-                              ? "Refusée"
-                              : "En attente"}
-                          </span>
-                        </td>
-                        <td>
-                          {isPending ? (
-                            <div
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateStatus(tx.id, "approved")
+                              }
+                              disabled={isLoadingRow}
                               style={{
-                                display: "flex",
-                                gap: 8,
-                                flexWrap: "wrap",
+                                padding: "4px 8px",
+                                borderRadius: 6,
+                                border: "none",
+                                background: "#16a34a",
+                                color: "white",
+                                cursor: "pointer",
+                                fontSize: 13,
+                                opacity: isLoadingRow ? 0.7 : 1,
                               }}
                             >
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleUpdateStatus(tx.id, "approved")
-                                }
-                                disabled={isLoadingRow}
-                                style={{
-                                  padding: "4px 8px",
-                                  borderRadius: 6,
-                                  border: "none",
-                                  background: "#16a34a",
-                                  color: "white",
-                                  cursor: "pointer",
-                                  fontSize: 13,
-                                  opacity: isLoadingRow ? 0.7 : 1,
-                                }}
-                              >
-                                Valider
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleUpdateStatus(tx.id, "rejected")
-                                }
-                                disabled={isLoadingRow}
-                                style={{
-                                  padding: "4px 8px",
-                                  borderRadius: 6,
-                                  border: "none",
-                                  background: "#dc2626",
-                                  color: "white",
-                                  cursor: "pointer",
-                                  fontSize: 13,
-                                  opacity: isLoadingRow ? 0.7 : 1,
-                                }}
-                              >
-                                Refuser
-                              </button>
-                            </div>
-                          ) : (
-                            <span
-                              style={{ color: "#6b7280", fontSize: 12 }}
+                              {isLoadingRow ? "Validation…" : "Valider"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleUpdateStatus(tx.id, "rejected")
+                              }
+                              disabled={isLoadingRow}
+                              style={{
+                                padding: "4px 8px",
+                                borderRadius: 6,
+                                border: "none",
+                                background: "#dc2626",
+                                color: "white",
+                                cursor: "pointer",
+                                fontSize: 13,
+                                opacity: isLoadingRow ? 0.7 : 1,
+                              }}
                             >
-                              Aucune action
-                            </span>
-                          )}
+                              {isLoadingRow ? "Traitement…" : "Refuser"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
