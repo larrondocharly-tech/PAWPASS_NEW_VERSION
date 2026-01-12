@@ -121,154 +121,221 @@ export default function DashboardPage() {
   const availableBalance = wallet?.balance ?? 0;
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
-      {/* En-tête + bouton admin */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 24,
-        }}
-      >
-        <h1 style={{ fontSize: 24, margin: 0 }}>Tableau de bord</h1>
-
-        {isAdmin && (
-          <button
-            onClick={() => router.push("/admin")}
-            style={{
-              padding: "8px 16px",
-              borderRadius: 999,
-              border: "1px solid #0f766e",
-              background: "#0f766e",
-              color: "white",
-              cursor: "pointer",
-              fontSize: 14,
-              whiteSpace: "nowrap",
-            }}
-          >
-            Accéder à l&apos;admin
-          </button>
-        )}
-      </div>
-
-      {loading && <p>Chargement…</p>}
-
-      {error && (
-        <p style={{ color: "red", marginBottom: 16 }}>
-          {error}
-        </p>
-      )}
-
-      {!loading && !error && (
-        <div
+    <main style={{ minHeight: "100vh", background: "#FAFAF5" }}>
+      <div className="container" style={{ maxWidth: 1100 }}>
+        {/* En-tête + bouton admin */}
+        <header
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: 20,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            marginBottom: 24,
           }}
         >
-          {/* Carte bienvenue */}
           <div
             style={{
-              background: "white",
-              borderRadius: 16,
-              padding: 20,
-              boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
             }}
           >
-            <h2 style={{ fontSize: 18, marginBottom: 8 }}>Bienvenue</h2>
-            <p style={{ margin: 0 }}>
-              Scannez un QR commerçant pour enregistrer vos achats et accumuler
-              du cashback solidaire.
+            <h1 style={{ fontSize: 28, margin: 0, color: "#222222" }}>
+              Tableau de bord
+            </h1>
+            <p style={{ margin: 0, color: "#666666" }}>
+              Suivez votre cagnotte, vos dons et vos réductions en un coup
+              d&apos;œil.
             </p>
           </div>
 
-          {/* Carte cagnotte */}
-          <div
+          {isAdmin && (
+            <div>
+              <button
+                onClick={() => router.push("/admin")}
+                className="button secondary"
+                style={{
+                  borderRadius: 999,
+                  padding: "8px 16px",
+                  fontSize: 14,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Accéder à l&apos;admin
+              </button>
+            </div>
+          )}
+        </header>
+
+        {loading && <p>Chargement…</p>}
+
+        {error && (
+          <p style={{ color: "red", marginBottom: 16 }}>
+            {error}
+          </p>
+        )}
+
+        {!loading && !error && (
+          <section
             style={{
-              background: "white",
-              borderRadius: 16,
-              padding: 20,
-              boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: 20,
             }}
           >
-            <h2 style={{ fontSize: 18, marginBottom: 12 }}>
-              Ma cagnotte PawPass
-            </h2>
-            <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
-              Solde disponible pour vos réductions :
-            </p>
-            <p
-              style={{
-                fontSize: 28,
-                fontWeight: 700,
-                marginTop: 4,
-                marginBottom: 12,
-              }}
-            >
-              {formatEuro(availableBalance)}
-            </p>
-
-            <div
-              style={{
-                background: "#ecfdf3",
-                borderRadius: 999,
-                padding: "6px 12px",
-                fontSize: 14,
-                display: "inline-block",
-              }}
-            >
-              Total donné aux SPA :{" "}
-              <strong>{formatEuro(totalDonation)}</strong>
+            {/* Carte bienvenue */}
+            <div className="card" style={{ borderRadius: 16 }}>
+              <p
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: "#FF7A3C",
+                  marginBottom: 8,
+                }}
+              >
+                Bienvenue
+              </p>
+              <h2 style={{ fontSize: 20, marginBottom: 10, color: "#222222" }}>
+                Un scan, et votre cashback démarre
+              </h2>
+              <p style={{ margin: 0, color: "#666666" }}>
+                Scannez un QR commerçant pour enregistrer vos achats et accumuler
+                du cashback solidaire.
+              </p>
             </div>
 
-            <p style={{ marginTop: 12, fontSize: 14, color: "#64748b" }}>
-              Total cashback gagné : {formatEuro(totalCashback)}
-              <br />
-              Transactions réalisées : {txCount}
-            </p>
-          </div>
+            {/* Carte cagnotte */}
+            <div className="card" style={{ borderRadius: 16 }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <h2 style={{ fontSize: 20, marginBottom: 4, color: "#222222" }}>
+                  Ma cagnotte PawPass
+                </h2>
+                <p style={{ margin: 0, color: "#666666", fontSize: 14 }}>
+                  Solde disponible pour vos réductions
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 32,
+                      fontWeight: 700,
+                      color: "#222222",
+                    }}
+                  >
+                    {formatEuro(availableBalance)}
+                  </span>
+                  <span
+                    style={{
+                      background: "#ECFDF3",
+                      color: "#1B5E20",
+                      borderRadius: 999,
+                      padding: "6px 12px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Total donné aux SPA : {formatEuro(totalDonation)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                    gap: 12,
+                    marginTop: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "#FFF7ED",
+                      borderRadius: 12,
+                      padding: 12,
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: 12, color: "#666666" }}>
+                      Cashback gagné
+                    </p>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontWeight: 700,
+                        fontSize: 16,
+                        color: "#222222",
+                      }}
+                    >
+                      {formatEuro(totalCashback)}
+                    </p>
+                  </div>
+                  <div
+                    style={{
+                      background: "#F1F5F9",
+                      borderRadius: 12,
+                      padding: 12,
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: 12, color: "#666666" }}>
+                      Transactions
+                    </p>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontWeight: 700,
+                        fontSize: 16,
+                        color: "#222222",
+                      }}
+                    >
+                      {txCount}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-          {/* Carte réductions */}
-          <div
-            style={{
-              background: "white",
-              borderRadius: 16,
-              padding: 20,
-              boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
-            }}
-          >
-            <h2 style={{ fontSize: 18, marginBottom: 12 }}>
-              Réductions disponibles
-            </h2>
-            <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
-              Solde cashback : {formatEuro(availableBalance)}
-            </p>
+            {/* Carte réductions */}
+            <div className="card" style={{ borderRadius: 16 }}>
+              <h2 style={{ fontSize: 20, marginBottom: 8, color: "#222222" }}>
+                Réductions disponibles
+              </h2>
+              <p style={{ margin: 0, color: "#666666", fontSize: 14 }}>
+                Solde cashback : {formatEuro(availableBalance)}
+              </p>
 
-            <button
-              onClick={() => router.push("/scan?mode=redeem")}
-              style={{
-                marginTop: 16,
-                padding: "10px 18px",
-                borderRadius: 999,
-                border: "none",
-                background: "#0f766e",
-                color: "white",
-                cursor: "pointer",
-                fontSize: 14,
-              }}
-            >
-              Utiliser mes crédits
-            </button>
+              <button
+                onClick={() => router.push("/scan?mode=redeem")}
+                className="button"
+                style={{
+                  marginTop: 16,
+                  width: "100%",
+                  borderRadius: 14,
+                  background: "#4CAF50",
+                  color: "white",
+                  fontSize: 15,
+                }}
+              >
+                Utiliser mes crédits
+              </button>
 
-            <p style={{ marginTop: 12, fontSize: 13, color: "#64748b" }}>
-              Vous pouvez utiliser une partie de votre cagnotte dès maintenant
-              chez les commerçants partenaires.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
+              <p style={{ marginTop: 12, fontSize: 13, color: "#666666" }}>
+                Vous pouvez utiliser une partie de votre cagnotte dès maintenant
+                chez les commerçants partenaires.
+              </p>
+            </div>
+          </section>
+        )}
+      </div>
+    </main>
   );
 }
