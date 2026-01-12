@@ -14,17 +14,17 @@ export default function MentionsLegalesPage() {
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2>Éditeur du site</h2>
-        <p>PawPass SAS (placeholder) – 123 rue des Animaux, 75000 Paris.</p>
+        <p>PawPass SAS (placeholder) </p>
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2>Responsable de la publication</h2>
-        <p>Direction PawPass (placeholder).</p>
+        <p>Direction PawPass (placeholder). Pour plus d'information contactez nous à l'adresse suivante : contact.pawpass@gmail.com</p>
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2>Hébergement</h2>
-        <p>Vercel / Supabase (placeholder) – infrastructure cloud sécurisée.</p>
+        <p>Vercel / Supabase – infrastructure cloud sécurisée.</p>
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>
