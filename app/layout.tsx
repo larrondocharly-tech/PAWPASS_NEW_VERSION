@@ -1,10 +1,12 @@
 // app/layout.tsx
+"use client";
+
 import "./globals.css";
 import type { ReactNode } from "react";
-import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import TopNav from "@/components/TopNav";
 import SiteFooter from "@/components/SiteFooter";
+import { usePathname } from "next/navigation";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -12,23 +14,12 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
 });
 
-// ⬇⬇⬇ IMPORTANT : ici on ajoute les icônes, dont l'icône iPhone
-export const metadata: Metadata = {
-  title: "PawPass",
-  description: "Cashback solidaire pour les clients et commerçants.",
-  icons: {
-    icon: [
-      { url: "/icon-192.png" },
-      { url: "/icon-512.png", sizes: "512x512" },
-    ],
-    apple: [
-      // utilisé par “Ajouter à l’écran d’accueil” sur iPhone
-      { url: "/icon-192.png" },
-    ],
-  },
-};
-
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+
+  // Pages où le header doit être masqué
+  const hiddenHeaderRoutes = ["/", "/login"];
+
   return (
     <html lang="fr" className={inter.variable}>
       <body
@@ -44,13 +35,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             flexDirection: "column",
           }}
         >
-          {/* BARRE DE MENU GLOBALE */}
-          <TopNav />
+          {/* Masquer TopNav sur certaines pages */}
+          {!hiddenHeaderRoutes.includes(pathname) && <TopNav />}
 
-          {/* CONTENU DES PAGES */}
           <main style={{ flex: 1 }}>{children}</main>
 
-          {/* FOOTER GLOBAL */}
           <SiteFooter />
         </div>
       </body>
