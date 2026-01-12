@@ -382,157 +382,225 @@ export default function ScanPageClient() {
   // --------- MODE REDEEM, SANS CODE → SCANNER ----------
   if (mode === "redeem" && !merchantCode) {
     return (
-      <div
+      <main
         style={{
           minHeight: "100vh",
-          padding: 16,
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
+          background: "#FAFAF5",
         }}
       >
-        <h1 style={{ fontSize: 22, fontWeight: 700, textAlign: "center" }}>
-          Utiliser mes crédits
-        </h1>
-        <p style={{ textAlign: "center", marginBottom: 8 }}>
-          Scannez le QR code du commerçant pour utiliser vos crédits.
-        </p>
-
-        {error && (
-          <div
-            style={{
-              backgroundColor: "#fee2e2",
-              color: "#b91c1c",
-              padding: 8,
-              borderRadius: 8,
-              fontSize: 14,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
         <div
+          className="container"
           style={{
-            flex: 1,
+            maxWidth: 560,
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            flexDirection: "column",
+            gap: 20,
           }}
         >
-          <div style={{ width: "100%", maxWidth: 360 }}>
-            <QrScanner
-              delay={300}
-              onError={handleScanError}
-              onScan={handleScan}
-              constraints={videoConstraints}
-              style={{ width: "100%" }}
-            />
-          </div>
+          <header style={{ textAlign: "center" }}>
+            <p
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "#FF7A3C",
+                marginBottom: 6,
+              }}
+            >
+              Scan sécurisé
+            </p>
+            <h1 style={{ fontSize: 28, fontWeight: 700 }}>
+              Utiliser mes crédits
+            </h1>
+            <p style={{ color: "#666666", marginTop: 6 }}>
+              Scannez le QR code du commerçant pour appliquer votre réduction.
+            </p>
+          </header>
+
+          {error && (
+            <div
+              style={{
+                backgroundColor: "#fee2e2",
+                color: "#b91c1c",
+                padding: 12,
+                borderRadius: 12,
+                fontSize: 14,
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          <section className="card" style={{ borderRadius: 16 }}>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div>
+                <p style={{ fontWeight: 600, marginBottom: 8 }}>
+                  Suivez ces étapes :
+                </p>
+                <ol
+                  style={{
+                    margin: 0,
+                    paddingLeft: 20,
+                    color: "#666666",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <li>Autorisez l’accès à la caméra si demandé.</li>
+                  <li>Placez le QR code dans le cadre.</li>
+                </ol>
+              </div>
+
+              <div
+                style={{
+                  background: "#ffffff",
+                  borderRadius: 16,
+                  border: "1px solid #f0f0e6",
+                  padding: 12,
+                  boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+                }}
+              >
+                <div style={{ width: "100%", maxWidth: 360, margin: "0 auto" }}>
+                  <QrScanner
+                    delay={300}
+                    onError={handleScanError}
+                    onScan={handleScan}
+                    constraints={videoConstraints}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+
+              <p style={{ fontSize: 13, color: "#666666", marginBottom: 0 }}>
+                Astuce : si la luminosité est faible, rapprochez-vous d’une
+                source de lumière.
+              </p>
+            </div>
+          </section>
         </div>
-      </div>
+      </main>
     );
   }
 
   // --------- MODE REDEEM, AVEC CODE → FORMULAIRE + POPUPS ----------
   if (mode === "redeem" && merchantCode) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          padding: 16,
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <h1 style={{ fontSize: 22, fontWeight: 700, textAlign: "center" }}>
-          Utiliser mes crédits chez{" "}
-          {merchant ? merchant.name : "Commerçant"}
-        </h1>
-
-        {loading && <p>Chargement…</p>}
-
-        {walletBalance !== null && (
-          <p style={{ textAlign: "center" }}>
-            Solde disponible :{" "}
-            <strong>{walletBalance.toFixed(2)} €</strong>
-          </p>
-        )}
-
-        <p style={{ textAlign: "center", marginTop: -8 }}>
-          Vous pouvez utiliser vos crédits dès que votre cagnotte atteint{" "}
-          <strong>5,00 €</strong>. Le montant de la réduction peut être
-          inférieur (1 €, 2 €, …) tant qu&apos;il ne dépasse pas votre
-          solde.
-        </p>
-
-        <p style={{ textAlign: "center", fontSize: 13, color: "#64748b" }}>
-          Paramètre marchand (info) : montant minimum recommandé pour une
-          réduction :{" "}
-          <strong>{minRedeemAmount.toFixed(2)} €</strong>
-        </p>
-
-        {error && (
-          <div
-            style={{
-              backgroundColor: "#fee2e2",
-              color: "#b91c1c",
-              padding: 8,
-              borderRadius: 8,
-              fontSize: 14,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <div style={{ marginTop: 8 }}>
-          <label
-            style={{
-              display: "block",
-              fontSize: 14,
-              marginBottom: 6,
-              fontWeight: 500,
-            }}
-          >
-            Montant de la réduction (€)
-          </label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={redeemAmount}
-            onChange={(e) => setRedeemAmount(e.target.value)}
-            placeholder="Ex : 1.00"
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: 999,
-              border: "1px solid #cbd5f5",
-              fontSize: 16,
-            }}
-          />
-        </div>
-
-        <button
-          onClick={handleValidateRedeem}
-          disabled={actionLoading}
+      <main style={{ minHeight: "100vh", background: "#FAFAF5" }}>
+        <div
+          className="container"
           style={{
-            marginTop: 16,
-            padding: "10px 18px",
-            borderRadius: 999,
-            border: "none",
-            fontWeight: 600,
-            fontSize: 16,
-            cursor: actionLoading ? "not-allowed" : "pointer",
-            backgroundColor: "#0f766e",
-            color: "white",
-            opacity: actionLoading ? 0.7 : 1,
+            maxWidth: 640,
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
           }}
         >
-          {actionLoading ? "Validation..." : "Valider la réduction"}
-        </button>
+          <header style={{ textAlign: "center" }}>
+            <p
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "#FF7A3C",
+                marginBottom: 6,
+              }}
+            >
+              Réduction instantanée
+            </p>
+            <h1 style={{ fontSize: 28, fontWeight: 700 }}>
+              Utiliser mes crédits chez{" "}
+              {merchant ? merchant.name : "Commerçant"}
+            </h1>
+            <p style={{ color: "#666666", marginTop: 6 }}>
+              Indiquez le montant à déduire, puis validez avec le commerçant.
+            </p>
+          </header>
+
+          <section className="card" style={{ borderRadius: 16 }}>
+            <div style={{ display: "grid", gap: 12 }}>
+              {loading && <p>Chargement…</p>}
+
+              {walletBalance !== null && (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    background: "#FFF4EC",
+                    borderRadius: 12,
+                    padding: "10px 12px",
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>Solde disponible</span>
+                  <span>{walletBalance.toFixed(2)} €</span>
+                </div>
+              )}
+
+              <p style={{ color: "#666666" }}>
+                Vous pouvez utiliser vos crédits dès que votre cagnotte atteint{" "}
+                <strong>5,00 €</strong>. Le montant de la réduction peut être
+                inférieur (1 €, 2 €, …) tant qu&apos;il ne dépasse pas votre
+                solde.
+              </p>
+
+              <p style={{ fontSize: 13, color: "#64748b", marginBottom: 4 }}>
+                Paramètre marchand (info) : montant minimum recommandé pour une
+                réduction :{" "}
+                <strong>{minRedeemAmount.toFixed(2)} €</strong>
+              </p>
+
+              {error && (
+                <div
+                  style={{
+                    backgroundColor: "#fee2e2",
+                    color: "#b91c1c",
+                    padding: 12,
+                    borderRadius: 12,
+                    fontSize: 14,
+                  }}
+                >
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label
+                  className="label"
+                  style={{ marginTop: 0, fontSize: 14 }}
+                >
+                  Montant de la réduction (€)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={redeemAmount}
+                  onChange={(e) => setRedeemAmount(e.target.value)}
+                  placeholder="Ex : 1.00"
+                  className="input"
+                  style={{ borderRadius: 14 }}
+                />
+              </div>
+
+              <button
+                onClick={handleValidateRedeem}
+                disabled={actionLoading}
+                className="button"
+                style={{
+                  marginTop: 4,
+                  backgroundColor: "#FF7A3C",
+                  color: "#ffffff",
+                  width: "100%",
+                  opacity: actionLoading ? 0.7 : 1,
+                }}
+              >
+                {actionLoading ? "Validation..." : "Valider la réduction"}
+              </button>
+            </div>
+          </section>
 
         {/* POPUP 1 : RÉDUCTION VALIDÉE */}
         {showRedeemConfirmation && redeemStep === "CONFIRM" && (
@@ -552,9 +620,10 @@ export default function ScanPageClient() {
                 width: "90%",
                 maxWidth: 420,
                 backgroundColor: "white",
-                borderRadius: 16,
-                padding: 24,
+                borderRadius: 20,
+                padding: 28,
                 textAlign: "center",
+                boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
               }}
             >
               <h2
@@ -593,13 +662,13 @@ export default function ScanPageClient() {
               <button
                 onClick={() => setRedeemStep("REMAINING")}
                 style={{
-                  padding: "10px 18px",
-                  borderRadius: 999,
+                  padding: "12px 20px",
+                  borderRadius: 14,
                   border: "none",
                   fontWeight: 600,
                   fontSize: 16,
                   cursor: "pointer",
-                  backgroundColor: "#0f766e",
+                  backgroundColor: "#FF7A3C",
                   color: "white",
                 }}
               >
@@ -627,8 +696,9 @@ export default function ScanPageClient() {
                 width: "90%",
                 maxWidth: 420,
                 backgroundColor: "white",
-                borderRadius: 16,
-                padding: 24,
+                borderRadius: 20,
+                padding: 28,
+                boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
               }}
             >
               <h2
@@ -650,12 +720,8 @@ export default function ScanPageClient() {
               </p>
 
               <label
-                style={{
-                  display: "block",
-                  fontSize: 14,
-                  marginBottom: 6,
-                  fontWeight: 500,
-                }}
+                className="label"
+                style={{ fontSize: 14, marginTop: 0 }}
               >
                 Montant restant (€)
               </label>
@@ -666,14 +732,8 @@ export default function ScanPageClient() {
                 value={remainingAmount}
                 onChange={(e) => setRemainingAmount(e.target.value)}
                 placeholder="Ex : 8.50"
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 999,
-                  border: "1px solid #cbd5f5",
-                  marginBottom: 12,
-                  fontSize: 16,
-                }}
+                className="input"
+                style={{ marginBottom: 12 }}
               />
 
               {remainingCashback > 0 && (
@@ -702,13 +762,13 @@ export default function ScanPageClient() {
                 disabled={actionLoading}
                 style={{
                   width: "100%",
-                  padding: "10px 18px",
-                  borderRadius: 999,
+                  padding: "12px 18px",
+                  borderRadius: 14,
                   border: "none",
                   fontWeight: 600,
                   fontSize: 16,
                   cursor: actionLoading ? "not-allowed" : "pointer",
-                  backgroundColor: "#0f766e",
+                  backgroundColor: "#4CAF50",
                   color: "white",
                   marginTop: 8,
                   opacity: actionLoading ? 0.7 : 1,
@@ -721,7 +781,8 @@ export default function ScanPageClient() {
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </main>
     );
   }
 
@@ -735,55 +796,104 @@ export default function ScanPageClient() {
 
     // Sinon : simple scanner
     return (
-      <div
+      <main
         style={{
           minHeight: "100vh",
-          padding: 16,
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
+          background: "#FAFAF5",
         }}
       >
-        <h1 style={{ fontSize: 22, fontWeight: 700, textAlign: "center" }}>
-          Scanner un ticket
-        </h1>
-        <p style={{ textAlign: "center", marginBottom: 8 }}>
-          Scannez le QR code du ticket ou du commerçant.
-        </p>
-
-        {error && (
-          <div
-            style={{
-              backgroundColor: "#fee2e2",
-              color: "#b91c1c",
-              padding: 8,
-              borderRadius: 8,
-              fontSize: 14,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
         <div
+          className="container"
           style={{
-            flex: 1,
+            maxWidth: 560,
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            flexDirection: "column",
+            gap: 20,
           }}
         >
-          <div style={{ width: "100%", maxWidth: 360 }}>
-            <QrScanner
-              delay={300}
-              onError={handleScanError}
-              onScan={handleScan}
-              constraints={videoConstraints}
-              style={{ width: "100%" }}
-            />
-          </div>
+          <header style={{ textAlign: "center" }}>
+            <p
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "#FF7A3C",
+                marginBottom: 6,
+              }}
+            >
+              Scan rapide
+            </p>
+            <h1 style={{ fontSize: 28, fontWeight: 700 }}>
+              Scanner un ticket
+            </h1>
+            <p style={{ color: "#666666", marginTop: 6 }}>
+              Scannez le QR code du ticket ou du commerçant.
+            </p>
+          </header>
+
+          {error && (
+            <div
+              style={{
+                backgroundColor: "#fee2e2",
+                color: "#b91c1c",
+                padding: 12,
+                borderRadius: 12,
+                fontSize: 14,
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          <section className="card" style={{ borderRadius: 16 }}>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div>
+                <p style={{ fontWeight: 600, marginBottom: 8 }}>
+                  Suivez ces étapes :
+                </p>
+                <ol
+                  style={{
+                    margin: 0,
+                    paddingLeft: 20,
+                    color: "#666666",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <li>Autorisez l’accès à la caméra si demandé.</li>
+                  <li>Placez le QR code dans le cadre.</li>
+                </ol>
+              </div>
+
+              <div
+                style={{
+                  background: "#ffffff",
+                  borderRadius: 16,
+                  border: "1px solid #f0f0e6",
+                  padding: 12,
+                  boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+                }}
+              >
+                <div style={{ width: "100%", maxWidth: 360, margin: "0 auto" }}>
+                  <QrScanner
+                    delay={300}
+                    onError={handleScanError}
+                    onScan={handleScan}
+                    constraints={videoConstraints}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+
+              <p style={{ fontSize: 13, color: "#666666", marginBottom: 0 }}>
+                Astuce : si la luminosité est faible, rapprochez-vous d’une
+                source de lumière.
+              </p>
+            </div>
+          </section>
         </div>
-      </div>
+      </main>
     );
   }
 
