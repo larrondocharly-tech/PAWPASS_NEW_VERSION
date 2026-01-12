@@ -8,11 +8,11 @@ import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-// On n'utilise plus la table wallets ici, on lit la cagnotte dans profiles
 interface StatTransaction {
   cashback_amount: number | null;
   donation_amount: number | null;
   status: string | null;
+  wallet_spent: number | null;
 }
 
 interface RecentTransaction {
@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const supabase = createClient();
   const router = useRouter();
 
-  const [walletBalance, setWalletBalance] = useState(0);
+  const [availableBalance, setAvailableBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,8 +40,6 @@ export default function DashboardPage() {
   const [recentTx, setRecentTx] = useState<RecentTransaction[]>([]);
 
   const formatEuro = (value: number) => value.toFixed(2) + " €";
-
-  const availableBalance = walletBalance;
 
   const formatDate = (value: string) => {
     try {
@@ -60,7 +58,7 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
 
-      // 1) Récupération de l'utilisateur connecté
+      // 1) Utilisateur
       const {
         data: { user },
         error: userError,
@@ -75,26 +73,23 @@ export default function DashboardPage() {
         return;
       }
 
-      // 2) Profil : cagnotte + rôle (wallet_balance + role dans profiles)
+      // 2) Rôle admin
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("role, wallet_balance")
+        .select("role")
         .eq("id", user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error(profileError);
-      } else if (profileData) {
-        if (profileData.role === "admin") {
-          setIsAdmin(true);
-        }
-        setWalletBalance(profileData.wallet_balance ?? 0);
+      if (!profileError && profileData?.role === "admin") {
+        setIsAdmin(true);
       }
 
-      // 3) Statistiques globales sur la table transactions
+      // 3) Statistiques + solde calculé à partir des transactions VALIDÉES
       const { data: txData, error: txError } = await supabase
         .from("transactions")
-        .select("cashback_amount, donation_amount, status")
+        .select(
+          "cashback_amount, donation_amount, status, wallet_spent"
+        )
         .eq("user_id", user.id);
 
       if (txError) {
@@ -102,7 +97,6 @@ export default function DashboardPage() {
       } else if (txData) {
         const list = txData as StatTransaction[];
 
-        // On ne garde QUE les transactions approuvées
         const approved = list.filter(
           (tx) => tx.status === "approved" || tx.status === "validated"
         );
@@ -119,12 +113,23 @@ export default function DashboardPage() {
           return sum + v;
         }, 0);
 
+        // Si tu commences à utiliser wallet_spent pour les remises,
+        // on le soustraira ici. Pour l’instant, on le laisse à 0.
+        const totalSpent = approved.reduce((sum, tx) => {
+          const v =
+            typeof tx.wallet_spent === "number" ? tx.wallet_spent : 0;
+          return sum + v;
+        }, 0);
+
+        const available = Math.max(totalCb - totalSpent, 0);
+
         setTotalCashback(totalCb);
         setTotalDonation(totalDon);
         setTxCount(approved.length);
+        setAvailableBalance(available);
       }
 
-      // 4) 5 dernières transactions - vue client_transactions_history
+      // 4) Dernières transactions (vue client_transactions_history)
       const { data: historyData, error: historyError } = await supabase
         .from("client_transactions_history")
         .select("*")
@@ -159,7 +164,7 @@ export default function DashboardPage() {
   return (
     <main style={{ minHeight: "100vh", background: "#FAFAF5" }}>
       <div className="container" style={{ maxWidth: 1100 }}>
-        {/* En-tête + bouton admin */}
+        {/* En-tête */}
         <header
           style={{
             display: "flex",
@@ -411,7 +416,7 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {/* 5 dernières transactions */}
+            {/* Dernières transactions */}
             {recentTx.length > 0 && (
               <section
                 style={{
@@ -473,7 +478,6 @@ export default function DashboardPage() {
                           columnGap: 8,
                         }}
                       >
-                        {/* Commerçant + prix payé */}
                         <div
                           style={{
                             overflow: "hidden",
@@ -495,7 +499,6 @@ export default function DashboardPage() {
                           </span>
                         </div>
 
-                        {/* Date */}
                         <span
                           style={{
                             fontSize: 13,
@@ -505,7 +508,6 @@ export default function DashboardPage() {
                           {formatDate(tx.created_at)}
                         </span>
 
-                        {/* Cashback reçu */}
                         <span
                           style={{
                             textAlign: "right",
@@ -515,7 +517,6 @@ export default function DashboardPage() {
                           {formatEuro(tx.cashback_to_user)}
                         </span>
 
-                        {/* Don SPA */}
                         <span
                           style={{
                             textAlign: "right",
