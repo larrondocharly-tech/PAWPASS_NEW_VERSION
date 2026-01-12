@@ -8,13 +8,11 @@ import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-interface Wallet {
-  balance: number;
-}
-
+// On n'utilise plus la table wallets ici, on lit la cagnotte dans profiles
 interface StatTransaction {
   cashback_amount: number | null;
   donation_amount: number | null;
+  status: string | null;
 }
 
 interface RecentTransaction {
@@ -30,7 +28,7 @@ export default function DashboardPage() {
   const supabase = createClient();
   const router = useRouter();
 
-  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +41,7 @@ export default function DashboardPage() {
 
   const formatEuro = (value: number) => value.toFixed(2) + " €";
 
-  const availableBalance = wallet?.balance ?? 0;
+  const availableBalance = walletBalance;
 
   const formatDate = (value: string) => {
     try {
@@ -69,29 +67,34 @@ export default function DashboardPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        setError("Vous devez être connecté pour accéder à votre tableau de bord.");
+        setError(
+          "Vous devez être connecté pour accéder à votre tableau de bord."
+        );
         setLoading(false);
         router.push("/login");
         return;
       }
 
-      // 2) Wallet
-      const { data: walletData, error: walletError } = await supabase
-        .from("wallets")
-        .select("balance")
-        .eq("user_id", user.id)
+      // 2) Profil : cagnotte + rôle (wallet_balance + role dans profiles)
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, wallet_balance")
+        .eq("id", user.id)
         .maybeSingle();
 
-      if (walletError) {
-        console.error(walletError);
-      } else if (walletData) {
-        setWallet(walletData);
+      if (profileError) {
+        console.error(profileError);
+      } else if (profileData) {
+        if (profileData.role === "admin") {
+          setIsAdmin(true);
+        }
+        setWalletBalance(profileData.wallet_balance ?? 0);
       }
 
       // 3) Statistiques globales sur la table transactions
       const { data: txData, error: txError } = await supabase
         .from("transactions")
-        .select("cashback_amount, donation_amount")
+        .select("cashback_amount, donation_amount, status")
         .eq("user_id", user.id);
 
       if (txError) {
@@ -99,33 +102,29 @@ export default function DashboardPage() {
       } else if (txData) {
         const list = txData as StatTransaction[];
 
-        const totalCb = list.reduce((sum, tx) => {
-          const v = typeof tx.cashback_amount === "number" ? tx.cashback_amount : 0;
+        // On ne garde QUE les transactions approuvées
+        const approved = list.filter(
+          (tx) => tx.status === "approved" || tx.status === "validated"
+        );
+
+        const totalCb = approved.reduce((sum, tx) => {
+          const v =
+            typeof tx.cashback_amount === "number" ? tx.cashback_amount : 0;
           return sum + v;
         }, 0);
 
-        const totalDon = list.reduce((sum, tx) => {
-          const v = typeof tx.donation_amount === "number" ? tx.donation_amount : 0;
+        const totalDon = approved.reduce((sum, tx) => {
+          const v =
+            typeof tx.donation_amount === "number" ? tx.donation_amount : 0;
           return sum + v;
         }, 0);
 
         setTotalCashback(totalCb);
         setTotalDonation(totalDon);
-        setTxCount(list.length);
+        setTxCount(approved.length);
       }
 
-      // 4) Rôle admin
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!profileError && profileData?.role === "admin") {
-        setIsAdmin(true);
-      }
-
-      // 5) 5 dernières transactions - vue client_transactions_history
+      // 4) 5 dernières transactions - vue client_transactions_history
       const { data: historyData, error: historyError } = await supabase
         .from("client_transactions_history")
         .select("*")
@@ -181,7 +180,8 @@ export default function DashboardPage() {
               Tableau de bord
             </h1>
             <p style={{ margin: 0, color: "#666666" }}>
-              Suivez votre cagnotte, vos dons et vos réductions en un coup d&apos;œil.
+              Suivez votre cagnotte, vos dons et vos réductions en un coup
+              d&apos;œil.
             </p>
           </div>
 
@@ -245,8 +245,8 @@ export default function DashboardPage() {
                   Un scan, et votre cashback démarre
                 </h2>
                 <p style={{ margin: 0, color: "#666666" }}>
-                  Scannez un QR commerçant pour enregistrer vos achats et accumuler
-                  du cashback solidaire.
+                  Scannez un QR commerçant pour enregistrer vos achats et
+                  accumuler du cashback solidaire.
                 </p>
               </div>
 
@@ -268,7 +268,9 @@ export default function DashboardPage() {
                   >
                     Ma cagnotte PawPass
                   </h2>
-                  <p style={{ margin: 0, color: "#666666", fontSize: 14 }}>
+                  <p
+                    style={{ margin: 0, color: "#666666", fontSize: 14 }}
+                  >
                     Solde disponible pour vos réductions
                   </p>
                   <div
@@ -304,7 +306,8 @@ export default function DashboardPage() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(140px, 1fr))",
                       gap: 12,
                       marginTop: 8,
                     }}
@@ -369,10 +372,14 @@ export default function DashboardPage() {
 
               {/* Carte réductions */}
               <div className="card" style={{ borderRadius: 16 }}>
-                <h2 style={{ fontSize: 20, marginBottom: 8, color: "#222222" }}>
+                <h2
+                  style={{ fontSize: 20, marginBottom: 8, color: "#222222" }}
+                >
                   Réductions disponibles
                 </h2>
-                <p style={{ margin: 0, color: "#666666", fontSize: 14 }}>
+                <p
+                  style={{ margin: 0, color: "#666666", fontSize: 14 }}
+                >
                   Solde cashback : {formatEuro(availableBalance)}
                 </p>
 
@@ -391,9 +398,15 @@ export default function DashboardPage() {
                   Utiliser mes crédits
                 </button>
 
-                <p style={{ marginTop: 12, fontSize: 13, color: "#666666" }}>
-                  Vous pouvez utiliser une partie de votre cagnotte dès maintenant
-                  chez les commerçants partenaires.
+                <p
+                  style={{
+                    marginTop: 12,
+                    fontSize: 13,
+                    color: "#666666",
+                  }}
+                >
+                  Vous pouvez utiliser une partie de votre cagnotte dès
+                  maintenant chez les commerçants partenaires.
                 </p>
               </div>
             </section>
@@ -451,7 +464,8 @@ export default function DashboardPage() {
                         key={tx.id}
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "2.2fr 1fr 1fr 1fr",
+                          gridTemplateColumns:
+                            "2.2fr 1fr 1fr 1fr",
                           fontSize: 14,
                           padding: "8px 4px",
                           borderBottom: "1px solid #F3F4F6",
@@ -482,7 +496,12 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Date */}
-                        <span style={{ fontSize: 13, color: "#6B7280" }}>
+                        <span
+                          style={{
+                            fontSize: 13,
+                            color: "#6B7280",
+                          }}
+                        >
                           {formatDate(tx.created_at)}
                         </span>
 
