@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 import { formatCurrency } from "@/lib/utils";
-import TopNav from "@/components/TopNav";
 
 export const dynamic = "force-dynamic";
 
@@ -159,130 +158,125 @@ export default function MerchantTransactionsPage() {
   };
 
   return (
-    <>
-      <TopNav />
+    <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
+      <div className="card">
+        <h2>Transactions à valider (≥ {RECEIPT_THRESHOLD} €)</h2>
 
-      <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
-        <div className="card">
-          <h2>Transactions à valider (≥ {RECEIPT_THRESHOLD} €)</h2>
+        {profile && (
+          <p className="helper" style={{ marginTop: 4 }}>
+            Seules les transactions de {RECEIPT_THRESHOLD} € et plus
+            apparaissent ici. Vous devez les valider ou les refuser après
+            vérification du ticket de caisse.
+          </p>
+        )}
 
-          {profile && (
-            <p className="helper" style={{ marginTop: 4 }}>
-              Seules les transactions de {RECEIPT_THRESHOLD} € et plus
-              apparaissent ici. Vous devez les valider ou les refuser après
-              vérification du ticket de caisse.
-            </p>
-          )}
+        {loading ? (
+          <p className="helper">Chargement des transactions…</p>
+        ) : error ? (
+          <p className="error">Erreur : {error}</p>
+        ) : transactions.length === 0 ? (
+          <p className="helper">
+            Aucune transaction à valider pour le moment (≥ {RECEIPT_THRESHOLD} €).
+          </p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Montant achat</th>
+                  <th>Cashback client</th>
+                  <th>Don SPA</th>
+                  <th>Ticket</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((tx) => {
+                  const isLoadingRow = actionLoadingId === tx.id;
 
-          {loading ? (
-            <p className="helper">Chargement des transactions…</p>
-          ) : error ? (
-            <p className="error">Erreur : {error}</p>
-          ) : transactions.length === 0 ? (
-            <p className="helper">
-              Aucune transaction à valider pour le moment (≥{" "}
-              {RECEIPT_THRESHOLD} €).
-            </p>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Montant achat</th>
-                    <th>Cashback client</th>
-                    <th>Don SPA</th>
-                    <th>Ticket</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((tx) => {
-                    const isLoadingRow = actionLoadingId === tx.id;
-
-                    return (
-                      <tr key={tx.id}>
-                        <td>{formatDateTime(tx.created_at)}</td>
-                        <td>{formatCurrency(tx.amount)}</td>
-                        <td>{formatCurrency(tx.cashback_amount ?? 0)}</td>
-                        <td>{formatCurrency(tx.donation_amount ?? 0)}</td>
-                        <td>
-                          {tx.receipt_image_url ? (
-                            <button
-                              type="button"
-                              onClick={() => handleViewReceipt(tx)}
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: 6,
-                                border: "1px solid #ccc",
-                                background: "#f9fafb",
-                                cursor: "pointer",
-                                fontSize: 13,
-                              }}
-                            >
-                              Voir le ticket
-                            </button>
-                          ) : (
-                            <span style={{ color: "#6b7280" }}>Aucun</span>
-                          )}
-                        </td>
-                        <td>
-                          <div
+                  return (
+                    <tr key={tx.id}>
+                      <td>{formatDateTime(tx.created_at)}</td>
+                      <td>{formatCurrency(tx.amount)}</td>
+                      <td>{formatCurrency(tx.cashback_amount ?? 0)}</td>
+                      <td>{formatCurrency(tx.donation_amount ?? 0)}</td>
+                      <td>
+                        {tx.receipt_image_url ? (
+                          <button
+                            type="button"
+                            onClick={() => handleViewReceipt(tx)}
                             style={{
-                              display: "flex",
-                              gap: 8,
-                              flexWrap: "wrap",
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              border: "1px solid #ccc",
+                              background: "#f9fafb",
+                              cursor: "pointer",
+                              fontSize: 13,
                             }}
                           >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateStatus(tx.id, "approved")
-                              }
-                              disabled={isLoadingRow}
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: 6,
-                                border: "none",
-                                background: "#16a34a",
-                                color: "white",
-                                cursor: "pointer",
-                                fontSize: 13,
-                                opacity: isLoadingRow ? 0.7 : 1,
-                              }}
-                            >
-                              {isLoadingRow ? "Validation…" : "Valider"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateStatus(tx.id, "rejected")
-                              }
-                              disabled={isLoadingRow}
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: 6,
-                                border: "none",
-                                background: "#dc2626",
-                                color: "white",
-                                cursor: "pointer",
-                                fontSize: 13,
-                                opacity: isLoadingRow ? 0.7 : 1,
-                              }}
-                            >
-                              {isLoadingRow ? "Traitement…" : "Refuser"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                            Voir le ticket
+                          </button>
+                        ) : (
+                          <span style={{ color: "#6b7280" }}>Aucun</span>
+                        )}
+                      </td>
+                      <td>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateStatus(tx.id, "approved")
+                            }
+                            disabled={isLoadingRow}
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: "#16a34a",
+                              color: "white",
+                              cursor: "pointer",
+                              fontSize: 13,
+                              opacity: isLoadingRow ? 0.7 : 1,
+                            }}
+                          >
+                            {isLoadingRow ? "Validation…" : "Valider"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleUpdateStatus(tx.id, "rejected")
+                            }
+                            disabled={isLoadingRow}
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              border: "none",
+                              background: "#dc2626",
+                              color: "white",
+                              cursor: "pointer",
+                              fontSize: 13,
+                              opacity: isLoadingRow ? 0.7 : 1,
+                            }}
+                          >
+                            {isLoadingRow ? "Traitement…" : "Refuser"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 }
