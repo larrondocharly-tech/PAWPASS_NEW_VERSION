@@ -19,7 +19,7 @@ export default function MentionsLegalesPage() {
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2>Responsable de la publication</h2>
-        <p>Direction PawPass (placeholder). Pour plus d'information contactez nous à l'adresse suivante : contact.pawpass@gmail.com</p>
+        <p>Direction PawPass (placeholder). Pour plus d'information contactez nous par mail</p>
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>

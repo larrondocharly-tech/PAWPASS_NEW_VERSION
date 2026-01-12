@@ -6,11 +6,9 @@ import { useState, type CSSProperties } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
 const navItems = [
-  // Accueil pointe maintenant vers le dashboard
+  // Accueil pointe vers le dashboard
   { href: "/dashboard", label: "Accueil" },
   { href: "/scan", label: "Scanner" },
-  // Bouton direct vers la page de validation commerçant
-  { href: "/merchant/transactions", label: "Transactions" },
   // On garde cette entrée même si elle n'est pas rendue directement
   { href: "/dashboard", label: "Mon compte" },
 ];
@@ -55,7 +53,7 @@ export default function TopNav() {
             gap: 16,
           }}
         >
-          {/* Logo / titre → renvoie désormais vers le dashboard */}
+          {/* Logo / titre → renvoie vers le dashboard */}
           <Link
             href="/dashboard"
             style={{
