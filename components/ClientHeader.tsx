@@ -1,18 +1,137 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import TopNav from "@/components/TopNav";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabaseClient";
 
-// Routes où le header NE doit PAS s'afficher
-const hiddenHeaderRoutes = ["/", "/login", "/register"];
+type Role = "client" | "merchant" | "admin" | null;
 
 export function ClientHeader() {
+  const supabase = createClient();
   const pathname = usePathname();
 
-  // Masquer le TopNav entièrement sur mobile landing page/login/register
-  if (hiddenHeaderRoutes.includes(pathname)) {
-    return null;
-  }
+  const [role, setRole] = useState<Role>(null);
+  const [loading, setLoading] = useState(true);
 
-  return <TopNav />;
+  useEffect(() => {
+    const load = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setRole(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      setRole((profile?.role as Role) ?? null);
+      setLoading(false);
+    };
+
+    load();
+  }, [supabase]);
+
+  const isActive = (href: string) => pathname === href;
+
+  return (
+    <header
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 20,
+        backgroundColor: "#ffffff",
+        borderBottom: "1px solid #E5E7EB",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "1040px",
+          margin: "0 auto",
+          padding: "10px 16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+        }}
+      >
+        {/* Logo / titre */}
+        <Link
+          href="/"
+          style={{
+            fontWeight: 700,
+            fontSize: "20px",
+            letterSpacing: "0.03em",
+          }}
+        >
+          PawPass
+        </Link>
+
+        {/* BOUTONS CLIENT : visibles partout (web, mobile, app) */}
+        {role === "client" && (
+          <nav
+            style={{
+              display: "flex",
+              gap: "8px",
+              flexShrink: 0,
+            }}
+          >
+            {[
+              { href: "/dashboard", label: "Accueil" },
+              { href: "/scan", label: "Scanner" },
+              { href: "/account", label: "Mon compte" },
+            ].map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "999px",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  border: "1px solid rgba(15, 23, 42, 0.08)",
+                  backgroundColor: isActive(link.href) ? "#111827" : "#FFFFFF",
+                  color: isActive(link.href) ? "#FFFFFF" : "#111827",
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        )}
+
+        {/* Si pas connecté : actions simples */}
+        {role === null && !loading && (
+          <nav
+            style={{
+              display: "flex",
+              gap: "8px",
+              marginLeft: "auto",
+            }}
+          >
+            <Link href="/login" style={{ fontSize: "14px" }}>
+              Connexion
+            </Link>
+            <Link
+              href="/register"
+              style={{ fontSize: "14px", fontWeight: 600 }}
+            >
+              Créer un compte
+            </Link>
+          </nav>
+        )}
+
+        {/* Pour merchant / admin tu pourras ajouter d’autres boutons si tu veux */}
+      </div>
+    </header>
+  );
 }

@@ -211,15 +211,6 @@ p { margin: 0 0 0.5rem; }
 }
 
 /* ===========================
-   MASQUER BOUTONS TOPNAV SUR MOBILE
-=========================== */
-@media (max-width: 767px) {
-  .desktop-top-buttons {
-    display: none !important;
-  }
-}
-
-/* ===========================
    HERO – PATTES DANS LES 4 ANGLES
 =========================== */
 .hero-card {
