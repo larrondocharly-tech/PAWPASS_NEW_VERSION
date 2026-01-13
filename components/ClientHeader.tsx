@@ -39,7 +39,6 @@ export function ClientHeader() {
       return;
     }
 
-    // Retour à la page d'accueil après déconnexion
     router.push("/");
     router.refresh();
   };
@@ -146,7 +145,7 @@ export function ClientHeader() {
               Menu
             </button>
 
-            {/* Overlay menu */}
+            {/* Overlay menu – même contenu que ton ancien menu */}
             {menuOpen && (
               <div
                 style={{
@@ -157,7 +156,7 @@ export function ClientHeader() {
                   borderRadius: "16px",
                   boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
                   padding: "12px 8px",
-                  minWidth: "210px",
+                  minWidth: "230px",
                   display: "flex",
                   flexDirection: "column",
                   gap: "4px",
@@ -174,7 +173,21 @@ export function ClientHeader() {
                     color: "#111827",
                   }}
                 >
-                  Commerces partenaires
+                  Commerçants partenaires
+                </Link>
+
+                <Link
+                  href="/parrainage"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    textDecoration: "none",
+                    color: "#111827",
+                  }}
+                >
+                  Parrainer un ami
                 </Link>
 
                 <Link
@@ -188,7 +201,7 @@ export function ClientHeader() {
                     color: "#111827",
                   }}
                 >
-                  Comment ça marche
+                  Comment ça marche ?
                 </Link>
 
                 <Link
@@ -203,6 +216,34 @@ export function ClientHeader() {
                   }}
                 >
                   FAQ
+                </Link>
+
+                <Link
+                  href="/contact"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    textDecoration: "none",
+                    color: "#111827",
+                  }}
+                >
+                  Contact
+                </Link>
+
+                <Link
+                  href="/mentions-legales"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    textDecoration: "none",
+                    color: "#111827",
+                  }}
+                >
+                  Mentions légales
                 </Link>
 
                 <div
