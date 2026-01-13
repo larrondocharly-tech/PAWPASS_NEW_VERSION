@@ -5,44 +5,105 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
+interface Profile {
+  role: string | null;
+  merchant_id: string | null;
+}
+
 export function ClientHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
 
+  // Sécurisation : on force une string
+  const currentPath = pathname || "/";
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [isMerchant, setIsMerchant] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // On récupère le profil pour savoir si c'est un commerçant ou un admin
+  useEffect(() => {
+    const loadProfile = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setIsMerchant(false);
+        setIsAdmin(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, merchant_id")
+        .eq("id", user.id)
+        .single<Profile>();
+
+      if (profile) {
+        setIsMerchant(
+          profile.role === "merchant" || profile.merchant_id !== null
+        );
+        setIsAdmin(profile.role === "admin");
+      } else {
+        setIsMerchant(false);
+        setIsAdmin(false);
+      }
+    };
+
+    loadProfile();
+  }, [supabase]);
+
+  const isMerchantArea = currentPath.startsWith("/merchant");
+  const isAdminArea = currentPath.startsWith("/admin");
 
   // Pages où on affiche "Accueil / Scanner / Menu"
   const isClientArea =
-    pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/scan") ||
-    pathname.startsWith("/account") ||
-    pathname.startsWith("/commerces") ||
-    pathname.startsWith("/parrainage") ||
-    pathname.startsWith("/comment-ca-marche") ||
-    pathname.startsWith("/faq") ||
-    pathname.startsWith("/contact") ||
-    pathname.startsWith("/mentions-legales") ||
-    pathname.startsWith("/cgu") ||
-    pathname.startsWith("/merchant"); // <-- AJOUT : espace commerçant
+    currentPath.startsWith("/dashboard") ||
+    currentPath.startsWith("/scan") ||
+    currentPath.startsWith("/account") ||
+    currentPath.startsWith("/commerces") ||
+    currentPath.startsWith("/parrainage") ||
+    currentPath.startsWith("/comment-ca-marche") ||
+    currentPath.startsWith("/faq") ||
+    currentPath.startsWith("/contact") ||
+    currentPath.startsWith("/mentions-legales") ||
+    currentPath.startsWith("/cgu") ||
+    isMerchantArea ||
+    isAdminArea;
 
-  const isLogin = pathname === "/login";
-  const isRegister = pathname === "/register";
-  const isHome = pathname === "/";
+  const isLogin = currentPath === "/login";
+  const isRegister = currentPath === "/register";
+  const isHome = currentPath === "/";
   const isAuthPage = isLogin || isRegister;
 
-  // Comportement du logo PawPass :
-  // - sur /, /login, /register -> lien vers /
-  // - partout ailleurs -> lien vers /dashboard
-  const logoHref = isAuthPage || isHome ? "/" : "/dashboard";
+  // Où pointe le logo :
+  // - /, /login, /register -> /
+  // - commerçant -> /merchant
+  // - admin -> /admin
+  // - sinon -> /dashboard
+  const logoHref = isAuthPage || isHome
+    ? "/"
+    : isMerchant
+    ? "/merchant"
+    : isAdmin
+    ? "/admin"
+    : "/dashboard";
 
-  const isActive = (href: string) => pathname === href;
+  const homeHref = isMerchant
+    ? "/merchant"
+    : isAdmin
+    ? "/admin"
+    : "/dashboard";
+
+  const isActive = (href: string) => currentPath === href;
 
   useEffect(() => {
     // On ferme le menu quand on change de page
     setMenuOpen(false);
-  }, [pathname]);
+  }, [currentPath]);
 
   const handleLogout = async () => {
     setLogoutError(null);
@@ -95,7 +156,7 @@ export function ClientHeader() {
         </Link>
 
         {/* ===========================
-            MENU CLIENT (Dashboard / Scan / pages liées)
+            MENU CLIENT / COMMERCANT / ADMIN
            ============================ */}
         {isClientArea && (
           <nav
@@ -105,23 +166,47 @@ export function ClientHeader() {
               flexShrink: 0,
             }}
           >
-            {/* Accueil */}
+            {/* Accueil (client / commerçant / admin) */}
             <Link
-              href="/dashboard"
+              href={homeHref}
               style={{
                 padding: "6px 14px",
                 borderRadius: "999px",
                 fontSize: "14px",
                 fontWeight: 600,
                 border: "1px solid rgba(15, 23, 42, 0.08)",
-                backgroundColor: isActive("/dashboard") ? "#111827" : "#FFFFFF",
-                color: isActive("/dashboard") ? "#FFFFFF" : "#111827",
+                backgroundColor: isActive(homeHref) ? "#111827" : "#FFFFFF",
+                color: isActive(homeHref) ? "#FFFFFF" : "#111827",
                 textDecoration: "none",
                 whiteSpace: "nowrap",
               }}
             >
               Accueil
             </Link>
+
+            {/* Bouton Transactions – UNIQUEMENT pour les comptes commerçants */}
+            {isMerchant && (
+              <Link
+                href="/merchant/transactions"
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "999px",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  border: "1px solid rgba(15, 23, 42, 0.08)",
+                  backgroundColor: isActive("/merchant/transactions")
+                    ? "#111827"
+                    : "#FFFFFF",
+                  color: isActive("/merchant/transactions")
+                    ? "#FFFFFF"
+                    : "#111827",
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Transactions
+              </Link>
+            )}
 
             {/* Scanner */}
             <Link
@@ -160,7 +245,7 @@ export function ClientHeader() {
               Menu
             </button>
 
-            {/* Overlay menu – avec emojis + CGU */}
+            {/* Overlay menu */}
             {menuOpen && (
               <div
                 style={{
@@ -171,12 +256,33 @@ export function ClientHeader() {
                   borderRadius: "16px",
                   boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
                   padding: "12px 8px",
-                  minWidth: "240px",
+                  minWidth: "260px",
                   display: "flex",
                   flexDirection: "column",
                   gap: "4px",
                 }}
               >
+                {/* Mon QR code commerçant – visible PARTOUT si compte commerçant */}
+                {isMerchant && (
+                  <Link
+                    href="/merchant"
+                    onClick={() => setMenuOpen(false)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: "10px",
+                      fontSize: "14px",
+                      textDecoration: "none",
+                      color: "#111827",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <span>📌</span>
+                    <span>Mon QR code commerçant</span>
+                  </Link>
+                )}
+
                 <Link
                   href="/commerces"
                   onClick={() => setMenuOpen(false)}
@@ -351,7 +457,6 @@ export function ClientHeader() {
             PAGES D'AUTH
            ============================ */}
 
-        {/* Sur /login -> seulement "Créer un compte" */}
         {isLogin && (
           <nav
             style={{
@@ -369,7 +474,6 @@ export function ClientHeader() {
           </nav>
         )}
 
-        {/* Sur /register -> seulement "Connexion" */}
         {isRegister && (
           <nav
             style={{
