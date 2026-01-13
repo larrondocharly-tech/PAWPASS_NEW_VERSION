@@ -2,37 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabaseClient";
-
-interface SupaUser {
-  id: string;
-  email?: string;
-}
 
 export function ClientHeader() {
-  const supabase = createClient();
   const pathname = usePathname();
 
-  const [user, setUser] = useState<SupaUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Pages "espace client" -> on affiche Accueil / Scanner / Mon compte
+  const isClientArea =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/scan") ||
+    pathname.startsWith("/account");
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-
-      const { data, error } = await supabase.auth.getUser();
-
-      if (error) {
-        console.error("Erreur getUser dans ClientHeader :", error.message);
-      }
-
-      setUser((data?.user as SupaUser | null) ?? null);
-      setLoading(false);
-    };
-
-    load();
-  }, [supabase]);
+  // Pages d'auth -> on affiche Connexion / Créer un compte
+  const isAuthPage =
+    pathname === "/login" ||
+    pathname === "/register";
 
   const isActive = (href: string) => pathname === href;
 
@@ -71,8 +54,8 @@ export function ClientHeader() {
           PawPass
         </Link>
 
-        {/* --- SI CONNECTÉ(E) --- */}
-        {user && (
+        {/* --- MENU CLIENT (dashboard / scan / account) --- */}
+        {isClientArea && (
           <nav
             style={{
               display: "flex",
@@ -106,8 +89,8 @@ export function ClientHeader() {
           </nav>
         )}
 
-        {/* --- SI NON CONNECTÉ(E) --- */}
-        {!user && !loading && (
+        {/* --- MENU AUTH (login / register) --- */}
+        {isAuthPage && (
           <nav
             style={{
               display: "flex",
@@ -126,6 +109,10 @@ export function ClientHeader() {
             </Link>
           </nav>
         )}
+
+        {/* Sur les autres pages (homepage marketing, cgu, etc.),
+            on peut ne pas afficher de boutons, ou tu pourras en ajouter plus tard.
+        */}
       </div>
     </header>
   );
