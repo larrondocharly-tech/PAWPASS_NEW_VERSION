@@ -21,16 +21,23 @@ export function ClientHeader() {
   const [isMerchant, setIsMerchant] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Charger profil pour savoir si c'est commerçant ou admin
+  // Chargement du profil + écoute des changements de session
   useEffect(() => {
+    let isMounted = true;
+
+    const applyNoUser = () => {
+      if (!isMounted) return;
+      setIsMerchant(false);
+      setIsAdmin(false);
+    };
+
     const loadProfile = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setIsMerchant(false);
-        setIsAdmin(false);
+        applyNoUser();
         return;
       }
 
@@ -40,22 +47,32 @@ export function ClientHeader() {
         .eq("id", user.id)
         .single<Profile>();
 
+      if (!isMounted) return;
+
       if (profileError || !profile) {
         console.error("Erreur chargement profil header :", profileError);
-        setIsMerchant(false);
-        setIsAdmin(false);
+        applyNoUser();
         return;
       }
 
       const role = profile.role?.toLowerCase() || null;
 
-      setIsMerchant(
-        role === "merchant" || profile.merchant_id !== null
-      );
+      setIsMerchant(role === "merchant" || profile.merchant_id !== null);
       setIsAdmin(role === "admin");
     };
 
+    // 1) premier chargement
     loadProfile();
+
+    // 2) rechargement à chaque changement d'état d'auth (login / logout)
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      loadProfile();
+    });
+
+    return () => {
+      isMounted = false;
+      sub?.subscription?.unsubscribe();
+    };
   }, [supabase]);
 
   const isMerchantArea = currentPath.startsWith("/merchant");
@@ -348,9 +365,7 @@ export function ClientHeader() {
 
                 <Link
                   href="/comment-ca-marche"
-                  onClick={() =>
-                    setMenuOpen(false)
-                  }
+                  onClick={() => setMenuOpen(false)}
                   style={{
                     padding: "8px 12px",
                     borderRadius: "10px",
