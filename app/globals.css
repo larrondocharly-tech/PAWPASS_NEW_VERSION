@@ -265,3 +265,18 @@ p {
     display: block;
   }
 }
+.hero-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/bg-paws.svg");
+  background-repeat: repeat;
+  background-size: 80px;
+  opacity: 0.25;
+  pointer-events: none;
+}

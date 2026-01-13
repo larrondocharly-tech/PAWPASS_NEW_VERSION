@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="none"/>
+
+  <!-- Patte 1 -->
+  <g fill="#E4F5EC" fill-opacity="0.8" transform="translate(30,40)">
+    <ellipse cx="40" cy="55" rx="22" ry="16"/>
+    <circle cx="25" cy="38" r="8"/>
+    <circle cx="40" cy="32" r="8"/>
+    <circle cx="55" cy="38" r="8"/>
+    <circle cx="40" cy="45" r="7"/>
+  </g>
+
+  <!-- Patte 2 (un peu tournée) -->
+  <g fill="#E4F5EC" fill-opacity="0.6" transform="translate(110,20) rotate(18 40 40)">
+    <ellipse cx="40" cy="55" rx="20" ry="15"/>
+    <circle cx="25" cy="38" r="7"/>
+    <circle cx="40" cy="32" r="7"/>
+    <circle cx="55" cy="38" r="7"/>
+    <circle cx="40" cy="45" r="6"/>
+  </g>
+
+  <!-- Patte 3 (en bas) -->
+  <g fill="#E4F5EC" fill-opacity="0.5" transform="translate(70,110) rotate(-12 40 40)">
+    <ellipse cx="40" cy="55" rx="18" ry="14"/>
+    <circle cx="25" cy="38" r="6"/>
+    <circle cx="40" cy="32" r="6"/>
+    <circle cx="55" cy="38" r="6"/>
+    <circle cx="40" cy="45" r="5"/>
+  </g>
+</svg>
