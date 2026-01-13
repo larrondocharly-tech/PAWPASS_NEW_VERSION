@@ -25,6 +25,9 @@ export default function AdminTransactionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
+  // URL du ticket affiché dans la modale
+  const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null);
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -109,7 +112,7 @@ export default function AdminTransactionsPage() {
     }
   };
 
-  // Voir le ticket — version compatible mobile (ouvre dans la même fenêtre)
+  // Voir le ticket — on ouvre une modale avec l'image
   const handleViewReceipt = async (tx: Transaction) => {
     if (!tx.receipt_image_url) return;
 
@@ -123,9 +126,8 @@ export default function AdminTransactionsPage() {
       return;
     }
 
-    // Sur mobile, on évite window.open (souvent bloqué).
-    // On redirige simplement vers l'image dans l'onglet actuel.
-    window.location.href = data.signedUrl;
+    // On affiche l'image dans une modale par-dessus la page
+    setReceiptModalUrl(data.signedUrl);
   };
 
   // Validation / refus par l'admin
@@ -339,6 +341,69 @@ export default function AdminTransactionsPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* MODALE D'AFFICHAGE DU TICKET */}
+      {receiptModalUrl && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.7)",
+            zIndex: 50,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+        >
+          {/* Bouton X pour fermer */}
+          <button
+            type="button"
+            onClick={() => setReceiptModalUrl(null)}
+            style={{
+              position: "absolute",
+              top: 16,
+              right: 16,
+              width: 32,
+              height: 32,
+              borderRadius: "999px",
+              border: "none",
+              backgroundColor: "rgba(15, 23, 42, 0.85)",
+              color: "#F9FAFB",
+              fontSize: 18,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+
+          <div
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              backgroundColor: "#FFFFFF",
+              borderRadius: 12,
+              padding: 8,
+              boxShadow: "0 20px 40px rgba(0,0,0,0.35)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <img
+              src={receiptModalUrl}
+              alt="Ticket de caisse"
+              style={{
+                maxWidth: "100%",
+                maxHeight: "80vh",
+                borderRadius: 8,
+                objectFit: "contain",
+              }}
+            />
+          </div>
         </div>
       )}
     </div>

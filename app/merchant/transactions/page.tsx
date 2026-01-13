@@ -23,17 +23,19 @@ interface MerchantTransaction {
   status: string | null;
 }
 
-const RECEIPT_THRESHOLD = 50; // à partir de ce montant, validation manuelle par le commerçant
-
 export default function MerchantTransactionsPage() {
   const supabase = createClient();
   const router = useRouter();
 
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
   const [transactions, setTransactions] = useState<MerchantTransaction[]>([]);
+  const [receiptThreshold, setReceiptThreshold] = useState<number>(50);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // URL du ticket affiché dans la modale
+  const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -74,8 +76,24 @@ export default function MerchantTransactionsPage() {
 
       setProfile(profileData);
 
-      // 3) Transactions de CE commerçant, uniquement :
-      // - montant >= RECEIPT_THRESHOLD
+      // 3) Charger le seuil de ticket depuis la table merchants
+      let threshold = 50;
+      const { data: merchant, error: merchantError } = await supabase
+        .from("merchants")
+        .select("receipt_threshold")
+        .eq("id", profileData.merchant_id)
+        .single();
+
+      if (merchantError) {
+        console.error("Erreur chargement seuil commerçant :", merchantError);
+      } else if (typeof merchant?.receipt_threshold === "number") {
+        threshold = merchant.receipt_threshold;
+      }
+
+      setReceiptThreshold(threshold);
+
+      // 4) Transactions de CE commerçant, uniquement :
+      // - montant >= threshold
       // - statut "pending" (en attente)
       const { data: transactionData, error: transactionError } = await supabase
         .from("transactions")
@@ -83,7 +101,7 @@ export default function MerchantTransactionsPage() {
           "id, amount, cashback_amount, donation_amount, created_at, receipt_image_url, status"
         )
         .eq("merchant_id", profileData.merchant_id)
-        .gte("amount", RECEIPT_THRESHOLD)
+        .gte("amount", threshold)
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
@@ -113,7 +131,7 @@ export default function MerchantTransactionsPage() {
     });
   };
 
-  // Voir le ticket (via URL signée du bucket "receipts")
+  // Voir le ticket (via URL signée du bucket "receipts") → modale
   const handleViewReceipt = async (tx: MerchantTransaction) => {
     if (!tx.receipt_image_url) return;
 
@@ -127,7 +145,8 @@ export default function MerchantTransactionsPage() {
       return;
     }
 
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    // On affiche l'image dans une modale sur la même page
+    setReceiptModalUrl(data.signedUrl);
   };
 
   // Validation / refus par le commerçant
@@ -160,11 +179,11 @@ export default function MerchantTransactionsPage() {
   return (
     <div className="container" style={{ paddingTop: 24, paddingBottom: 24 }}>
       <div className="card">
-        <h2>Transactions à valider (≥ {RECEIPT_THRESHOLD} €)</h2>
+        <h2>Transactions à valider (≥ {receiptThreshold} €)</h2>
 
         {profile && (
           <p className="helper" style={{ marginTop: 4 }}>
-            Seules les transactions de {RECEIPT_THRESHOLD} € et plus
+            Seules les transactions de {receiptThreshold} € et plus
             apparaissent ici. Vous devez les valider ou les refuser après
             vérification du ticket de caisse.
           </p>
@@ -176,7 +195,7 @@ export default function MerchantTransactionsPage() {
           <p className="error">Erreur : {error}</p>
         ) : transactions.length === 0 ? (
           <p className="helper">
-            Aucune transaction à valider pour le moment (≥ {RECEIPT_THRESHOLD} €).
+            Aucune transaction à valider pour le moment (≥ {receiptThreshold} €).
           </p>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -277,6 +296,69 @@ export default function MerchantTransactionsPage() {
           </div>
         )}
       </div>
+
+      {/* MODALE D'AFFICHAGE DU TICKET POUR LE COMMERÇANT */}
+      {receiptModalUrl && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.7)",
+            zIndex: 50,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+        >
+          {/* Bouton X pour fermer */}
+          <button
+            type="button"
+            onClick={() => setReceiptModalUrl(null)}
+            style={{
+              position: "absolute",
+              top: 16,
+              right: 16,
+              width: 32,
+              height: 32,
+              borderRadius: "999px",
+              border: "none",
+              backgroundColor: "rgba(15, 23, 42, 0.85)",
+              color: "#F9FAFB",
+              fontSize: 18,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+
+          <div
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              backgroundColor: "#FFFFFF",
+              borderRadius: 12,
+              padding: 8,
+              boxShadow: "0 20px 40px rgba(0,0,0,0.35)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <img
+              src={receiptModalUrl}
+              alt="Ticket de caisse"
+              style={{
+                maxWidth: "100%",
+                maxHeight: "80vh",
+                borderRadius: 8,
+                objectFit: "contain",
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

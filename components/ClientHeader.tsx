@@ -12,18 +12,16 @@ interface Profile {
 
 export function ClientHeader() {
   const pathname = usePathname();
+  const currentPath = pathname || "/";
   const router = useRouter();
   const supabase = createClient();
-
-  // Sécurisation : on force une string
-  const currentPath = pathname || "/";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [isMerchant, setIsMerchant] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // On récupère le profil pour savoir si c'est un commerçant ou un admin
+  // Charger profil pour savoir si c'est commerçant ou admin
   useEffect(() => {
     const loadProfile = async () => {
       const {
@@ -36,21 +34,22 @@ export function ClientHeader() {
         return;
       }
 
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role, merchant_id")
         .eq("id", user.id)
         .single<Profile>();
 
-      if (profile) {
-        setIsMerchant(
-          profile.role === "merchant" || profile.merchant_id !== null
-        );
-        setIsAdmin(profile.role === "admin");
-      } else {
+      if (profileError || !profile) {
         setIsMerchant(false);
         setIsAdmin(false);
+        return;
       }
+
+      setIsMerchant(
+        profile.role === "merchant" || profile.merchant_id !== null
+      );
+      setIsAdmin(profile.role === "admin");
     };
 
     loadProfile();
@@ -59,7 +58,7 @@ export function ClientHeader() {
   const isMerchantArea = currentPath.startsWith("/merchant");
   const isAdminArea = currentPath.startsWith("/admin");
 
-  // Pages où on affiche "Accueil / Scanner / Menu"
+  // Pages où on affiche Accueil / Scanner / Menu
   const isClientArea =
     currentPath.startsWith("/dashboard") ||
     currentPath.startsWith("/scan") ||
@@ -260,27 +259,49 @@ export function ClientHeader() {
                   display: "flex",
                   flexDirection: "column",
                   gap: "4px",
+                  zIndex: 40,
                 }}
               >
                 {/* Mon QR code commerçant – visible PARTOUT si compte commerçant */}
                 {isMerchant && (
-                  <Link
-                    href="/merchant"
-                    onClick={() => setMenuOpen(false)}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: "10px",
-                      fontSize: "14px",
-                      textDecoration: "none",
-                      color: "#111827",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <span>📌</span>
-                    <span>Mon QR code commerçant</span>
-                  </Link>
+                  <>
+                    <Link
+                      href="/merchant"
+                      onClick={() => setMenuOpen(false)}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "10px",
+                        fontSize: "14px",
+                        textDecoration: "none",
+                        color: "#111827",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <span>📌</span>
+                      <span>Mon QR code commerçant</span>
+                    </Link>
+
+                    {/* Paramètres commerçant – juste en dessous */}
+                    <Link
+                      href="/merchant/settings"
+                      onClick={() => setMenuOpen(false)}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "10px",
+                        fontSize: "14px",
+                        textDecoration: "none",
+                        color: "#111827",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <span>⚙️</span>
+                      <span>Paramètres commerçant</span>
+                    </Link>
+                  </>
                 )}
 
                 <Link
