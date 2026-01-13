@@ -13,7 +13,6 @@
   --border: #e6e7df;
   --warm: #f3d9a4;
 
-  /* Police gérée par next/font : Inter */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 }
 
@@ -50,7 +49,6 @@ a:hover {
   text-decoration: underline;
 }
 
-/* Titres – même rendu que ton ancien dashboard */
 h1,
 h2,
 h3,
@@ -60,17 +58,9 @@ h4 {
   color: var(--text);
 }
 
-h1 {
-  font-size: 1.8rem;
-}
-
-h2 {
-  font-size: 1.4rem;
-}
-
-h3 {
-  font-size: 1.2rem;
-}
+h1 { font-size: 1.8rem; }
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.2rem; }
 
 p {
   margin: 0 0 0.5rem;
@@ -117,7 +107,6 @@ p {
   background: transparent;
   border: 1px solid var(--primary-dark);
   color: var(--text);
-  box-shadow: none;
 }
 
 /* ===========================
@@ -129,10 +118,9 @@ p {
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  font-size: 1rem;
-  margin-top: 6px;
   background: #ffffff;
   color: var(--text);
+  font-size: 1rem;
 }
 
 .label {
@@ -188,36 +176,8 @@ p {
 .table th,
 .table td {
   padding: 10px 6px;
-  text-align: left;
   border-bottom: 1px solid var(--border);
-}
-
-/* ===========================
-   NAVIGATION
-=========================== */
-.nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32px;
-  background: var(--text);
-  color: #f9f9f4;
-  padding: 12px 16px;
-  border-radius: 16px;
-}
-
-.nav-links {
-  display: flex;
-  gap: 16px;
-}
-
-.nav-links a {
-  color: #f9f9f4;
-}
-
-.nav-links a:hover,
-.nav-links button:hover {
-  color: var(--primary);
+  text-align: left;
 }
 
 /* ===========================
@@ -244,10 +204,9 @@ p {
 }
 
 /* ===========================
-   RESPONSIVE – VARIANTES MOBILE / DESKTOP
+   RESPONSIVE VERSION MOBILE / DESKTOP
 =========================== */
 
-/* Par défaut : version mobile visible */
 .mobile-only {
   display: block;
 }
@@ -256,32 +215,49 @@ p {
   display: none;
 }
 
-/* À partir de 768px : on bascule sur la version desktop */
 @media (min-width: 768px) {
   .mobile-only {
     display: none;
   }
-
   .desktop-only {
     display: block;
   }
 }
 
 /* ===========================
-   HERO CARD – FOND À PATTES
+   HERO CARD — PATTES DANS LES 4 COINS
 =========================== */
 .hero-card {
   position: relative;
   overflow: hidden;
+  background-color: #ffffff;
 }
 
 .hero-card::before {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("/bg-paws.svg");
-  background-repeat: repeat;
-  background-size: 240px 240px; /* taille des grosses pattes */
-  opacity: 1;                    /* le SVG est déjà pastel, donc on laisse à 1 */
   pointer-events: none;
+  z-index: 0;
+
+  background-image:
+    url("/bg-paws.svg"),  /* haut gauche */
+    url("/bg-paws.svg"),  /* haut droite */
+    url("/bg-paws.svg"),  /* bas gauche */
+    url("/bg-paws.svg");  /* bas droite */
+
+  background-repeat: no-repeat;
+  background-size: 130px 130px;
+  background-position:
+    top 4% left 4%,
+    top 4% right 4%,
+    bottom 4% left 4%,
+    bottom 4% right 4%;
+
+  opacity: 0.18;
+}
+
+.hero-card > * {
+  position: relative;
+  z-index: 1;
 }
