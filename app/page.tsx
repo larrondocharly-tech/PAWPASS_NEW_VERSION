@@ -13,158 +13,156 @@ export default function LandingPage() {
       <div className="container" style={{ maxWidth: 1120 }}>
         {/* ========= VERSION MOBILE ========= */}
         <div className="mobile-only">
-          <header
-            style={{
-              paddingTop: 8,
-              paddingBottom: 16,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <Image
-              src="/pawpass-logo.jpg"
-              alt="PawPass"
-              width={140}
-              height={70}
-              priority
-            />
-
+          <section style={{ marginTop: 8 }}>
             <div
               style={{
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-                justifyContent: "center",
-                marginTop: 4,
+                background: "#FFFFFF",
+                borderRadius: 24,
+                padding: "18px 18px 22px",
+                boxShadow: "0 16px 40px rgba(15, 23, 42, 0.12)",
               }}
             >
-              <Link
-                href="/login"
-                className="button secondary"
+              {/* Bandeau vert + logo + menu */}
+              <div
                 style={{
-                  padding: "8px 14px",
-                  borderRadius: 999,
-                  fontSize: 14,
+                  background: "#9BE7C4",
+                  borderRadius: 20,
+                  margin: "-18px -18px 18px -18px",
+                  padding: "10px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
                 }}
               >
-                Connexion
-              </Link>
-              <Link
-                href="/register"
-                className="button"
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 999,
-                  fontSize: 14,
-                  background: "#FF7A3C",
-                  color: "white",
-                  boxShadow: "0 6px 14px rgba(255,122,60,0.35)",
-                }}
-              >
-                Inscription
-              </Link>
-            </div>
-          </header>
+                <Image
+                  src="/pawpass-logo.jpg"
+                  alt="PawPass"
+                  width={120}
+                  height={60}
+                  priority
+                />
+                <span
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 700,
+                    color: "#2F4F4F",
+                    lineHeight: 1,
+                  }}
+                >
+                  ≡
+                </span>
+              </div>
 
-          <section
-            style={{
-              padding: "8px 0 24px",
-              textAlign: "center",
-              display: "flex",
-              flexDirection: "column",
-              gap: 16,
-            }}
-          >
-            <div>
-              <p
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  color: "#FF7A3C",
-                  marginBottom: 8,
-                }}
-              >
-                Cashback solidaire
-              </p>
-              <h1
-                style={{
-                  color: "#222222",
-                  fontSize: "1.7rem",
-                  lineHeight: 1.2,
-                  marginBottom: 8,
-                }}
-              >
-                Gagnez en soutenant les animaux
-              </h1>
-              <p
-                className="helper"
-                style={{
-                  fontSize: "0.95rem",
-                  color: "#666666",
-                  margin: "0 auto",
-                  maxWidth: 340,
-                }}
-              >
-                PawPass transforme vos achats chez les commerçants partenaires
-                en cashback solidaire, utilisable en réduction ou en don à une
-                SPA locale.
-              </p>
-            </div>
+              {/* Texte principal */}
+              <div style={{ textAlign: "center", padding: "0 4px" }}>
+                <h1
+                  style={{
+                    color: "#222222",
+                    fontSize: "1.7rem",
+                    lineHeight: 1.25,
+                    marginBottom: 8,
+                  }}
+                >
+                  Soutenez les animaux
+                  <br />
+                  en faisant vos achats
+                </h1>
+                <p
+                  className="helper"
+                  style={{
+                    fontSize: "0.95rem",
+                    color: "#666666",
+                    margin: "0 auto",
+                    maxWidth: 320,
+                  }}
+                >
+                  Cumulez du cashback en aidant les refuges locaux.
+                </p>
+              </div>
 
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-                marginTop: 8,
-              }}
-            >
-              <Link
-                className="button"
-                href="/register"
+              {/* Bloc SPA + animaux (style mockup) */}
+              <div
                 style={{
-                  background: "#FF7A3C",
-                  color: "white",
-                  width: "100%",
+                  marginTop: 18,
+                  borderRadius: 18,
+                  background:
+                    "linear-gradient(180deg, #E9F8EF 0%, #F7FFF9 100%)",
+                  padding: "16px 10px 10px",
+                  textAlign: "center",
                 }}
               >
-                Créer mon compte
-              </Link>
-              <Link
-                className="button secondary"
-                href="/login"
-                style={{ width: "100%" }}
-              >
-                Connexion
-              </Link>
-              <a
-                className="button secondary"
-                href="#comment-ca-marche"
-                style={{
-                  width: "100%",
-                  borderStyle: "dashed",
-                  borderColor: "#4CAF50",
-                  background: "transparent",
-                }}
-              >
-                Voir comment ça marche
-              </a>
-            </div>
+                <div
+                  style={{
+                    display: "inline-block",
+                    marginBottom: 12,
+                    padding: "6px 20px",
+                    borderRadius: 999,
+                    backgroundColor: "#4CAF6A",
+                    color: "#FFFFFF",
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  SPA
+                </div>
 
-            <p
-              className="helper"
-              style={{
-                marginTop: 8,
-                color: "#666666",
-              }}
-            >
-              Pas encore de compte ? Scannez un commerçant, validez votre achat
-              et créez votre compte après.
-            </p>
+                {/* Illustration : on réutilise le logo comme duo chien/chat */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    marginBottom: 4,
+                  }}
+                >
+                  <Image
+                    src="/pawpass-logo.jpg"
+                    alt="Chien et chat"
+                    width={140}
+                    height={80}
+                  />
+                </div>
+              </div>
+
+              {/* Boutons */}
+              <div
+                style={{
+                  marginTop: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <Link
+                  href="/register"
+                  className="button"
+                  style={{
+                    width: "100%",
+                    background: "#FF7A3C",
+                    color: "#FFFFFF",
+                    fontSize: "1rem",
+                    padding: "12px 18px",
+                    boxShadow: "0 10px 24px rgba(255,122,60,0.45)",
+                  }}
+                >
+                  Créer mon compte
+                </Link>
+
+                <Link
+                  href="/login"
+                  className="button secondary"
+                  style={{
+                    width: "100%",
+                    background: "#FFFFFF",
+                    borderRadius: 999,
+                    borderColor: "#CFE7D7",
+                    color: "#2E7D66",
+                    fontWeight: 600,
+                  }}
+                >
+                  Connexion
+                </Link>
+              </div>
+            </div>
           </section>
         </div>
 
