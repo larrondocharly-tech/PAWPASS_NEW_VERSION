@@ -242,3 +242,26 @@ p {
     flex-direction: row;
   }
 }
+/* ===========================
+   RESPONSIVE – VARIANTES MOBILE / DESKTOP
+=========================== */
+
+/* Par défaut : version mobile visible */
+.mobile-only {
+  display: block;
+}
+
+.desktop-only {
+  display: none;
+}
+
+/* À partir de 768px : on bascule sur la version desktop */
+@media (min-width: 768px) {
+  .mobile-only {
+    display: none;
+  }
+
+  .desktop-only {
+    display: block;
+  }
+}
