@@ -41,15 +41,18 @@ export function ClientHeader() {
         .single<Profile>();
 
       if (profileError || !profile) {
+        console.error("Erreur chargement profil header :", profileError);
         setIsMerchant(false);
         setIsAdmin(false);
         return;
       }
 
+      const role = profile.role?.toLowerCase() || null;
+
       setIsMerchant(
-        profile.role === "merchant" || profile.merchant_id !== null
+        role === "merchant" || profile.merchant_id !== null
       );
-      setIsAdmin(profile.role === "admin");
+      setIsAdmin(role === "admin");
     };
 
     loadProfile();
@@ -83,13 +86,14 @@ export function ClientHeader() {
   // - commerçant -> /merchant
   // - admin -> /admin
   // - sinon -> /dashboard
-  const logoHref = isAuthPage || isHome
-    ? "/"
-    : isMerchant
-    ? "/merchant"
-    : isAdmin
-    ? "/admin"
-    : "/dashboard";
+  const logoHref =
+    isAuthPage || isHome
+      ? "/"
+      : isMerchant
+      ? "/merchant"
+      : isAdmin
+      ? "/admin"
+      : "/dashboard";
 
   const homeHref = isMerchant
     ? "/merchant"
@@ -262,9 +266,10 @@ export function ClientHeader() {
                   zIndex: 40,
                 }}
               >
-                {/* Mon QR code commerçant – visible PARTOUT si compte commerçant */}
+                {/* === SECTION COMMERCANT : QR + Paramètres === */}
                 {isMerchant && (
                   <>
+                    {/* QR Code commerçant */}
                     <Link
                       href="/merchant"
                       onClick={() => setMenuOpen(false)}
@@ -283,7 +288,7 @@ export function ClientHeader() {
                       <span>Mon QR code commerçant</span>
                     </Link>
 
-                    {/* Paramètres commerçant – juste en dessous */}
+                    {/* Paramètres commerçant */}
                     <Link
                       href="/merchant/settings"
                       onClick={() => setMenuOpen(false)}
@@ -304,6 +309,7 @@ export function ClientHeader() {
                   </>
                 )}
 
+                {/* Liens généraux */}
                 <Link
                   href="/commerces"
                   onClick={() => setMenuOpen(false)}
@@ -342,7 +348,9 @@ export function ClientHeader() {
 
                 <Link
                   href="/comment-ca-marche"
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() =>
+                    setMenuOpen(false)
+                  }
                   style={{
                     padding: "8px 12px",
                     borderRadius: "10px",
