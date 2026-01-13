@@ -22,7 +22,7 @@ export default function LandingPage() {
                 boxShadow: "0 16px 40px rgba(15, 23, 42, 0.12)",
               }}
             >
-              {/* Bandeau vert + logo + menu */}
+              {/* Bandeau vert + logo centré + menu */}
               <div
                 style={{
                   background: "#9BE7C4",
@@ -31,7 +31,8 @@ export default function LandingPage() {
                   padding: "10px 16px",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "space-between",
+                  justifyContent: "center",
+                  position: "relative",
                 }}
               >
                 <Image
@@ -41,8 +42,11 @@ export default function LandingPage() {
                   height={60}
                   priority
                 />
+                {/* icône menu à droite */}
                 <span
                   style={{
+                    position: "absolute",
+                    right: 18,
                     fontSize: 22,
                     fontWeight: 700,
                     color: "#2F4F4F",
@@ -80,24 +84,25 @@ export default function LandingPage() {
                 </p>
               </div>
 
-              {/* Bloc SPA + animaux (style mockup) */}
+              {/* Bloc SPA + illustration simplifiée */}
               <div
                 style={{
                   marginTop: 18,
                   borderRadius: 18,
                   background:
                     "linear-gradient(180deg, #E9F8EF 0%, #F7FFF9 100%)",
-                  padding: "16px 10px 10px",
+                  padding: "16px 10px 18px",
                   textAlign: "center",
                 }}
               >
+                {/* pastille SPA */}
                 <div
                   style={{
                     display: "inline-block",
-                    marginBottom: 12,
-                    padding: "6px 20px",
+                    marginBottom: 14,
+                    padding: "6px 24px",
                     borderRadius: 999,
-                    backgroundColor: "#4CAF6A",
+                    backgroundColor: "#2E7D32",
                     color: "#FFFFFF",
                     fontWeight: 700,
                     letterSpacing: "0.06em",
@@ -106,20 +111,43 @@ export default function LandingPage() {
                   SPA
                 </div>
 
-                {/* Illustration : on réutilise le logo comme duo chien/chat */}
+                {/* "maison" stylisée + animaux : on compose avec des blocs + logo */}
                 <div
                   style={{
-                    display: "flex",
-                    justifyContent: "center",
-                    marginBottom: 4,
+                    margin: "0 auto",
+                    maxWidth: 260,
+                    borderRadius: 16,
+                    backgroundColor: "#FBE9D7",
+                    padding: "12px 10px 10px",
+                    position: "relative",
+                    overflow: "hidden",
                   }}
                 >
-                  <Image
-                    src="/pawpass-logo.jpg"
-                    alt="Chien et chat"
-                    width={140}
-                    height={80}
+                  {/* toit vert */}
+                  <div
+                    style={{
+                      backgroundColor: "#4CAF6A",
+                      height: 26,
+                      borderRadius: "12px 12px 0 0",
+                      margin: "-12px -10px 10px -10px",
+                    }}
                   />
+                  {/* “façade” claire */}
+                  <div
+                    style={{
+                      backgroundColor: "#FFEEDB",
+                      borderRadius: 10,
+                      padding: "8px 10px 4px",
+                    }}
+                  >
+                    <Image
+                      src="/pawpass-logo.jpg"
+                      alt="Chien et chat"
+                      width={120}
+                      height={60}
+                      style={{ display: "block", margin: "0 auto" }}
+                    />
+                  </div>
                 </div>
               </div>
 
