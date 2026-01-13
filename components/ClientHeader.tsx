@@ -13,11 +13,18 @@ export function ClientHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
-  // Pages "espace client" => Accueil / Scanner / Menu
+  // Toutes les pages où tu veux voir "Accueil / Scanner / Menu"
   const isClientArea =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/scan") ||
-    pathname.startsWith("/account");
+    pathname.startsWith("/account") ||
+    pathname.startsWith("/commerces") ||
+    pathname.startsWith("/parrainage") ||
+    pathname.startsWith("/comment-ca-marche") ||
+    pathname.startsWith("/faq") ||
+    pathname.startsWith("/contact") ||
+    pathname.startsWith("/mentions-legales") ||
+    pathname.startsWith("/cgu");
 
   const isLogin = pathname === "/login";
   const isRegister = pathname === "/register";
@@ -80,7 +87,7 @@ export function ClientHeader() {
         </Link>
 
         {/* ===========================
-            MENU CLIENT (Dashboard / Scan / Account)
+            MENU CLIENT (Dashboard / Scan / pages liées)
            ============================ */}
         {isClientArea && (
           <nav
@@ -145,7 +152,7 @@ export function ClientHeader() {
               Menu
             </button>
 
-            {/* Overlay menu – même contenu que ton ancien menu */}
+            {/* Overlay menu – avec emojis + CGU */}
             {menuOpen && (
               <div
                 style={{
@@ -156,7 +163,7 @@ export function ClientHeader() {
                   borderRadius: "16px",
                   boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
                   padding: "12px 8px",
-                  minWidth: "230px",
+                  minWidth: "240px",
                   display: "flex",
                   flexDirection: "column",
                   gap: "4px",
@@ -171,9 +178,13 @@ export function ClientHeader() {
                     fontSize: "14px",
                     textDecoration: "none",
                     color: "#111827",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  Commerçants partenaires
+                  <span>🏪</span>
+                  <span>Commerçants partenaires</span>
                 </Link>
 
                 <Link
@@ -185,9 +196,13 @@ export function ClientHeader() {
                     fontSize: "14px",
                     textDecoration: "none",
                     color: "#111827",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  Parrainer un ami
+                  <span>🤝</span>
+                  <span>Parrainer un ami</span>
                 </Link>
 
                 <Link
@@ -199,9 +214,13 @@ export function ClientHeader() {
                     fontSize: "14px",
                     textDecoration: "none",
                     color: "#111827",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  Comment ça marche ?
+                  <span>📖</span>
+                  <span>Comment ça marche ?</span>
                 </Link>
 
                 <Link
@@ -213,9 +232,13 @@ export function ClientHeader() {
                     fontSize: "14px",
                     textDecoration: "none",
                     color: "#111827",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  FAQ
+                  <span>❓</span>
+                  <span>FAQ</span>
                 </Link>
 
                 <Link
@@ -227,9 +250,13 @@ export function ClientHeader() {
                     fontSize: "14px",
                     textDecoration: "none",
                     color: "#111827",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  Contact
+                  <span>✉️</span>
+                  <span>Contact</span>
                 </Link>
 
                 <Link
@@ -241,9 +268,31 @@ export function ClientHeader() {
                     fontSize: "14px",
                     textDecoration: "none",
                     color: "#111827",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  Mentions légales
+                  <span>📄</span>
+                  <span>Mentions légales</span>
+                </Link>
+
+                <Link
+                  href="/cgu"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    textDecoration: "none",
+                    color: "#111827",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <span>📜</span>
+                  <span>CGU</span>
                 </Link>
 
                 <div
@@ -265,9 +314,13 @@ export function ClientHeader() {
                     background: "transparent",
                     color: "#b91c1c",
                     cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  Se déconnecter
+                  <span>🚪</span>
+                  <span>Se déconnecter</span>
                 </button>
 
                 {logoutError && (
