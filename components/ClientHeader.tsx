@@ -5,34 +5,29 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
-type Role = "client" | "merchant" | "admin" | null;
+interface SupaUser {
+  id: string;
+  email?: string;
+}
 
 export function ClientHeader() {
   const supabase = createClient();
   const pathname = usePathname();
 
-  const [role, setRole] = useState<Role>(null);
+  const [user, setUser] = useState<SupaUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      setLoading(true);
 
-      if (!user) {
-        setRole(null);
-        setLoading(false);
-        return;
+      const { data, error } = await supabase.auth.getUser();
+
+      if (error) {
+        console.error("Erreur getUser dans ClientHeader :", error.message);
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      setRole((profile?.role as Role) ?? null);
+      setUser((data?.user as SupaUser | null) ?? null);
       setLoading(false);
     };
 
@@ -76,8 +71,8 @@ export function ClientHeader() {
           PawPass
         </Link>
 
-        {/* --- MENU SI CONNECTÉE EN CLIENT --- */}
-        {role === "client" && (
+        {/* --- SI CONNECTÉ(E) --- */}
+        {user && (
           <nav
             style={{
               display: "flex",
@@ -111,8 +106,8 @@ export function ClientHeader() {
           </nav>
         )}
 
-        {/* --- SI NON CONNECTÉE --- */}
-        {role === null && !loading && (
+        {/* --- SI NON CONNECTÉ(E) --- */}
+        {!user && !loading && (
           <nav
             style={{
               display: "flex",
@@ -131,8 +126,6 @@ export function ClientHeader() {
             </Link>
           </nav>
         )}
-
-        {/* Tu pourras plus tard ajouter un menu spécifique merchant / admin si besoin */}
       </div>
     </header>
   );
