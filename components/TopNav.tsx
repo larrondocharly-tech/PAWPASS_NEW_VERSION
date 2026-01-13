@@ -6,10 +6,8 @@ import { useState, type CSSProperties } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
 const navItems = [
-  // Accueil pointe vers le dashboard
   { href: "/dashboard", label: "Accueil" },
   { href: "/scan", label: "Scanner" },
-  // On garde cette entrée même si elle n'est pas rendue directement
   { href: "/dashboard", label: "Mon compte" },
 ];
 
@@ -53,7 +51,7 @@ export default function TopNav() {
             gap: 16,
           }}
         >
-          {/* Logo / titre → renvoie vers le dashboard */}
+          {/* Logo → dashboard */}
           <Link
             href="/dashboard"
             style={{
@@ -66,8 +64,9 @@ export default function TopNav() {
             PawPass
           </Link>
 
-          {/* Liens + bouton "Mon compte" */}
+          {/* BLOC DES BOUTONS DU HAUT — desktop uniquement */}
           <div
+            className="desktop-top-buttons"
             style={{
               display: "flex",
               alignItems: "center",
@@ -81,7 +80,6 @@ export default function TopNav() {
                 pathname?.startsWith(item.href + "/") ||
                 pathname?.startsWith(item.href + "?");
 
-              // On ne rend pas le lien "Mon compte" en double : il sera dans le panneau
               if (item.href === "/dashboard" && item.label === "Mon compte") {
                 return null;
               }
@@ -110,7 +108,7 @@ export default function TopNav() {
               );
             })}
 
-            {/* Bouton pour ouvrir le panneau "Mon compte" */}
+            {/* Bouton mon compte (desktop) */}
             <button
               type="button"
               onClick={() => setPanelOpen(true)}
@@ -135,7 +133,7 @@ export default function TopNav() {
         </nav>
       </header>
 
-      {/* Panneau latéral "Mon compte" */}
+      {/* PANNEAU LATÉRAL */}
       {panelOpen && (
         <div
           style={{
@@ -160,7 +158,7 @@ export default function TopNav() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header du panneau */}
+            {/* Header */}
             <div
               style={{
                 padding: "16px 20px",
@@ -193,7 +191,7 @@ export default function TopNav() {
               </button>
             </div>
 
-            {/* Contenu du panneau */}
+            {/* Liens panneau */}
             <div
               style={{
                 padding: "12px 16px",
@@ -201,92 +199,44 @@ export default function TopNav() {
                 flex: 1,
               }}
             >
-              {/* Dashboard */}
-              <Link
-                href="/dashboard"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>🏠</span>
-                <span>Tableau de bord</span>
+              <Link href="/dashboard" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>🏠</span><span>Tableau de bord</span>
               </Link>
 
-              {/* QR Code */}
-              <Link
-                href="/merchant"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>📱</span>
-                <span>Mon QR Code</span>
+              <Link href="/merchant" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>📱</span><span>Mon QR Code</span>
               </Link>
 
-              {/* Transactions commerçant */}
-              <Link
-                href="/merchant/transactions"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>📊</span>
-                <span>Transactions à valider</span>
+              <Link href="/merchant/transactions" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>📊</span><span>Transactions à valider</span>
               </Link>
 
-              <Link
-                href="/commerces"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>🛍️</span>
-                <span>Commerçants partenaires</span>
+              <Link href="/commerces" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>🛍️</span><span>Commerçants partenaires</span>
               </Link>
 
-              <Link
-                href="/parrainage"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>🤝</span>
-                <span>Parrainer un ami</span>
+              <Link href="/parrainage" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>🤝</span><span>Parrainer un ami</span>
               </Link>
 
-              <Link
-                href="/comment-ca-marche"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>❓</span>
-                <span>Comment ça marche ?</span>
+              <Link href="/comment-ca-marche" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>❓</span><span>Comment ça marche ?</span>
               </Link>
 
-              <Link
-                href="/faq"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>📚</span>
-                <span>FAQ</span>
+              <Link href="/faq" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>📚</span><span>FAQ</span>
               </Link>
 
-              <Link
-                href="/contact"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>✉️</span>
-                <span>Contact</span>
+              <Link href="/contact" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>✉️</span><span>Contact</span>
               </Link>
 
-              <Link
-                href="/mentions-legales"
-                onClick={() => setPanelOpen(false)}
-                style={rowStyle}
-              >
-                <span>📄</span>
-                <span>Mentions légales</span>
+              <Link href="/mentions-legales" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>📄</span><span>Mentions légales</span>
               </Link>
             </div>
 
-            {/* Bouton de déconnexion */}
+            {/* Déconnexion */}
             <div
               style={{
                 padding: "12px 16px 16px 16px",

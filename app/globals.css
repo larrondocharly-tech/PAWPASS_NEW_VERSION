@@ -261,3 +261,15 @@ p {
   position: relative;
   z-index: 1;
 }
+/* Masquer la barre de boutons Connexion / Inscription UNIQUEMENT sur mobile */
+@media (max-width: 767px) {
+  .desktop-top-buttons {
+    display: none !important;
+  }
+}
+@media (max-width: 767px) {
+  .hero-illustration {
+    max-width: 85%;   /* réduit légèrement */
+    margin: 0 auto;
+  }
+}
