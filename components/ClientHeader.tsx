@@ -24,7 +24,8 @@ export function ClientHeader() {
     pathname.startsWith("/faq") ||
     pathname.startsWith("/contact") ||
     pathname.startsWith("/mentions-legales") ||
-    pathname.startsWith("/cgu");
+    pathname.startsWith("/cgu") ||
+    pathname.startsWith("/merchant"); // <-- AJOUT : espace commerçant
 
   const isLogin = pathname === "/login";
   const isRegister = pathname === "/register";
