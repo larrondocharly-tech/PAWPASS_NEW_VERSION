@@ -16,17 +16,24 @@ interface SpaSummary {
   total_cashback: number;
 }
 
+interface Tab {
+  href: string;
+  label: string;
+}
+
 export default function AdminDashboardPage() {
   const supabase = createClient();
   const pathname = usePathname();
+  const currentPath = pathname || "/";
   const router = useRouter();
 
   const [summary, setSummary] = useState<SpaSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sectionsOpen, setSectionsOpen] = useState(false);
 
   // Tabs de navigation admin
-  const tabs = [
+  const tabs: Tab[] = [
     { href: "/admin", label: "Vue d’ensemble" },
     { href: "/admin/transactions", label: "Transactions" },
     { href: "/admin/merchants", label: "Gérer les commerçants" },
@@ -88,36 +95,105 @@ export default function AdminDashboardPage() {
     0
   );
 
-  const renderTabs = () => (
-    <nav
-      style={{
-        marginBottom: 24,
-        display: "flex",
-        gap: 8,
-      }}
-    >
-      {tabs.map((tab) => {
-        const isActive = pathname === tab.href;
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
+  const renderTabs = () => {
+    // On cherche l’onglet le plus spécifique qui matche l’URL courante
+    const activeTab = tabs.reduce<Tab | null>((best, tab) => {
+      if (currentPath.startsWith(tab.href)) {
+        if (!best || tab.href.length > best.href.length) {
+          return tab;
+        }
+      }
+      return best;
+    }, null);
+
+    const activeLabel = activeTab ? activeTab.label : "Sections admin";
+
+    return (
+      <div
+        style={{
+          marginBottom: 24,
+          position: "relative",
+          display: "inline-block",
+        }}
+      >
+        {/* Bouton principal "Sections admin" */}
+        <button
+          type="button"
+          onClick={() => setSectionsOpen((prev) => !prev)}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 999,
+            border: "1px solid #D1D5DB",
+            backgroundColor: "#FFFFFF",
+            cursor: "pointer",
+            fontSize: 14,
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
+          }}
+        >
+          <span>{activeLabel}</span>
+          <span
             style={{
-              padding: "8px 12px",
-              borderRadius: 999,
-              fontSize: 14,
-              fontWeight: isActive ? 700 : 500,
-              backgroundColor: isActive ? "#059669" : "#e5e7eb",
-              color: isActive ? "#ffffff" : "#111827",
-              textDecoration: "none",
+              fontSize: 12,
             }}
           >
-            {tab.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
+            ▾
+          </span>
+        </button>
+
+        {/* Dropdown des sections admin */}
+        {sectionsOpen && (
+          <div
+            style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              marginTop: 6,
+              backgroundColor: "#FFFFFF",
+              borderRadius: 16,
+              boxShadow: "0 10px 25px rgba(15, 23, 42, 0.18)",
+              padding: "8px 6px",
+              minWidth: 260,
+              zIndex: 30,
+            }}
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTab?.href === tab.href;
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  onClick={() => setSectionsOpen(false)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    textDecoration: "none",
+                    color: isActive ? "#059669" : "#111827",
+                    backgroundColor: isActive ? "#ECFDF3" : "transparent",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontWeight: isActive ? 700 : 500,
+                    }}
+                  >
+                    {tab.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (loading) {
     return (

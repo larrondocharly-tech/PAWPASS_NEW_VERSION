@@ -109,13 +109,13 @@ export default function AdminTransactionsPage() {
     }
   };
 
-  // Voir le ticket
+  // Voir le ticket — version compatible mobile (ouvre dans la même fenêtre)
   const handleViewReceipt = async (tx: Transaction) => {
     if (!tx.receipt_image_url) return;
 
     const { data, error } = await supabase.storage
       .from("receipts")
-      .createSignedUrl(tx.receipt_image_url, 60 * 60); // 1h
+      .createSignedUrl(tx.receipt_image_url, 60 * 60); // URL valable 1h
 
     if (error || !data?.signedUrl) {
       console.error("Erreur URL ticket:", error);
@@ -123,7 +123,9 @@ export default function AdminTransactionsPage() {
       return;
     }
 
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    // Sur mobile, on évite window.open (souvent bloqué).
+    // On redirige simplement vers l'image dans l'onglet actuel.
+    window.location.href = data.signedUrl;
   };
 
   // Validation / refus par l'admin
@@ -243,26 +245,34 @@ export default function AdminTransactionsPage() {
                     <td style={{ padding: 12 }}>
                       {formatEuro(effectiveDonation)}
                     </td>
-                    <td style={{ padding: 12 }}>
-  {tx.receipt_image_url ? (
-    <button
-      type="button"
-      onClick={() => handleViewReceipt(tx)}
-      style={{
-        padding: "6px 10px",
-        borderRadius: 6,
-        border: "1px solid #ccc",
-        background: "#f9fafb",
-        cursor: "pointer",
-      }}
-    >
-      Voir le ticket
-    </button>
-  ) : (
-    <span style={{ color: "#6b7280" }}>Aucun</span>
-  )}
-</td>
-
+                    <td
+                      style={{
+                        padding: 12,
+                      }}
+                    >
+                      {tx.receipt_image_url ? (
+                        <button
+                          type="button"
+                          onClick={() => handleViewReceipt(tx)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 6,
+                            border: "1px solid #D1D5DB",
+                            background: "#F9FAFB",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            color: "#2563EB",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Voir le ticket
+                        </button>
+                      ) : (
+                        <span style={{ color: "#6b7280", fontSize: 13 }}>
+                          Aucun
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding: 12 }}>
                       <span
                         style={{
