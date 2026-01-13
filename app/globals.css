@@ -30,10 +30,9 @@ html {
 
 body {
   margin: 0;
-  font-family: inherit;
   line-height: 1.5;
-  color: var(--text);
   background: var(--bg);
+  color: var(--text);
 }
 
 main {
@@ -49,10 +48,8 @@ a:hover {
   text-decoration: underline;
 }
 
-h1,
-h2,
-h3,
-h4 {
+/* TITRES */
+h1, h2, h3, h4 {
   margin: 0 0 0.5rem;
   font-weight: 700;
   color: var(--text);
@@ -62,9 +59,7 @@ h1 { font-size: 1.8rem; }
 h2 { font-size: 1.4rem; }
 h3 { font-size: 1.2rem; }
 
-p {
-  margin: 0 0 0.5rem;
-}
+p { margin: 0 0 0.5rem; }
 
 /* ===========================
    CONTAINERS
@@ -204,50 +199,51 @@ p {
 }
 
 /* ===========================
-   RESPONSIVE VERSION MOBILE / DESKTOP
+   RESPONSIVE — MOBILE / DESKTOP
 =========================== */
 
-.mobile-only {
-  display: block;
-}
-
-.desktop-only {
-  display: none;
-}
+.mobile-only { display: block; }
+.desktop-only { display: none; }
 
 @media (min-width: 768px) {
-  .mobile-only {
-    display: none;
-  }
-  .desktop-only {
-    display: block;
+  .mobile-only { display: none; }
+  .desktop-only { display: block; }
+}
+
+/* ===========================
+   MASQUER BOUTONS TOPNAV SUR MOBILE
+=========================== */
+@media (max-width: 767px) {
+  .desktop-top-buttons {
+    display: none !important;
   }
 }
 
 /* ===========================
-   HERO CARD — PATTES DANS LES 4 COINS
+   HERO – PATTES DANS LES 4 ANGLES
 =========================== */
 .hero-card {
   position: relative;
   overflow: hidden;
   background-color: #ffffff;
+  border-radius: 24px;
 }
 
 .hero-card::before {
   content: "";
   position: absolute;
   inset: 0;
-  pointer-events: none;
   z-index: 0;
+  pointer-events: none;
 
   background-image:
-    url("/bg-paws.svg"),  /* haut gauche */
-    url("/bg-paws.svg"),  /* haut droite */
-    url("/bg-paws.svg"),  /* bas gauche */
-    url("/bg-paws.svg");  /* bas droite */
+    url("/bg-paws.svg"),
+    url("/bg-paws.svg"),
+    url("/bg-paws.svg"),
+    url("/bg-paws.svg");
 
   background-repeat: no-repeat;
-  background-size: 130px 130px;
+  background-size: 120px;
   background-position:
     top 4% left 4%,
     top 4% right 4%,
@@ -261,15 +257,14 @@ p {
   position: relative;
   z-index: 1;
 }
-/* Masquer la barre de boutons Connexion / Inscription UNIQUEMENT sur mobile */
-@media (max-width: 767px) {
-  .desktop-top-buttons {
-    display: none !important;
-  }
-}
+
+/* ===========================
+   ILLUSTRATION MOBILE
+=========================== */
 @media (max-width: 767px) {
   .hero-illustration {
-    max-width: 85%;   /* réduit légèrement */
+    max-width: 82%;
     margin: 0 auto;
+    display: block;
   }
 }

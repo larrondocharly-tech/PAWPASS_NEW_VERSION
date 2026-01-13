@@ -51,7 +51,7 @@ export default function TopNav() {
             gap: 16,
           }}
         >
-          {/* Logo → dashboard */}
+          {/* Logo */}
           <Link
             href="/dashboard"
             style={{
@@ -64,7 +64,7 @@ export default function TopNav() {
             PawPass
           </Link>
 
-          {/* BLOC DES BOUTONS DU HAUT — desktop uniquement */}
+          {/* BOUTONS DESKTOP UNIQUEMENT */}
           <div
             className="desktop-top-buttons"
             style={{
@@ -108,7 +108,7 @@ export default function TopNav() {
               );
             })}
 
-            {/* Bouton mon compte (desktop) */}
+            {/* Bouton mon compte */}
             <button
               type="button"
               onClick={() => setPanelOpen(true)}
@@ -133,7 +133,7 @@ export default function TopNav() {
         </nav>
       </header>
 
-      {/* PANNEAU LATÉRAL */}
+      {/* PANEL LATERAL */}
       {panelOpen && (
         <div
           style={{
@@ -158,7 +158,6 @@ export default function TopNav() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div
               style={{
                 padding: "16px 20px",
@@ -191,7 +190,6 @@ export default function TopNav() {
               </button>
             </div>
 
-            {/* Liens panneau */}
             <div
               style={{
                 padding: "12px 16px",
@@ -236,7 +234,6 @@ export default function TopNav() {
               </Link>
             </div>
 
-            {/* Déconnexion */}
             <div
               style={{
                 padding: "12px 16px 16px 16px",

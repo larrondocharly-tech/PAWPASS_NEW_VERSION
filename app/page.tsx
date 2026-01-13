@@ -23,7 +23,7 @@ export default function HomePage() {
           />
         </div>
 
-        {/* Boutons (header mobile seulement) */}
+        {/* Boutons mobile */}
         <div
           style={{
             display: "flex",
@@ -61,7 +61,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Bloc Hero mobile */}
+        {/* HERO MOBILE */}
         <div
           className="hero-card"
           style={{
@@ -73,7 +73,6 @@ export default function HomePage() {
             overflow: "hidden",
           }}
         >
-          {/* Texte */}
           <p
             style={{
               textAlign: "center",
@@ -112,11 +111,12 @@ export default function HomePage() {
           {/* Illustration mobile */}
           <div style={{ textAlign: "center" }}>
             <Image
-              src="/hero-spa.png"
+              src="/hero-spa.png.jpg"
               alt="Chien et chat devant une SPA"
               width={380}
               height={380}
               priority
+              className="hero-illustration"
               style={{
                 width: "82%",
                 height: "auto",
@@ -182,34 +182,21 @@ export default function HomePage() {
             CASHBACK SOLIDAIRE
           </span>
 
-          <h1 style={{ marginTop: "16px" }}>
-            Gagnez en soutenant les animaux
-          </h1>
+          <h1 style={{ marginTop: "16px" }}>Gagnez en soutenant les animaux</h1>
 
           <p style={{ maxWidth: "480px", marginBottom: "32px" }}>
-            PawPass transforme vos achats en cashback solidaire, utilisable en
-            réduction ou en don à une SPA locale.
+            PawPass transforme vos achats en cashback solidaire, utilisable en réduction ou en don à une SPA locale.
           </p>
 
           <div style={{ display: "flex", gap: "16px" }}>
-            <Link
-              href="/register"
-              className="button"
-              style={{
-                padding: "14px 20px",
-                borderRadius: "16px",
-              }}
-            >
+            <Link href="/register" className="button" style={{ padding: "14px 20px", borderRadius: "16px" }}>
               Créer mon compte
             </Link>
 
             <Link
               href="/how-it-works"
               className="button secondary"
-              style={{
-                padding: "14px 20px",
-                borderRadius: "16px",
-              }}
+              style={{ padding: "14px 20px", borderRadius: "16px" }}
             >
               Voir comment ça marche
             </Link>

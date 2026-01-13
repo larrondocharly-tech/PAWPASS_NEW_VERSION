@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             flexDirection: "column",
           }}
         >
-          {/* Header conditionnel côté client */}
+          {/* Header affiché selon la route */}
           <ClientHeader />
 
           {/* Contenu des pages */}
