@@ -1,23 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabaseClient";
 
 export function ClientHeader() {
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
 
-  // Pages "espace client" -> on affiche Accueil / Scanner / Mon compte
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  // Pages "espace client" => Accueil / Scanner / Menu
   const isClientArea =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/scan") ||
     pathname.startsWith("/account");
 
-  // Pages d'auth -> on affiche Connexion / Créer un compte
-  const isAuthPage =
-    pathname === "/login" ||
-    pathname === "/register";
+  const isLogin = pathname === "/login";
+  const isRegister = pathname === "/register";
 
   const isActive = (href: string) => pathname === href;
+
+  useEffect(() => {
+    // On ferme le menu quand on change de page
+    setMenuOpen(false);
+  }, [pathname]);
+
+  const handleLogout = async () => {
+    setLogoutError(null);
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error("Erreur signOut depuis le header :", error.message);
+      setLogoutError("Déconnexion impossible pour le moment.");
+      return;
+    }
+
+    // Retour à la page d'accueil après déconnexion
+    router.push("/");
+    router.refresh();
+  };
 
   return (
     <header
@@ -38,6 +63,7 @@ export function ClientHeader() {
           alignItems: "center",
           justifyContent: "space-between",
           gap: "12px",
+          position: "relative",
         }}
       >
         {/* Logo / titre */}
@@ -54,7 +80,9 @@ export function ClientHeader() {
           PawPass
         </Link>
 
-        {/* --- MENU CLIENT (dashboard / scan / account) --- */}
+        {/* ===========================
+            MENU CLIENT (Dashboard / Scan / Account)
+           ============================ */}
         {isClientArea && (
           <nav
             style={{
@@ -63,34 +91,184 @@ export function ClientHeader() {
               flexShrink: 0,
             }}
           >
-            {[
-              { href: "/dashboard", label: "Accueil" },
-              { href: "/scan", label: "Scanner" },
-              { href: "/account", label: "Mon compte" },
-            ].map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
+            {/* Accueil */}
+            <Link
+              href="/dashboard"
+              style={{
+                padding: "6px 14px",
+                borderRadius: "999px",
+                fontSize: "14px",
+                fontWeight: 600,
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+                backgroundColor: isActive("/dashboard") ? "#111827" : "#FFFFFF",
+                color: isActive("/dashboard") ? "#FFFFFF" : "#111827",
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Accueil
+            </Link>
+
+            {/* Scanner */}
+            <Link
+              href="/scan"
+              style={{
+                padding: "6px 14px",
+                borderRadius: "999px",
+                fontSize: "14px",
+                fontWeight: 600,
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+                backgroundColor: isActive("/scan") ? "#111827" : "#FFFFFF",
+                color: isActive("/scan") ? "#FFFFFF" : "#111827",
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Scanner
+            </Link>
+
+            {/* Menu (overlay) */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "999px",
+                fontSize: "14px",
+                fontWeight: 600,
+                border: "1px solid rgba(15, 23, 42, 0.08)",
+                backgroundColor: "#FFFFFF",
+                color: "#111827",
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+            >
+              Menu
+            </button>
+
+            {/* Overlay menu */}
+            {menuOpen && (
+              <div
                 style={{
-                  padding: "6px 14px",
-                  borderRadius: "999px",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  border: "1px solid rgba(15, 23, 42, 0.08)",
-                  backgroundColor: isActive(link.href) ? "#111827" : "#FFFFFF",
-                  color: isActive(link.href) ? "#FFFFFF" : "#111827",
-                  textDecoration: "none",
-                  whiteSpace: "nowrap",
+                  position: "absolute",
+                  top: "46px",
+                  right: "16px",
+                  backgroundColor: "#ffffff",
+                  borderRadius: "16px",
+                  boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
+                  padding: "12px 8px",
+                  minWidth: "210px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "4px",
                 }}
               >
-                {link.label}
-              </Link>
-            ))}
+                <Link
+                  href="/commerces"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    textDecoration: "none",
+                    color: "#111827",
+                  }}
+                >
+                  Commerces partenaires
+                </Link>
+
+                <Link
+                  href="/comment-ca-marche"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    textDecoration: "none",
+                    color: "#111827",
+                  }}
+                >
+                  Comment ça marche
+                </Link>
+
+                <Link
+                  href="/faq"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    textDecoration: "none",
+                    color: "#111827",
+                  }}
+                >
+                  FAQ
+                </Link>
+
+                <div
+                  style={{
+                    borderTop: "1px solid #E5E7EB",
+                    margin: "6px 0 4px",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    fontSize: "14px",
+                    textAlign: "left",
+                    border: "none",
+                    background: "transparent",
+                    color: "#b91c1c",
+                    cursor: "pointer",
+                  }}
+                >
+                  Se déconnecter
+                </button>
+
+                {logoutError && (
+                  <div
+                    style={{
+                      marginTop: "4px",
+                      fontSize: "11px",
+                      color: "#b91c1c",
+                    }}
+                  >
+                    {logoutError}
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
         )}
 
-        {/* --- MENU AUTH (login / register) --- */}
-        {isAuthPage && (
+        {/* ===========================
+            PAGES D'AUTH
+           ============================ */}
+
+        {/* Sur /login -> seulement "Créer un compte" */}
+        {isLogin && (
+          <nav
+            style={{
+              display: "flex",
+              gap: "8px",
+              marginLeft: "auto",
+            }}
+          >
+            <Link
+              href="/register"
+              style={{ fontSize: "14px", fontWeight: 600 }}
+            >
+              Créer un compte
+            </Link>
+          </nav>
+        )}
+
+        {/* Sur /register -> seulement "Connexion" */}
+        {isRegister && (
           <nav
             style={{
               display: "flex",
@@ -101,18 +279,8 @@ export function ClientHeader() {
             <Link href="/login" style={{ fontSize: "14px" }}>
               Connexion
             </Link>
-            <Link
-              href="/register"
-              style={{ fontSize: "14px", fontWeight: 600 }}
-            >
-              Créer un compte
-            </Link>
           </nav>
         )}
-
-        {/* Sur les autres pages (homepage marketing, cgu, etc.),
-            on peut ne pas afficher de boutons, ou tu pourras en ajouter plus tard.
-        */}
       </div>
     </header>
   );
