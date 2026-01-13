@@ -242,6 +242,7 @@ p {
     flex-direction: row;
   }
 }
+
 /* ===========================
    RESPONSIVE – VARIANTES MOBILE / DESKTOP
 =========================== */
@@ -265,6 +266,10 @@ p {
     display: block;
   }
 }
+
+/* ===========================
+   HERO CARD – FOND À PATTES
+=========================== */
 .hero-card {
   position: relative;
   overflow: hidden;
@@ -276,7 +281,7 @@ p {
   inset: 0;
   background-image: url("/bg-paws.svg");
   background-repeat: repeat;
-  background-size: 80px;
-  opacity: 0.25;
+  background-size: 240px 240px; /* taille des grosses pattes */
+  opacity: 1;                    /* le SVG est déjà pastel, donc on laisse à 1 */
   pointer-events: none;
 }
