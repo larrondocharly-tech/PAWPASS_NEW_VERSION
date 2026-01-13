@@ -13,7 +13,7 @@ export function ClientHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
-  // Toutes les pages où tu veux voir "Accueil / Scanner / Menu"
+  // Pages où on affiche "Accueil / Scanner / Menu"
   const isClientArea =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/scan") ||
@@ -28,6 +28,13 @@ export function ClientHeader() {
 
   const isLogin = pathname === "/login";
   const isRegister = pathname === "/register";
+  const isHome = pathname === "/";
+  const isAuthPage = isLogin || isRegister;
+
+  // Comportement du logo PawPass :
+  // - sur /, /login, /register -> lien vers /
+  // - partout ailleurs -> lien vers /dashboard
+  const logoHref = isAuthPage || isHome ? "/" : "/dashboard";
 
   const isActive = (href: string) => pathname === href;
 
@@ -74,7 +81,7 @@ export function ClientHeader() {
       >
         {/* Logo / titre */}
         <Link
-          href="/"
+          href={logoHref}
           style={{
             fontWeight: 700,
             fontSize: "20px",
