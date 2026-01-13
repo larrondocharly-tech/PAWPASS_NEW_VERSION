@@ -69,12 +69,14 @@ export function ClientHeader() {
             fontWeight: 700,
             fontSize: "20px",
             letterSpacing: "0.03em",
+            textDecoration: "none",
+            color: "#111827",
           }}
         >
           PawPass
         </Link>
 
-        {/* BOUTONS CLIENT : visibles partout (web, mobile, app) */}
+        {/* --- MENU SI CONNECTÉE EN CLIENT --- */}
         {role === "client" && (
           <nav
             style={{
@@ -109,7 +111,7 @@ export function ClientHeader() {
           </nav>
         )}
 
-        {/* Si pas connecté : actions simples */}
+        {/* --- SI NON CONNECTÉE --- */}
         {role === null && !loading && (
           <nav
             style={{
@@ -130,7 +132,7 @@ export function ClientHeader() {
           </nav>
         )}
 
-        {/* Pour merchant / admin tu pourras ajouter d’autres boutons si tu veux */}
+        {/* Tu pourras plus tard ajouter un menu spécifique merchant / admin si besoin */}
       </div>
     </header>
   );
