@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/lib/supabaseClient";
 import QrScannerRaw from "react-qr-scanner";
 const QrScanner: any = QrScannerRaw;
@@ -41,6 +42,9 @@ export default function ScanInner() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // error: erreurs venant de Supabase (RPC / trigger 2h / autres)
   const [error, setError] = useState<string | null>(null);
+
+  // Popup de remerciement
+  const [showThankYou, setShowThankYou] = useState(false);
 
   // =========================
   // Chargement des SPAs
@@ -169,7 +173,7 @@ export default function ScanInner() {
   // =========================
   // Soumission du formulaire (création transaction)
   // =========================
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrorMsg(null);
     setError(null);
@@ -247,9 +251,15 @@ export default function ScanInner() {
       return;
     }
 
-    // Succès : message de remerciement puis retour au tableau de bord
-    alert("Merci pour votre don ! ❤️");
-    router.push("/dashboard");
+    // =========================
+    // Succès : popup de remerciement + redirection
+    // =========================
+    setShowThankYou(true);
+
+    // Redirection vers le dashboard après 2,5 secondes
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 2500);
   };
 
   // =========================
@@ -432,6 +442,70 @@ export default function ScanInner() {
       {/* Cas commerçant introuvable */}
       {merchantCode && !merchantFound && !loadingMerchant && !error && (
         <p style={{ marginTop: 16 }}>Commerçant introuvable.</p>
+      )}
+
+      {/* =========================
+          POPUP "Meeeeh-rciiii pour votre don !"
+      ========================== */}
+      {showThankYou && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#FFFFFB",
+              borderRadius: "20px",
+              padding: "20px 18px 18px",
+              width: "90%",
+              maxWidth: "360px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ marginBottom: 12 }}>
+              <Image
+                src="/goat-thankyou.gif"
+                alt="Merci pour votre don"
+                width={260}
+                height={260}
+                style={{
+                  borderRadius: 16,
+                  objectFit: "cover",
+                }}
+              />
+            </div>
+
+            <p
+              style={{
+                fontWeight: 700,
+                fontSize: 18,
+                margin: "0 0 6px",
+                color: "#222222",
+              }}
+            >
+              Meeeeh-rciiii pour votre don !
+            </p>
+
+            <p
+              style={{
+                fontSize: 14,
+                margin: 0,
+                color: "#555555",
+              }}
+            >
+              Grâce à vous, les animaux des refuges locaux sont un peu mieux
+              soutenus.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );
