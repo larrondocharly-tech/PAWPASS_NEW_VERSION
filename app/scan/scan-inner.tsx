@@ -252,14 +252,9 @@ export default function ScanInner() {
     }
 
     // =========================
-    // Succès : popup de remerciement + redirection
+    // Succès : popup de remerciement (plus de redirection automatique)
     // =========================
     setShowThankYou(true);
-
-    // Redirection vers le dashboard après 2,5 secondes
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 2500);
   };
 
   // =========================
@@ -270,9 +265,7 @@ export default function ScanInner() {
       <h1>Scanner un commerçant</h1>
 
       {(error || errorMsg) && (
-        <p style={{ color: "red", marginTop: 8 }}>
-          {error || errorMsg}
-        </p>
+        <p style={{ color: "red", marginTop: 8 }}>{error || errorMsg}</p>
       )}
 
       {/* Si aucun code marchand → scanner interne */}
@@ -476,6 +469,7 @@ export default function ScanInner() {
                 alt="Merci pour votre don"
                 width={260}
                 height={260}
+                unoptimized
                 style={{
                   borderRadius: 16,
                   objectFit: "cover",
@@ -504,6 +498,22 @@ export default function ScanInner() {
               Grâce à vous, les animaux des refuges locaux sont un peu mieux
               soutenus.
             </p>
+
+            <button
+              onClick={() => router.push("/dashboard")}
+              style={{
+                marginTop: 16,
+                padding: "10px 18px",
+                borderRadius: 10,
+                fontWeight: 600,
+                backgroundColor: "#0A8F44",
+                color: "white",
+                border: "none",
+                width: "100%",
+              }}
+            >
+              Retour au tableau de bord
+            </button>
           </div>
         </div>
       )}
