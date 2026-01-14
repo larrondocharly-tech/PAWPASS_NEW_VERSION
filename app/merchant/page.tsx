@@ -12,7 +12,8 @@ export default function MerchantDashboard() {
 
   // Stats
   const [totalAmount, setTotalAmount] = useState(0);
-  const [totalGenerated, setTotalGenerated] = useState(0);
+  const [totalCashback, setTotalCashback] = useState(0);
+  const [totalDonations, setTotalDonations] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
@@ -59,28 +60,30 @@ export default function MerchantDashboard() {
       setMerchant(merchantData);
 
       // 4) Charger les transactions du commerçant
-      // IMPORTANT : On lit dans admin_transactions_detailed
-      //             en filtrant sur merchant_name
       const { data: tx, error: txError } = await supabase
         .from("admin_transactions_detailed")
         .select("amount, cashback_amount, donation_amount, merchant_name")
-        .eq("merchant_name", merchantData.name); // <==== PAS DE FILTRE SUR LE STATUT
+        .eq("merchant_name", merchantData.name); // comme avant, pas de filtre status
 
       if (!txError && tx && tx.length > 0) {
         let total = 0;
-        let generated = 0;
+        let cb = 0;
+        let dons = 0;
 
         tx.forEach((t: any) => {
           total += t.amount || 0;
-          generated += (t.cashback_amount || 0) + (t.donation_amount || 0);
+          cb += t.cashback_amount || 0;
+          dons += t.donation_amount || 0;
         });
 
         setTotalAmount(total);
-        setTotalGenerated(generated);
+        setTotalCashback(cb);
+        setTotalDonations(dons);
         setTotalCount(tx.length);
       } else {
         setTotalAmount(0);
-        setTotalGenerated(0);
+        setTotalCashback(0);
+        setTotalDonations(0);
         setTotalCount(0);
       }
 
@@ -167,7 +170,7 @@ export default function MerchantDashboard() {
           </p>
         </div>
 
-        {/* Cashback + dons */}
+        {/* Cashback généré */}
         <div
           style={{
             flex: 1,
@@ -177,9 +180,25 @@ export default function MerchantDashboard() {
             background: "#E8F0FF",
           }}
         >
-          <h3>Cashback + dons générés</h3>
+          <h3>Cashback généré</h3>
           <p style={{ fontSize: 26, fontWeight: "bold" }}>
-            {totalGenerated.toFixed(2)} €
+            {totalCashback.toFixed(2)} €
+          </p>
+        </div>
+
+        {/* Dons générés */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 200,
+            padding: 15,
+            borderRadius: 10,
+            background: "#E8F0FF",
+          }}
+        >
+          <h3>Dons générés</h3>
+          <p style={{ fontSize: 26, fontWeight: "bold" }}>
+            {totalDonations.toFixed(2)} €
           </p>
         </div>
 
