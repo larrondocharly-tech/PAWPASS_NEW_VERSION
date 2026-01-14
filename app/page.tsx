@@ -50,11 +50,24 @@ export default function HomePage() {
           <p
             style={{
               textAlign: "center",
-              marginBottom: 18,
+              marginBottom: 8,
               color: "#4c6b76",
             }}
           >
             Cumulez du cashback en aidant les refuges locaux.
+          </p>
+
+          {/* Dicton */}
+          <p
+            style={{
+              textAlign: "center",
+              marginBottom: 18,
+              color: "#7a8e96",
+              fontSize: "0.85rem",
+              fontStyle: "italic",
+            }}
+          >
+            « Les petits ruisseaux font les grandes rivières. »
           </p>
 
           {/* Illustration unique : logo + SPA + chien & chat */}
