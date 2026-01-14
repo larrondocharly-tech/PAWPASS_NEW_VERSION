@@ -98,6 +98,20 @@ export default function ScanInner() {
     loadMerchant();
   }, [merchantCode, supabase]);
 
+  // Fonction utilitaire : seuil ticket pour ce commerçant
+  // Remplace "min_receipt_amount" par le nom réel de ta colonne si besoin.
+  const getMinReceiptAmount = (): number => {
+    if (
+      merchantFound &&
+      typeof merchantFound.min_receipt_amount === "number" &&
+      !Number.isNaN(merchantFound.min_receipt_amount)
+    ) {
+      return merchantFound.min_receipt_amount;
+    }
+    // Valeur par défaut si rien en BDD
+    return 50;
+  };
+
   // =========================
   // Scan QR interne (si on vient directement sur /scan-inner)
   // =========================
@@ -124,17 +138,20 @@ export default function ScanInner() {
   // =========================
   const uploadReceiptIfNeeded = async (
     userId: string,
-    amountNumber: number
+    amountNumber: number,
+    minReceiptAmount: number
   ): Promise<string | null> => {
-    // Si montant <= 50€ → ticket facultatif
-    if (amountNumber <= 50) {
+    // Si montant <= seuil → ticket facultatif
+    if (amountNumber <= minReceiptAmount) {
       // S'il n'y a pas de fichier, on ne fait rien
       if (!receiptFile) return null;
-      // S'il y a un fichier même pour < 50€, on peut l'uploader quand même
+      // S'il y a un fichier même pour un montant inférieur, on peut l'uploader quand même
     } else {
-      // Montant > 50€ → ticket obligatoire
+      // Montant > seuil → ticket obligatoire
       if (!receiptFile) {
-        setErrorMsg("Ticket de caisse obligatoire pour les achats > 50€.");
+        setErrorMsg(
+          `Ticket de caisse obligatoire pour les achats > ${minReceiptAmount} €.`
+        );
         return null;
       }
     }
@@ -205,9 +222,15 @@ export default function ScanInner() {
       return;
     }
 
+    const minReceiptAmount = getMinReceiptAmount();
+
     // Gestion du ticket de caisse / upload
-    const receiptPath = await uploadReceiptIfNeeded(auth.user.id, amountNumber);
-    if (amountNumber > 50 && !receiptPath) {
+    const receiptPath = await uploadReceiptIfNeeded(
+      auth.user.id,
+      amountNumber,
+      minReceiptAmount
+    );
+    if (amountNumber > minReceiptAmount && !receiptPath) {
       // erreur déjà affichée (absence de fichier ou upload raté)
       return;
     }
@@ -240,7 +263,7 @@ export default function ScanInner() {
 
       if (msg.includes("RECEIPT_REQUIRED")) {
         setError(
-          "Ticket requis pour les achats de plus de 50€. Merci d'ajouter une photo ou un PDF."
+          `Ticket requis pour les achats de plus de ${minReceiptAmount} €. Merci d'ajouter une photo ou un PDF.`
         );
         return;
       }
@@ -252,7 +275,7 @@ export default function ScanInner() {
     }
 
     // =========================
-    // Succès : popup de remerciement (plus de redirection automatique)
+    // Succès : popup de remerciement
     // =========================
     setShowThankYou(true);
   };
@@ -260,6 +283,8 @@ export default function ScanInner() {
   // =========================
   // Rendu
   // =========================
+  const minReceiptAmountForUI = getMinReceiptAmount();
+
   return (
     <div style={{ padding: 20 }}>
       <h1>Scanner un commerçant</h1>
@@ -330,7 +355,7 @@ export default function ScanInner() {
                 marginTop: 4,
               }}
             >
-              Obligatoire pour les achats &gt; 50 €.
+              Obligatoire pour les achats &gt; {minReceiptAmountForUI} €.
             </p>
           </div>
 
