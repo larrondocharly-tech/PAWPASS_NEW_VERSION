@@ -128,7 +128,7 @@ export default function HomePage() {
       </section>
 
       {/* ===========================
-          VERSION DESKTOP – OPTION 3
+          VERSION DESKTOP – IMAGE RÉDUITE + TEXTE PLUS HAUT
       ============================ */}
       <section className="desktop-only" style={{ padding: "48px 20px" }}>
         <div
@@ -142,7 +142,7 @@ export default function HomePage() {
           }}
         >
           {/* Colonne texte */}
-          <div style={{ flex: 1, marginTop: "-40px" }}>
+          <div style={{ flex: 1, marginTop: "-70px" }}>
             <p
               style={{
                 color: "#ff6f2c",
@@ -192,7 +192,15 @@ export default function HomePage() {
               « Les petits ruisseaux font les grandes rivières. »
             </p>
 
-            <div style={{ display: "flex", gap: "16px" }}>
+            {/* Boutons Desktop */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+                maxWidth: "260px",
+              }}
+            >
               <Link
                 href="/register"
                 className="button"
@@ -200,9 +208,23 @@ export default function HomePage() {
                   padding: "14px 22px",
                   borderRadius: "18px",
                   fontWeight: 700,
+                  textAlign: "center",
                 }}
               >
                 Créer mon compte
+              </Link>
+
+              <Link
+                href="/login"
+                className="button secondary"
+                style={{
+                  padding: "14px 22px",
+                  borderRadius: "18px",
+                  fontWeight: 700,
+                  textAlign: "center",
+                }}
+              >
+                Connexion
               </Link>
 
               <Link
@@ -212,6 +234,7 @@ export default function HomePage() {
                   padding: "14px 22px",
                   borderRadius: "18px",
                   fontWeight: 600,
+                  textAlign: "center",
                 }}
               >
                 Voir comment ça marche
