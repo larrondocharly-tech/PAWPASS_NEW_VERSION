@@ -26,7 +26,7 @@ interface Merchant {
   cashback_rate?: number;
 }
 
-const RECEIPT_THRESHOLD = 50; // seuil à partir duquel on demande une validation admin
+const RECEIPT_THRESHOLD = 50; // seuil à partir duquel on demande une validation admin pour le "remaining"
 
 export default function ScanPageClient() {
   const router = useRouter();
@@ -230,7 +230,7 @@ export default function ScanPageClient() {
       return;
     }
 
-    // NOUVELLE RÈGLE : seuil sur la cagnotte, pas sur le montant de réduction
+    // Règle : seuil sur la cagnotte, pas sur le montant de réduction
     if (walletBalance < 5) {
       setError(
         "Vous devez avoir au moins 5 € dans votre cagnotte pour utiliser vos crédits."
@@ -302,14 +302,14 @@ export default function ScanPageClient() {
     try {
       if (val >= RECEIPT_THRESHOLD) {
         // CAS 1 : montant restant >= 50 €
-        // → on crée une transaction en attente de validation admin
+        // → transaction en attente d'admin (à adapter avec ton back si besoin)
         const { error: txError } = await supabase.from("transactions").insert({
           user_id: userId,
           merchant_id: merchant.id,
           amount: val,
           cashback_amount: 0,
           donation_amount: 0,
-          status: "pending_admin", // à adapter si ton statut est différent
+          status: "pending_admin",
         });
 
         if (txError) {
@@ -319,18 +319,13 @@ export default function ScanPageClient() {
           );
           return;
         }
-
-        // Ici, tu pourras plus tard rediriger vers une page d'upload de ticket si tu en as une
-        // ex: router.push(`/upload-ticket?amount=${val}&merchant=${merchant.id}`);
       } else {
         // CAS 2 : montant restant < 50 €
         // → cashback automatique
-
-        const cashbackRate = merchant.cashback_rate ?? 2; // % par défaut si non défini
+        const cashbackRate = merchant.cashback_rate ?? 2;
         const cashback = Number(((val * cashbackRate) / 100).toFixed(2));
         const donation = Number((cashback / 2).toFixed(2));
 
-        // 1) Crédite la cagnotte du cashback
         let currentBalance = walletBalance ?? 0;
         const newBalance = Number((currentBalance + cashback).toFixed(2));
 
@@ -349,14 +344,13 @@ export default function ScanPageClient() {
 
         setWalletBalance(newBalance);
 
-        // 2) Enregistre la transaction
         const { error: txError } = await supabase.from("transactions").insert({
           user_id: userId,
           merchant_id: merchant.id,
           amount: val,
           cashback_amount: cashback,
           donation_amount: donation,
-          status: "validated_auto", // à adapter si besoin
+          status: "validated_auto",
         });
 
         if (txError) {
@@ -548,8 +542,7 @@ export default function ScanPageClient() {
 
               <p style={{ fontSize: 13, color: "#64748b", marginBottom: 4 }}>
                 Paramètre marchand (info) : montant minimum recommandé pour une
-                réduction :{" "}
-                <strong>{minRedeemAmount.toFixed(2)} €</strong>
+                réduction : <strong>{minRedeemAmount.toFixed(2)} €</strong>
               </p>
 
               {error && (
@@ -602,185 +595,183 @@ export default function ScanPageClient() {
             </div>
           </section>
 
-        {/* POPUP 1 : RÉDUCTION VALIDÉE */}
-        {showRedeemConfirmation && redeemStep === "CONFIRM" && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              backgroundColor: "rgba(0,0,0,0.4)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 50,
-            }}
-          >
+          {/* POPUP 1 : RÉDUCTION VALIDÉE */}
+          {showRedeemConfirmation && redeemStep === "CONFIRM" && (
             <div
               style={{
-                width: "90%",
-                maxWidth: 420,
-                backgroundColor: "white",
-                borderRadius: 20,
-                padding: 28,
-                textAlign: "center",
-                boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
+                position: "fixed",
+                inset: 0,
+                backgroundColor: "rgba(0,0,0,0.4)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 50,
               }}
             >
-              <h2
+              <div
                 style={{
-                  fontSize: 22,
-                  fontWeight: 700,
-                  marginBottom: 16,
-                  color: "#0f172a",
-                }}
-              >
-                Réduction validée
-              </h2>
-
-              <p style={{ marginBottom: 4 }}>
-                Commerçant :{" "}
-                <strong>{merchant ? merchant.name : "Commerçant"}</strong>
-              </p>
-
-              <p style={{ marginBottom: 4 }}>
-                Montant de la réduction :{" "}
-                <strong>
-                  {redeemAmount
-                    ? Number(redeemAmount.replace(",", ".")).toFixed(
-                        2
-                      )
-                    : "0.00"}{" "}
-                  €
-                </strong>
-              </p>
-
-              <p style={{ marginTop: 24, marginBottom: 16 }}>
-                Appuyez sur « Continuer » pour saisir le{" "}
-                <strong>prix restant à payer</strong> en caisse.
-              </p>
-
-              <button
-                onClick={() => setRedeemStep("REMAINING")}
-                style={{
-                  padding: "12px 20px",
-                  borderRadius: 14,
-                  border: "none",
-                  fontWeight: 600,
-                  fontSize: 16,
-                  cursor: "pointer",
-                  backgroundColor: "#FF7A3C",
-                  color: "white",
-                }}
-              >
-                Continuer
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* POPUP 2 : PRIX RESTANT À PAYER */}
-        {showRedeemConfirmation && redeemStep === "REMAINING" && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              backgroundColor: "rgba(0,0,0,0.4)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 50,
-            }}
-          >
-            <div
-              style={{
-                width: "90%",
-                maxWidth: 420,
-                backgroundColor: "white",
-                borderRadius: 20,
-                padding: 28,
-                boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: 22,
-                  fontWeight: 700,
-                  marginBottom: 16,
+                  width: "90%",
+                  maxWidth: 420,
+                  backgroundColor: "white",
+                  borderRadius: 20,
+                  padding: 28,
                   textAlign: "center",
-                  color: "#0f172a",
+                  boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
                 }}
               >
-                Prix restant à payer
-              </h2>
-
-              <p style={{ marginBottom: 12 }}>
-                Indiquez le montant qui reste à payer après application de
-                votre réduction chez{" "}
-                <strong>{merchant ? merchant.name : "le commerçant"}</strong>.
-              </p>
-
-              <label
-                className="label"
-                style={{ fontSize: 14, marginTop: 0 }}
-              >
-                Montant restant (€)
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={remainingAmount}
-                onChange={(e) => setRemainingAmount(e.target.value)}
-                placeholder="Ex : 8.50"
-                className="input"
-                style={{ marginBottom: 12 }}
-              />
-
-              {remainingCashback > 0 && (
-                <p style={{ fontSize: 14, marginBottom: 16 }}>
-                  Vous gagnerez environ{" "}
-                  <strong>{remainingCashback.toFixed(2)} €</strong> de
-                  cashback sur ce paiement (dont une partie pourra être
-                  reversée à l&apos;association).
-                </p>
-              )}
-
-              {error && (
-                <p
+                <h2
                   style={{
-                    color: "#b91c1c",
-                    fontSize: 13,
-                    marginBottom: 8,
+                    fontSize: 22,
+                    fontWeight: 700,
+                    marginBottom: 16,
+                    color: "#0f172a",
                   }}
                 >
-                  {error}
-                </p>
-              )}
+                  Réduction validée
+                </h2>
 
-              <button
-                onClick={handleConfirmRemaining}
-                disabled={actionLoading}
+                <p style={{ marginBottom: 4 }}>
+                  Commerçant :{" "}
+                  <strong>{merchant ? merchant.name : "Commerçant"}</strong>
+                </p>
+
+                <p style={{ marginBottom: 4 }}>
+                  Montant de la réduction :{" "}
+                  <strong>
+                    {redeemAmount
+                      ? Number(redeemAmount.replace(",", ".")).toFixed(2)
+                      : "0.00"}{" "}
+                    €
+                  </strong>
+                </p>
+
+                <p style={{ marginTop: 24, marginBottom: 16 }}>
+                  Appuyez sur « Continuer » pour saisir le{" "}
+                  <strong>prix restant à payer</strong> en caisse.
+                </p>
+
+                <button
+                  onClick={() => setRedeemStep("REMAINING")}
+                  style={{
+                    padding: "12px 20px",
+                    borderRadius: 14,
+                    border: "none",
+                    fontWeight: 600,
+                    fontSize: 16,
+                    cursor: "pointer",
+                    backgroundColor: "#FF7A3C",
+                    color: "white",
+                  }}
+                >
+                  Continuer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* POPUP 2 : PRIX RESTANT À PAYER */}
+          {showRedeemConfirmation && redeemStep === "REMAINING" && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                backgroundColor: "rgba(0,0,0,0.4)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 50,
+              }}
+            >
+              <div
                 style={{
-                  width: "100%",
-                  padding: "12px 18px",
-                  borderRadius: 14,
-                  border: "none",
-                  fontWeight: 600,
-                  fontSize: 16,
-                  cursor: actionLoading ? "not-allowed" : "pointer",
-                  backgroundColor: "#4CAF50",
-                  color: "white",
-                  marginTop: 8,
-                  opacity: actionLoading ? 0.7 : 1,
+                  width: "90%",
+                  maxWidth: 420,
+                  backgroundColor: "white",
+                  borderRadius: 20,
+                  padding: 28,
+                  boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
                 }}
               >
-                {actionLoading
-                  ? "Enregistrement..."
-                  : "Valider et retourner au tableau de bord"}
-              </button>
+                <h2
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 700,
+                    marginBottom: 16,
+                    textAlign: "center",
+                    color: "#0f172a",
+                  }}
+                >
+                  Prix restant à payer
+                </h2>
+
+                <p style={{ marginBottom: 12 }}>
+                  Indiquez le montant qui reste à payer après application de
+                  votre réduction chez{" "}
+                  <strong>{merchant ? merchant.name : "le commerçant"}</strong>.
+                </p>
+
+                <label
+                  className="label"
+                  style={{ fontSize: 14, marginTop: 0 }}
+                >
+                  Montant restant (€)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={remainingAmount}
+                  onChange={(e) => setRemainingAmount(e.target.value)}
+                  placeholder="Ex : 8.50"
+                  className="input"
+                  style={{ marginBottom: 12 }}
+                />
+
+                {remainingCashback > 0 && (
+                  <p style={{ fontSize: 14, marginBottom: 16 }}>
+                    Vous gagnerez environ{" "}
+                    <strong>{remainingCashback.toFixed(2)} €</strong> de
+                    cashback sur ce paiement (dont une partie pourra être
+                    reversée à l&apos;association).
+                  </p>
+                )}
+
+                {error && (
+                  <p
+                    style={{
+                      color: "#b91c1c",
+                      fontSize: 13,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  onClick={handleConfirmRemaining}
+                  disabled={actionLoading}
+                  style={{
+                    width: "100%",
+                    padding: "12px 18px",
+                    borderRadius: 14,
+                    border: "none",
+                    fontWeight: 600,
+                    fontSize: 16,
+                    cursor: actionLoading ? "not-allowed" : "pointer",
+                    backgroundColor: "#4CAF50",
+                    color: "white",
+                    marginTop: 8,
+                    opacity: actionLoading ? 0.7 : 1,
+                  }}
+                >
+                  {actionLoading
+                    ? "Enregistrement..."
+                    : "Valider et retourner au tableau de bord"}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
         </div>
       </main>
     );
@@ -790,7 +781,6 @@ export default function ScanPageClient() {
   if (mode === "scan") {
     // Si on a déjà un code marchand dans l'URL → on laisse ScanInner gérer tout le flux
     if (merchantCode) {
-      // ScanInner lit lui-même le ?m= dans l’URL comme avant
       return <ScanInner />;
     }
 

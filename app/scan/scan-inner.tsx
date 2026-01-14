@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabaseClient";
 import QrScannerRaw from "react-qr-scanner";
+
 const QrScanner: any = QrScannerRaw;
 
 export const dynamic = "force-dynamic";
@@ -98,18 +99,30 @@ export default function ScanInner() {
     loadMerchant();
   }, [merchantCode, supabase]);
 
-  // Fonction utilitaire : seuil ticket pour ce commerçant
-  // Remplace "min_receipt_amount" par le nom réel de ta colonne si besoin.
+  // =========================
+  // Seuil ticket pour ce commerçant
+  // =========================
   const getMinReceiptAmount = (): number => {
+    if (!merchantFound) return 20;
+
+    // Colonne actuelle en BDD : merchants.receipt_threshold
     if (
-      merchantFound &&
+      typeof merchantFound.receipt_threshold === "number" &&
+      !Number.isNaN(merchantFound.receipt_threshold)
+    ) {
+      return merchantFound.receipt_threshold;
+    }
+
+    // Ancien nom possible, au cas où
+    if (
       typeof merchantFound.min_receipt_amount === "number" &&
       !Number.isNaN(merchantFound.min_receipt_amount)
     ) {
       return merchantFound.min_receipt_amount;
     }
-    // Valeur par défaut si rien en BDD
-    return 50;
+
+    // Valeur par défaut
+    return 20;
   };
 
   // =========================
@@ -143,9 +156,8 @@ export default function ScanInner() {
   ): Promise<string | null> => {
     // Si montant <= seuil → ticket facultatif
     if (amountNumber <= minReceiptAmount) {
-      // S'il n'y a pas de fichier, on ne fait rien
       if (!receiptFile) return null;
-      // S'il y a un fichier même pour un montant inférieur, on peut l'uploader quand même
+      // s'il y a un fichier même pour un montant inférieur, on l'uploade quand même
     } else {
       // Montant > seuil → ticket obligatoire
       if (!receiptFile) {
