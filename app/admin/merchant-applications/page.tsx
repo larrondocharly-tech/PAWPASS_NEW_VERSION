@@ -94,6 +94,46 @@ export default function AdminMerchantApplicationsPage() {
     setError(null);
     setActionId(application.id);
 
+    // 0) Vérifier si l'utilisateur a déjà un profil commerçant lié
+    const {
+      data: existingProfile,
+      error: existingProfileError,
+    } = await supabase
+      .from("profiles")
+      .select("role, merchant_id, merchant_code")
+      .eq("id", application.user_id)
+      .maybeSingle();
+
+    if (existingProfileError) {
+      setError(existingProfileError.message);
+      setActionId(null);
+      return;
+    }
+
+    // S'il est déjà commerçant et déjà lié à un merchant_id,
+    // on NE recrée rien : on approuve juste la demande et on sort.
+    if (existingProfile && existingProfile.merchant_id) {
+      const { error: applicationUpdateError } = await supabase
+        .from("merchant_applications")
+        .update({
+          status: "approved",
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", application.id);
+
+      if (applicationUpdateError) {
+        setError(applicationUpdateError.message);
+        setActionId(null);
+        return;
+      }
+
+      setApplications((prev) =>
+        prev.filter((item) => item.id !== application.id)
+      );
+      setActionId(null);
+      return;
+    }
+
     // 1) Chercher un commerçant existant avec même nom + ville (insensible à la casse)
     const {
       data: existingMerchant,
