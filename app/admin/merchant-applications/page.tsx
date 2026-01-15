@@ -12,7 +12,10 @@ interface MerchantApplication {
   business_name: string;
   city: string;
   address: string | null;
+  postal_code: string | null;
   phone: string | null;
+  responsible_name: string | null;
+  siret: string | null;
   message: string | null;
   created_at: string;
 }
@@ -69,7 +72,7 @@ export default function AdminMerchantApplicationsPage() {
       const { data, error: fetchError } = await supabase
         .from("merchant_applications")
         .select(
-          "id,user_id,business_name,city,address,phone,message,created_at"
+          "id,user_id,business_name,city,address,postal_code,phone,responsible_name,siret,message,created_at"
         )
         .eq("status", "pending")
         .order("created_at", { ascending: true });
@@ -227,9 +230,17 @@ export default function AdminMerchantApplicationsPage() {
           {applications.map((application) => (
             <div key={application.id} className="card" style={{ padding: 16 }}>
               <h3 style={{ marginTop: 0 }}>{application.business_name}</h3>
+
+              {application.responsible_name && (
+                <p className="helper" style={{ marginTop: 4 }}>
+                  Responsable : {application.responsible_name}
+                </p>
+              )}
+
               <p className="helper" style={{ marginTop: 4 }}>
-                {application.city}
+                {application.postal_code} {application.city}
               </p>
+
               {application.address && (
                 <p
                   className="helper"
@@ -238,18 +249,28 @@ export default function AdminMerchantApplicationsPage() {
                   {application.address}
                 </p>
               )}
+
               {application.phone && (
                 <p className="helper" style={{ marginTop: 4 }}>
                   Téléphone : {application.phone}
                 </p>
               )}
+
+              {application.siret && (
+                <p className="helper" style={{ marginTop: 4 }}>
+                  SIRET : {application.siret}
+                </p>
+              )}
+
               {application.message && (
                 <p style={{ marginTop: 8 }}>{application.message}</p>
               )}
+
               <p className="helper" style={{ marginTop: 8 }}>
                 Demande créée le{" "}
                 {new Date(application.created_at).toLocaleString("fr-FR")}
               </p>
+
               <div
                 style={{
                   display: "flex",
