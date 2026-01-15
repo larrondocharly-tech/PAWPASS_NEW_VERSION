@@ -74,6 +74,9 @@ export default function RegisterPage() {
           city: city,
           address: address,
           phone: phone,
+          postal_code: postalCode,
+          responsible_name: responsibleName,
+          siret: siret,
           message: null,
           status: "pending",
         });
