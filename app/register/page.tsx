@@ -20,6 +20,7 @@ export default function RegisterPage() {
   const [responsibleName, setResponsibleName] = useState("");
   const [address, setAddress] = useState("");
   const [postalCode, setPostalCode] = useState("");
+  const [city, setCity] = useState("");
   const [phone, setPhone] = useState("");
   const [siret, setSiret] = useState("");
 
@@ -33,7 +34,7 @@ export default function RegisterPage() {
 
     const role = isMerchant ? "merchant" : "user";
 
-    // Appel Supabase avec les métadonnées complètes
+    // 1) Création du compte dans auth + métadonnées
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -46,6 +47,7 @@ export default function RegisterPage() {
           merchant_responsible_name: isMerchant ? responsibleName : null,
           merchant_address: isMerchant ? address : null,
           merchant_postal_code: isMerchant ? postalCode : null,
+          merchant_city: isMerchant ? city : null,
           merchant_phone: isMerchant ? phone : null,
           merchant_siret: isMerchant ? siret : null,
           merchant_status: isMerchant ? "pending_validation" : null, // en attente de validation admin
@@ -53,17 +55,42 @@ export default function RegisterPage() {
       },
     });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       setErrorMsg(error.message);
       return;
     }
 
-    // Selon ton setup, l'email peut avoir besoin de confirmation.
-    // On suppose ici que le user est directement connecté.
+    const newUser = data.user;
     const newRole = (data.user?.user_metadata as any)?.role || role;
 
+    // 2) Si commerçant : créer aussi une demande dans merchant_applications
+    if (isMerchant && newUser?.id) {
+      const { error: appError } = await supabase
+        .from("merchant_applications")
+        .insert({
+          user_id: newUser.id,
+          business_name: shopName,
+          city: city,
+          address: address,
+          phone: phone,
+          message: null,
+          status: "pending",
+        });
+
+      if (appError) {
+        console.error(appError);
+        setLoading(false);
+        setErrorMsg(
+          "Votre compte a été créé, mais la demande commerçant n'a pas pu être enregistrée. Merci de contacter PawPass."
+        );
+        return;
+      }
+    }
+
+    setLoading(false);
+
+    // 3) Redirection selon le rôle
     if (newRole === "merchant") {
       router.push("/merchant");
     } else if (newRole === "admin") {
@@ -241,6 +268,22 @@ export default function RegisterPage() {
                 onChange={(e) => setPostalCode(e.target.value)}
                 required={isMerchant}
                 placeholder="Ex : 64100"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 12,
+                }}
+              />
+
+              <label style={{ fontWeight: 600 }}>Ville du commerce</label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                required={isMerchant}
+                placeholder="Ex : Bayonne"
                 style={{
                   width: "100%",
                   padding: 10,
