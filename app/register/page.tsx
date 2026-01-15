@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
+
 export const dynamic = "force-dynamic";
 
 export default function RegisterPage() {
@@ -11,7 +12,17 @@ export default function RegisterPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [isMerchant, setIsMerchant] = useState(false);
+
+  // Champs commerçant
+  const [shopName, setShopName] = useState("");
+  const [responsibleName, setResponsibleName] = useState("");
+  const [address, setAddress] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [phone, setPhone] = useState("");
+  const [siret, setSiret] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -22,12 +33,22 @@ export default function RegisterPage() {
 
     const role = isMerchant ? "merchant" : "user";
 
+    // Appel Supabase avec les métadonnées complètes
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           role,
+          is_merchant: isMerchant,
+          // Infos commerçant pour vérification admin
+          merchant_name: isMerchant ? shopName : null,
+          merchant_responsible_name: isMerchant ? responsibleName : null,
+          merchant_address: isMerchant ? address : null,
+          merchant_postal_code: isMerchant ? postalCode : null,
+          merchant_phone: isMerchant ? phone : null,
+          merchant_siret: isMerchant ? siret : null,
+          merchant_status: isMerchant ? "pending_validation" : null, // en attente de validation admin
         },
       },
     });
@@ -123,6 +144,7 @@ export default function RegisterPage() {
             6 caractères minimum. Tu pourras le modifier plus tard.
           </p>
 
+          {/* Case commerçant */}
           <label
             style={{
               display: "flex",
@@ -138,6 +160,140 @@ export default function RegisterPage() {
             />
             <span>Je suis commerçant et je souhaite proposer PawPass</span>
           </label>
+
+          {/* Champs supplémentaires si commerçant */}
+          {isMerchant && (
+            <div
+              style={{
+                borderRadius: 12,
+                border: "1px solid #e2e8f0",
+                padding: 16,
+                marginBottom: 16,
+                backgroundColor: "#f8fafc",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#6b7280",
+                  marginBottom: 12,
+                }}
+              >
+                Ces informations permettent à l&apos;équipe PawPass de vérifier
+                votre commerce. Votre compte commerçant sera d&apos;abord placé
+                en attente de validation par un administrateur.
+              </p>
+
+              <label style={{ fontWeight: 600 }}>Nom du commerce</label>
+              <input
+                type="text"
+                value={shopName}
+                onChange={(e) => setShopName(e.target.value)}
+                required={isMerchant}
+                placeholder="Ex : Boulangerie du Centre"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 12,
+                }}
+              />
+
+              <label style={{ fontWeight: 600 }}>
+                Nom et prénom du responsable
+              </label>
+              <input
+                type="text"
+                value={responsibleName}
+                onChange={(e) => setResponsibleName(e.target.value)}
+                required={isMerchant}
+                placeholder="Ex : Marie Dupont"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 12,
+                }}
+              />
+
+              <label style={{ fontWeight: 600 }}>Adresse du commerce</label>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                required={isMerchant}
+                placeholder="Numéro et rue"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 12,
+                }}
+              />
+
+              <label style={{ fontWeight: 600 }}>Code postal</label>
+              <input
+                type="text"
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                required={isMerchant}
+                placeholder="Ex : 64100"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 12,
+                }}
+              />
+
+              <label style={{ fontWeight: 600 }}>Numéro de téléphone</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required={isMerchant}
+                placeholder="Ex : 06 12 34 56 78"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 12,
+                }}
+              />
+
+              <label style={{ fontWeight: 600 }}>Numéro de SIRET</label>
+              <input
+                type="text"
+                value={siret}
+                onChange={(e) => setSiret(e.target.value)}
+                required={isMerchant}
+                placeholder="Ex : 123 456 789 00012"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 4,
+                }}
+              />
+
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "#9ca3af",
+                  marginTop: 4,
+                }}
+              >
+                Ces données ne sont utilisées que pour la vérification de votre
+                commerce et la lutte contre la fraude.
+              </p>
+            </div>
+          )}
 
           {errorMsg && (
             <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>
