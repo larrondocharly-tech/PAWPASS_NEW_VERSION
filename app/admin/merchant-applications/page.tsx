@@ -110,7 +110,7 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    // S'il est déjà relié à un commerçant → on ne recrée surtout rien
+    // S'il est déjà relié à un commerçant → on ne recrée rien
     if (existingProfile && existingProfile.merchant_id) {
       const { error: applicationUpdateError } = await supabase
         .from("merchant_applications")
@@ -133,39 +133,36 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    // 1) Générer un QR token (servira pour création ou mise à jour)
+    // 1) Générer un QR token
     const qrToken = buildMerchantToken(application.user_id);
 
-    // 2) UPSERT du commerçant sur (name, city) → plus jamais d'erreur "duplicate key"
+    // 2) Création simple du commerçant (plus de ON CONFLICT, plus de contrainte unique)
     const {
-      data: upsertedMerchant,
+      data: merchant,
       error: merchantError,
     } = await supabase
       .from("merchants")
-      .upsert(
-        {
-          name: application.business_name,
-          city: application.city,
-          address: application.address,
-          qr_token: qrToken,
-          is_active: true,
-        },
-        { onConflict: "name,city" } // utilise la contrainte unique existante
-      )
+      .insert({
+        name: application.business_name,
+        city: application.city,
+        address: application.address,
+        qr_token: qrToken,
+        is_active: true,
+      })
       .select("id, qr_token")
       .single();
 
-    if (merchantError || !upsertedMerchant) {
+    if (merchantError || !merchant) {
       setError(
         merchantError?.message ??
-          "Impossible de créer ou de récupérer le commerçant."
+          "Impossible de créer le commerçant à partir de cette demande."
       );
       setActionId(null);
       return;
     }
 
-    const merchantId = upsertedMerchant.id;
-    const finalQrToken = upsertedMerchant.qr_token || qrToken;
+    const merchantId = merchant.id;
+    const finalQrToken = merchant.qr_token || qrToken;
 
     // 3) Mise à jour du profil utilisateur -> rôle merchant
     const { error: profileUpdateError } = await supabase
