@@ -1,83 +1,44 @@
-"use server";
+"use client";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabaseClient";
 
-function createSupabaseServerClient() {
-  const cookieStore = cookies();
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set() {
-          // pas de modif cookies ici
-        },
-        remove() {
-          // pas de modif cookies ici
-        },
-      },
-    }
-  );
+interface DeleteSpaButtonProps {
+  id: string;
 }
 
-export async function deleteSpaAction(formData: FormData) {
-  const id = formData.get("id") as string | null;
+export function DeleteSpaButton({ id }: DeleteSpaButtonProps) {
+  const supabase = createClient();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
-  if (!id) {
-    console.error("deleteSpaAction: id manquant");
-    revalidatePath("/admin/spas");
-    return;
-  }
+  const handleDelete = () => {
+    const ok = window.confirm("Voulez-vous vraiment supprimer cette SPA ?");
+    if (!ok) return;
 
-  console.log("deleteSpaAction: appel avec id =", id);
+    startTransition(async () => {
+      const { error } = await supabase.from("spas").delete().eq("id", id);
 
-  const supabase = createSupabaseServerClient();
+      if (error) {
+        console.error("Erreur delete SPA (client):", error);
+        alert("Impossible de supprimer cette SPA. Regarde la console.");
+        return;
+      }
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+      // On recharge la page pour re-fetcher la liste côté serveur
+      router.refresh();
+    });
+  };
 
-  if (userError || !user) {
-    console.error("deleteSpaAction: utilisateur non connecté", userError);
-    redirect("/login");
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user!.id)
-    .maybeSingle();
-
-  if (profileError) {
-    console.error("deleteSpaAction: erreur profil admin", profileError);
-    redirect("/login");
-  }
-
-  if (!profile || profile.role?.toLowerCase() !== "admin") {
-    console.error("deleteSpaAction: accès non admin");
-    redirect("/dashboard");
-  }
-
-  const { error: deleteError } = await supabase
-    .from("spas")
-    .delete()
-    .eq("id", id);
-
-  if (deleteError) {
-    console.error("deleteSpaAction: erreur delete SPA", deleteError);
-    revalidatePath("/admin/spas");
-    return;
-  }
-
-  console.log("deleteSpaAction: SPA supprimée avec succès");
-
-  revalidatePath("/admin/spas");
+  return (
+    <button
+      type="button"
+      onClick={handleDelete}
+      className="button secondary"
+      disabled={isPending}
+    >
+      {isPending ? "Suppression..." : "Supprimer"}
+    </button>
+  );
 }

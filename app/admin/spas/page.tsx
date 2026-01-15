@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { addSpaAction } from "./addSpaAction";
-import DeleteSpaButton from "./DeleteSpaButton";
+import { DeleteSpaButton } from "./DeleteSpaButton";
 
 export const dynamic = "force-dynamic";
 
