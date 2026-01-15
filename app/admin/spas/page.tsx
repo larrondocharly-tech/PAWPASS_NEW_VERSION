@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { addSpaAction } from "./addSpaAction";
-import { deleteSpaAction } from "./deleteSpaAction";
+import DeleteSpaButton from "./DeleteSpaButton";
 
 export const dynamic = "force-dynamic";
 
@@ -233,15 +233,7 @@ export default async function AdminSpasPage() {
                     {new Date(spa.created_at).toLocaleString("fr-FR")}
                   </td>
                   <td>
-                    <form action={deleteSpaAction} method="post">
-                      <input type="hidden" name="id" value={spa.id} />
-                      <button
-                        className="button secondary"
-                        type="submit"
-                      >
-                        Supprimer
-                      </button>
-                    </form>
+                    <DeleteSpaButton id={spa.id} />
                   </td>
                 </tr>
               ))}
