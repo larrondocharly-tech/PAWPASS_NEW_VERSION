@@ -64,7 +64,9 @@ const requireAdmin = async () => {
   return supabase;
 };
 
-const fetchSpas = async (supabase: ReturnType<typeof createSupabaseServerClient>) => {
+const fetchSpas = async (
+  supabase: ReturnType<typeof createSupabaseServerClient>
+) => {
   const { data, error } = await supabase
     .from("spas")
     .select("id,name,city,created_at")
@@ -83,7 +85,6 @@ export default async function AdminSpasPage() {
 
   return (
     <div className="container">
-
       {/* barre d’onglets admin */}
       <nav
         style={{
@@ -232,7 +233,7 @@ export default async function AdminSpasPage() {
                     {new Date(spa.created_at).toLocaleString("fr-FR")}
                   </td>
                   <td>
-                    <form action={deleteSpaAction}>
+                    <form action={deleteSpaAction} method="post">
                       <input type="hidden" name="id" value={spa.id} />
                       <button
                         className="button secondary"

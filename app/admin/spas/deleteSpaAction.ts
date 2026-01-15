@@ -36,6 +36,8 @@ export async function deleteSpaAction(formData: FormData) {
     return;
   }
 
+  console.log("deleteSpaAction: appel avec id =", id);
+
   const supabase = createSupabaseServerClient();
 
   const {
@@ -74,6 +76,8 @@ export async function deleteSpaAction(formData: FormData) {
     revalidatePath("/admin/spas");
     return;
   }
+
+  console.log("deleteSpaAction: SPA supprimée avec succès");
 
   revalidatePath("/admin/spas");
 }
