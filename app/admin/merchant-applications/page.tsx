@@ -94,7 +94,7 @@ export default function AdminMerchantApplicationsPage() {
     setError(null);
     setActionId(application.id);
 
-    // 0) Vérifier si l'utilisateur a déjà un profil commerçant lié
+    // 0) Vérifier si l'utilisateur a déjà un merchant_id
     const {
       data: existingProfile,
       error: existingProfileError,
@@ -110,8 +110,7 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    // S'il est déjà commerçant et déjà lié à un merchant_id,
-    // on NE recrée rien : on approuve juste la demande et on sort.
+    // S'il est déjà relié à un commerçant → on ne recrée surtout rien
     if (existingProfile && existingProfile.merchant_id) {
       const { error: applicationUpdateError } = await supabase
         .from("merchant_applications")
@@ -134,77 +133,39 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    // 1) Chercher un commerçant existant avec même nom + ville (insensible à la casse)
+    // 1) Générer un QR token (servira pour création ou mise à jour)
+    const qrToken = buildMerchantToken(application.user_id);
+
+    // 2) UPSERT du commerçant sur (name, city) → plus jamais d'erreur "duplicate key"
     const {
-      data: existingMerchant,
-      error: existingError,
+      data: upsertedMerchant,
+      error: merchantError,
     } = await supabase
       .from("merchants")
-      .select("id, qr_token, name, city")
-      .ilike("name", application.business_name)
-      .ilike("city", application.city)
-      .maybeSingle();
-
-    if (existingError) {
-      setError(existingError.message);
-      setActionId(null);
-      return;
-    }
-
-    let merchantId: string;
-    let qrToken: string;
-
-    if (existingMerchant) {
-      // On réutilise le commerçant existant → pas de doublon, pas d'insert
-      merchantId = existingMerchant.id;
-      qrToken = existingMerchant.qr_token;
-    } else {
-      // 2) Création du commerçant si aucun n'existe encore
-      qrToken = buildMerchantToken(application.user_id);
-      const {
-        data: merchant,
-        error: merchantError,
-      } = await supabase
-        .from("merchants")
-        .insert({
+      .upsert(
+        {
           name: application.business_name,
           city: application.city,
           address: application.address,
           qr_token: qrToken,
           is_active: true,
-        })
-        .select("id, qr_token")
-        .single();
+        },
+        { onConflict: "name,city" } // utilise la contrainte unique existante
+      )
+      .select("id, qr_token")
+      .single();
 
-      if (merchantError || !merchant) {
-        // En cas d'erreur (par ex. contrainte unique), on tente de récupérer le commerçant existant
-        const {
-          data: fallbackMerchant,
-          error: fallbackError,
-        } = await supabase
-          .from("merchants")
-          .select("id, qr_token")
-          .ilike("name", application.business_name)
-          .ilike("city", application.city)
-          .maybeSingle();
-
-        if (fallbackError || !fallbackMerchant) {
-          setError(
-            fallbackError?.message ??
-              merchantError?.message ??
-              'Impossible de créer ou de récupérer le commerçant (doublon "nom + ville").'
-          );
-          setActionId(null);
-          return;
-        }
-
-        merchantId = fallbackMerchant.id;
-        qrToken = fallbackMerchant.qr_token;
-      } else {
-        merchantId = merchant.id;
-        qrToken = merchant.qr_token;
-      }
+    if (merchantError || !upsertedMerchant) {
+      setError(
+        merchantError?.message ??
+          "Impossible de créer ou de récupérer le commerçant."
+      );
+      setActionId(null);
+      return;
     }
+
+    const merchantId = upsertedMerchant.id;
+    const finalQrToken = upsertedMerchant.qr_token || qrToken;
 
     // 3) Mise à jour du profil utilisateur -> rôle merchant
     const { error: profileUpdateError } = await supabase
@@ -212,7 +173,7 @@ export default function AdminMerchantApplicationsPage() {
       .update({
         role: "merchant",
         merchant_id: merchantId,
-        merchant_code: qrToken,
+        merchant_code: finalQrToken,
       })
       .eq("id", application.user_id);
 
