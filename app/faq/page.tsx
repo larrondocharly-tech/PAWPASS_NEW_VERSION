@@ -45,14 +45,17 @@ export default function FaqPage() {
       </section>
 
       <section className="card" style={{ marginBottom: 24 }}>
-        <h2>Je suis commerçant, comment devenir partenaire ?</h2>
-        <p>
-          Vous pouvez faire une demande directement depuis l&apos;onglet
-          &laquo;&nbsp;Mon QR code&nbsp;&raquo; si vous avez un compte, ou
-          via la page &laquo;&nbsp;Devenir commerçant partenaire&nbsp;&raquo;.
-          Un administrateur validera ensuite votre demande.
-        </p>
-      </section>
+  <h2>Je suis commerçant, comment devenir partenaire ?</h2>
+  <p>
+    Lors de la création de votre compte sur PawPass, vous devez simplement
+    cocher la case « Devenir commerçant partenaire ». Votre compte sera alors
+    enregistré comme compte commerçant, puis placé en attente de validation
+    par un administrateur. Une fois votre demande approuvée, vous aurez accès
+    à votre QR code et à l’ensemble de votre espace commerçant.
+  </p>
+</section>
+
+
     </main>
   );
 }
