@@ -94,15 +94,15 @@ export default function AdminMerchantApplicationsPage() {
     setError(null);
     setActionId(application.id);
 
-    // 1) Vérifier si un commerçant existe déjà avec même nom + ville
+    // 1) Chercher un commerçant existant avec même nom + ville (insensible à la casse)
     const {
       data: existingMerchant,
       error: existingError,
     } = await supabase
       .from("merchants")
-      .select("id, qr_token")
-      .eq("name", application.business_name)
-      .eq("city", application.city)
+      .select("id, qr_token, name, city")
+      .ilike("name", application.business_name)
+      .ilike("city", application.city)
       .maybeSingle();
 
     if (existingError) {
@@ -115,13 +115,16 @@ export default function AdminMerchantApplicationsPage() {
     let qrToken: string;
 
     if (existingMerchant) {
-      // On réutilise le commerçant existant (évite les doublons)
+      // On réutilise le commerçant existant → pas de doublon, pas d'insert
       merchantId = existingMerchant.id;
       qrToken = existingMerchant.qr_token;
     } else {
-      // 2) Création du commerçant
+      // 2) Création du commerçant si aucun n'existe encore
       qrToken = buildMerchantToken(application.user_id);
-      const { data: merchant, error: merchantError } = await supabase
+      const {
+        data: merchant,
+        error: merchantError,
+      } = await supabase
         .from("merchants")
         .insert({
           name: application.business_name,
@@ -130,18 +133,37 @@ export default function AdminMerchantApplicationsPage() {
           qr_token: qrToken,
           is_active: true,
         })
-        .select("id")
+        .select("id, qr_token")
         .single();
 
       if (merchantError || !merchant) {
-        setError(
-          merchantError?.message ?? "Impossible de créer le commerçant."
-        );
-        setActionId(null);
-        return;
-      }
+        // En cas d'erreur (par ex. contrainte unique), on tente de récupérer le commerçant existant
+        const {
+          data: fallbackMerchant,
+          error: fallbackError,
+        } = await supabase
+          .from("merchants")
+          .select("id, qr_token")
+          .ilike("name", application.business_name)
+          .ilike("city", application.city)
+          .maybeSingle();
 
-      merchantId = merchant.id;
+        if (fallbackError || !fallbackMerchant) {
+          setError(
+            fallbackError?.message ??
+              merchantError?.message ??
+              'Impossible de créer ou de récupérer le commerçant (doublon "nom + ville").'
+          );
+          setActionId(null);
+          return;
+        }
+
+        merchantId = fallbackMerchant.id;
+        qrToken = fallbackMerchant.qr_token;
+      } else {
+        merchantId = merchant.id;
+        qrToken = merchant.qr_token;
+      }
     }
 
     // 3) Mise à jour du profil utilisateur -> rôle merchant
