@@ -259,3 +259,36 @@ p { margin: 0 0 0.5rem; }
     display: block;
   }
 }
+
+/* ===========================
+   BACKGROUND DASHBOARD CLIENT
+=========================== */
+.client-dashboard-bg {
+  min-height: 100vh;
+  background-image: url("/bg/dashboard-client.png");
+  background-size: cover;
+  background-position: center 90%;
+  background-repeat: no-repeat;
+}
+
+.client-dashboard-overlay {
+  min-height: 100vh;
+  padding: 32px 20px;
+  background: rgba(249, 249, 244, 0); /* proche de ton --bg */
+  backdrop-filter: blur(6px);
+}
+
+/* ===========================
+   DASHBOARD – ALIGNEMENT VISUEL
+=========================== */
+
+.dashboard-hero-spacer {
+  height: 120px;
+}
+
+/* Sur grands écrans, on descend un peu plus */
+@media (min-width: 1024px) {
+  .dashboard-hero-spacer {
+    height: 180px;
+  }
+}
