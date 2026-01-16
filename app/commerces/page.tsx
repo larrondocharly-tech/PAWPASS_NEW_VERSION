@@ -42,8 +42,8 @@ export default function MerchantsPublicPage() {
       setLoading(false);
     };
 
-    loadData();
-  }, []);
+    void loadData();
+  }, [supabase]);
 
   if (loading) {
     return (
@@ -114,27 +114,33 @@ export default function MerchantsPublicPage() {
           }
 
           return (
-            <div
+            <a
               key={m.id}
-              style={{
-                background: "white",
-                padding: 20,
-                borderRadius: 12,
-                boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-              }}
+              href={`/commerces/${m.id}`}
+              style={{ textDecoration: "none", color: "inherit" }}
             >
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
-                {m.name}
-              </h2>
+              <div
+                style={{
+                  background: "white",
+                  padding: 20,
+                  borderRadius: 12,
+                  boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+                  cursor: "pointer",
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
+                  {m.name}
+                </h2>
 
-              <p style={{ margin: "6px 0 4px", color: "#444" }}>
-                {m.address || ""} {m.city || ""}
-              </p>
+                <p style={{ margin: "6px 0 4px", color: "#444" }}>
+                  {m.address || ""} {m.city || ""}
+                </p>
 
-              <p style={{ margin: 0, color: "#0b675b", fontWeight: 500 }}>
-                Cashback PawPass : {cashbackText}
-              </p>
-            </div>
+                <p style={{ margin: 0, color: "#0b675b", fontWeight: 500 }}>
+                  Cashback PawPass : {cashbackText}
+                </p>
+              </div>
+            </a>
           );
         })}
       </div>

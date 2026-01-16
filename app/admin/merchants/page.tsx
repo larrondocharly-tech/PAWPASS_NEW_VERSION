@@ -148,30 +148,31 @@ export default function AdminMerchantsPage() {
   };
 
   // =========================
-  // SUPPRIMER UN COMMERÇANT
+  // SUPPRIMER (SOFT DELETE) UN COMMERÇANT
   // =========================
   const handleDeleteMerchant = async (id: string) => {
     const ok = window.confirm(
-      "Es-tu sûr de vouloir supprimer ce commerçant ? Cette action est définitive."
+      "Es-tu sûr de vouloir supprimer ce commerçant ? Il ne sera plus visible dans l'application (soft delete)."
     );
     if (!ok) return;
 
     setError(null);
     setSavingId(id);
 
-    const { error: deleteError } = await supabase
+    // On ne fait plus de DELETE physique → on désactive simplement
+    const { error: updateError } = await supabase
       .from("merchants")
-      .delete()
+      .update({ is_active: false })
       .eq("id", id);
 
-    if (deleteError) {
-      console.error(deleteError);
+    if (updateError) {
+      console.error(updateError);
       setError("Erreur lors de la suppression du commerçant.");
       setSavingId(null);
       return;
     }
 
-    // On enlève le commerçant de la liste locale
+    // On enlève le commerçant de la liste locale pour l'admin
     setMerchants((prev) => prev.filter((m) => m.id !== id));
     setSavingId(null);
   };
