@@ -79,7 +79,11 @@ export default function AdminMerchantsPage() {
         return;
       }
 
-      setMerchants((data ?? []) as MerchantRow[]);
+      // On ne garde en mémoire que les commerçants actifs
+      const rows = (data ?? []) as MerchantRow[];
+      const activeOnly = rows.filter((m) => m.is_active === true);
+
+      setMerchants(activeOnly);
       setLoading(false);
     };
 
@@ -141,9 +145,14 @@ export default function AdminMerchantsPage() {
       return;
     }
 
-    setMerchants((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, is_active: nextActive } : m))
-    );
+    // Si on vient de le désactiver → on le retire de la liste admin
+    if (!nextActive) {
+      setMerchants((prev) => prev.filter((m) => m.id !== id));
+    } else {
+      // Cas théorique d'une réactivation à partir d'ailleurs :
+      // on pourrait recharger mais pour l'instant on ne gère que la désactivation depuis cette page.
+    }
+
     setSavingId(null);
   };
 
@@ -159,7 +168,7 @@ export default function AdminMerchantsPage() {
     setError(null);
     setSavingId(id);
 
-    // On ne fait plus de DELETE physique → on désactive simplement
+    // Soft delete : on met is_active = false
     const { error: updateError } = await supabase
       .from("merchants")
       .update({ is_active: false })
@@ -172,7 +181,7 @@ export default function AdminMerchantsPage() {
       return;
     }
 
-    // On enlève le commerçant de la liste locale pour l'admin
+    // On enlève le commerçant de la liste locale
     setMerchants((prev) => prev.filter((m) => m.id !== id));
     setSavingId(null);
   };
