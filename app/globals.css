@@ -318,3 +318,92 @@ p { margin: 0 0 0.5rem; }
 .hero-btn-secondary:hover {
   background: rgba(255, 255, 255, 0.9);
 }
+
+/* ===========================
+   HEADER – INVISIBLE (ne touche pas aux boutons)
+=========================== */
+
+/* Si ton composant utilise <header> */
+header {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Si ton composant utilise <nav> au lieu de <header> */
+nav {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Très souvent il y a un wrapper interne (div) qui a le fond blanc */
+header > div,
+nav > div {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ===========================
+   MENU DÉROULANT – OPAQUE / GLASS
+=========================== */
+
+/* Cas le plus fréquent : menu dans un div absolute/fixed */
+header .menu,
+header .dropdown,
+header .menu-panel,
+nav .menu,
+nav .dropdown,
+nav .menu-panel {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Liens du menu */
+header .menu a,
+header .dropdown a,
+nav .menu a,
+nav .dropdown a {
+  background: transparent;
+  color: #0e3a4a;
+}
+
+/* Hover menu */
+header .menu a:hover,
+header .dropdown a:hover,
+nav .menu a:hover,
+nav .dropdown a:hover {
+  background: rgba(95, 211, 179, 0.12);
+  border-radius: 10px;
+}
+
+/* ===========================
+   MENU DÉROULANT (div inline) – OPAQUE
+=========================== */
+
+nav > div[style*="position: absolute"] {
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  border-radius: 16px;
+  padding: 10px 12px;
+
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+nav > div[style*="position: absolute"] a:hover {
+  background: rgba(95, 211, 179, 0.12);
+  border-radius: 10px;
+}
