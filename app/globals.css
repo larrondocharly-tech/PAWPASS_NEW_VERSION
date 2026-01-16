@@ -292,3 +292,29 @@ p { margin: 0 0 0.5rem; }
     height: 180px;
   }
 }
+
+/* ===========================
+   HERO BUTTONS – GLASS STYLE
+=========================== */
+
+.hero-btn-primary {
+  background: rgba(95, 211, 179, 0.85);
+  color: #0e3a4a;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 24px rgba(95, 211, 179, 0.35);
+}
+
+.hero-btn-primary:hover {
+  background: rgba(95, 211, 179, 0.95);
+}
+
+.hero-btn-secondary {
+  background: rgba(255, 255, 255, 0.75);
+  color: #0e3a4a;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(95, 211, 179, 0.45);
+}
+
+.hero-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.9);
+}

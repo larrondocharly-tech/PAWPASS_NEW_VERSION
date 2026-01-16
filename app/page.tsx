@@ -7,7 +7,7 @@ export default function HomePage() {
   return (
     <main>
       {/* ===========================
-          VERSION MOBILE – NE PAS TOUCHER
+          VERSION MOBILE – NE PAS TOUCHER (sauf boutons)
       ============================ */}
       <section className="mobile-only" style={{ padding: "16px" }}>
         <div
@@ -86,21 +86,23 @@ export default function HomePage() {
           </div>
 
           <div>
+            {/* Mobile: on garde ton style orange (CTA fort), mais on ajoute l'opacité "glass" */}
             <Link
               href="/register"
-              className="button"
+              className="button hero-btn-primary"
               style={{
                 display: "block",
                 width: "100%",
                 padding: "14px 0",
                 borderRadius: "18px",
                 fontSize: "1.15rem",
-                background: "#ff8a42",
+                background: "#ff8a42", // on garde l'orange
                 color: "white",
                 marginBottom: "14px",
                 textAlign: "center",
                 fontWeight: 700,
-                boxShadow: "0 10px 22px rgba(255,138,66,0.45)",
+                boxShadow: "0 10px 22px rgba(255,138,66,0.45)", // on garde l'ombre orange
+                opacity: 0.92, // petit effet opaque sans casser ton orange
               }}
             >
               Créer mon compte
@@ -108,13 +110,13 @@ export default function HomePage() {
 
             <Link
               href="/login"
-              className="button secondary"
+              className="button hero-btn-secondary"
               style={{
                 display: "block",
                 width: "100%",
                 padding: "14px 0",
                 borderRadius: "18px",
-                border: "2px solid #2e7d66",
+                border: "2px solid rgba(46, 125, 102, 0.55)",
                 fontSize: "1.15rem",
                 textAlign: "center",
                 color: "#0e3a4a",
@@ -192,7 +194,7 @@ export default function HomePage() {
               « Les petits ruisseaux font les grandes rivières. »
             </p>
 
-            {/* Boutons Desktop */}
+            {/* Boutons Desktop (glass / opaque) */}
             <div
               style={{
                 display: "flex",
@@ -203,7 +205,7 @@ export default function HomePage() {
             >
               <Link
                 href="/register"
-                className="button"
+                className="button hero-btn-primary"
                 style={{
                   padding: "14px 22px",
                   borderRadius: "18px",
@@ -216,7 +218,7 @@ export default function HomePage() {
 
               <Link
                 href="/login"
-                className="button secondary"
+                className="button hero-btn-secondary"
                 style={{
                   padding: "14px 22px",
                   borderRadius: "18px",
@@ -229,7 +231,7 @@ export default function HomePage() {
 
               <Link
                 href="/comment-ca-marche"
-                className="button secondary"
+                className="button hero-btn-secondary"
                 style={{
                   padding: "14px 22px",
                   borderRadius: "18px",

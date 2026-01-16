@@ -19,27 +19,30 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={inter.variable}>
-      <body
-        style={{
-          margin: 0,
-          backgroundColor: "#FAFAF5",
-        }}
-      >
-        <div
-          style={{
-            minHeight: "100vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          {/* Header affiché selon la route */}
-          <ClientHeader />
+      <body style={{ margin: 0 }}>
+        {/* Fond global + overlay global */}
+        <div className="client-dashboard-bg">
+          <div className="client-dashboard-overlay">
+            <div
+              style={{
+                minHeight: "100vh",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {/* Header */}
+              <ClientHeader />
 
-          {/* Contenu des pages */}
-          <main style={{ flex: 1 }}>{children}</main>
+              {/* Espace respirable sous le header (centrage visuel) */}
+              <div className="dashboard-hero-spacer" />
 
-          {/* Footer global */}
-          <SiteFooter />
+              {/* Contenu */}
+              <main style={{ flex: 1 }}>{children}</main>
+
+              {/* Footer */}
+              <SiteFooter />
+            </div>
+          </div>
         </div>
       </body>
     </html>
