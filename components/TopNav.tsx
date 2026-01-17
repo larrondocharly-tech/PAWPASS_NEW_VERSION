@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
 const navItems = [
   { href: "/dashboard", label: "Accueil" },
   { href: "/scan", label: "Scanner" },
-  { href: "/dashboard", label: "Mon compte" },
 ];
 
 export default function TopNav() {
@@ -17,6 +16,15 @@ export default function TopNav() {
   const supabase = createClient();
 
   const [panelOpen, setPanelOpen] = useState(false);
+
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener?.("change", apply);
+    return () => mq.removeEventListener?.("change", apply);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -28,6 +36,9 @@ export default function TopNav() {
       router.push("/");
     }
   };
+
+  const isActive = (href: string) =>
+    pathname === href || pathname?.startsWith(href + "/") || pathname?.startsWith(href + "?");
 
   return (
     <>
@@ -49,9 +60,9 @@ export default function TopNav() {
             alignItems: "center",
             justifyContent: "space-between",
             gap: 16,
+            position: "relative",
           }}
         >
-          {/* Logo */}
           <Link
             href="/dashboard"
             style={{
@@ -64,27 +75,10 @@ export default function TopNav() {
             PawPass
           </Link>
 
-          {/* BOUTONS DESKTOP UNIQUEMENT */}
-          <div
-            className="desktop-top-buttons"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              fontSize: 14,
-            }}
-          >
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                pathname?.startsWith(item.href + "/") ||
-                pathname?.startsWith(item.href + "?");
-
-              if (item.href === "/dashboard" && item.label === "Mon compte") {
-                return null;
-              }
-
-              return (
+          {/* Un seul rendu selon viewport */}
+          {isDesktop ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14 }}>
+              {navItems.map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}
@@ -92,44 +86,73 @@ export default function TopNav() {
                     padding: "6px 10px",
                     borderRadius: 999,
                     textDecoration: "none",
-                    border: isActive
-                      ? "1px solid #111827"
-                      : "1px solid transparent",
-                    backgroundColor: isActive ? "#111827" : "transparent",
-                    color: isActive ? "#FFFFFF" : "#374151",
-                    fontWeight: isActive ? 600 : 400,
-                    transition:
-                      "background-color 0.15s ease, color 0.15s ease",
+                    border: isActive(item.href) ? "1px solid #111827" : "1px solid transparent",
+                    backgroundColor: isActive(item.href) ? "#111827" : "transparent",
+                    color: isActive(item.href) ? "#FFFFFF" : "#374151",
+                    fontWeight: isActive(item.href) ? 600 : 400,
+                    transition: "background-color 0.15s ease, color 0.15s ease",
                     whiteSpace: "nowrap",
                   }}
                 >
                   {item.label}
                 </Link>
-              );
-            })}
+              ))}
 
-            {/* Bouton mon compte */}
-            <button
-              type="button"
-              onClick={() => setPanelOpen(true)}
-              style={{
-                padding: "6px 14px",
-                borderRadius: 999,
-                border: "1px solid #111827",
-                backgroundColor: pathname?.startsWith("/dashboard")
-                  ? "#111827"
-                  : "#F9FAFB",
-                color: pathname?.startsWith("/dashboard")
-                  ? "#FFFFFF"
-                  : "#111827",
-                cursor: "pointer",
-                fontSize: 14,
-                fontWeight: 600,
-              }}
-            >
-              Mon compte
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setPanelOpen(true)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  border: "1px solid #111827",
+                  backgroundColor: pathname?.startsWith("/dashboard") ? "#111827" : "#F9FAFB",
+                  color: pathname?.startsWith("/dashboard") ? "#FFFFFF" : "#111827",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Mon compte
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <Link
+                href="/dashboard"
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(15, 23, 42, 0.08)",
+                  backgroundColor: isActive("/dashboard") ? "#111827" : "#FFFFFF",
+                  color: isActive("/dashboard") ? "#FFFFFF" : "#111827",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Accueil
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setPanelOpen(true)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(15, 23, 42, 0.08)",
+                  backgroundColor: "#FFFFFF",
+                  color: "#111827",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Menu
+              </button>
+            </div>
+          )}
         </nav>
       </header>
 
@@ -167,15 +190,7 @@ export default function TopNav() {
                 justifyContent: "space-between",
               }}
             >
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 700,
-                }}
-              >
-                Mon compte
-              </h2>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Menu</h2>
               <button
                 type="button"
                 onClick={() => setPanelOpen(false)}
@@ -190,15 +205,13 @@ export default function TopNav() {
               </button>
             </div>
 
-            <div
-              style={{
-                padding: "12px 16px",
-                overflowY: "auto",
-                flex: 1,
-              }}
-            >
+            <div style={{ padding: "12px 16px", overflowY: "auto", flex: 1 }}>
               <Link href="/dashboard" onClick={() => setPanelOpen(false)} style={rowStyle}>
                 <span>🏠</span><span>Tableau de bord</span>
+              </Link>
+
+              <Link href="/scan" onClick={() => setPanelOpen(false)} style={rowStyle}>
+                <span>📷</span><span>Scanner</span>
               </Link>
 
               <Link href="/merchant" onClick={() => setPanelOpen(false)} style={rowStyle}>
@@ -234,12 +247,7 @@ export default function TopNav() {
               </Link>
             </div>
 
-            <div
-              style={{
-                padding: "12px 16px 16px 16px",
-                borderTop: "1px solid #F3F4F6",
-              }}
-            >
+            <div style={{ padding: "12px 16px 16px 16px", borderTop: "1px solid #F3F4F6" }}>
               <button
                 type="button"
                 onClick={handleLogout}

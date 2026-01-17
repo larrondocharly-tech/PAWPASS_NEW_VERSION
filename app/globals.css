@@ -357,12 +357,15 @@ nav {
 }
 
 /* Très souvent il y a un wrapper interne (div) qui a le fond blanc */
-header > div,
-nav > div {
+/* Très souvent il y a un wrapper interne (div) qui a le fond blanc
+   => on le rend transparent, MAIS on exclut les dropdowns */
+header > div:not([data-dropdown]),
+nav > div:not([data-dropdown]) {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
 }
+
 
 /* ===========================
    MENU DÉROULANT – OPAQUE / GLASS

@@ -21,7 +21,9 @@ export function ClientHeader() {
   const [isMerchant, setIsMerchant] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Chargement du profil + écoute des changements de session
+  // ✅ hover (PC) — on grise UNIQUEMENT au survol
+  const [hoveredHref, setHoveredHref] = useState<string | null>(null);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -61,10 +63,8 @@ export function ClientHeader() {
       setIsAdmin(role === "admin");
     };
 
-    // 1) premier chargement
     loadProfile();
 
-    // 2) rechargement à chaque changement d'état d'auth (login / logout)
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
       loadProfile();
     });
@@ -78,7 +78,6 @@ export function ClientHeader() {
   const isMerchantArea = currentPath.startsWith("/merchant");
   const isAdminArea = currentPath.startsWith("/admin");
 
-  // Pages où on affiche Accueil / Scanner / Menu
   const isClientArea =
     currentPath.startsWith("/dashboard") ||
     currentPath.startsWith("/scan") ||
@@ -98,11 +97,6 @@ export function ClientHeader() {
   const isHome = currentPath === "/";
   const isAuthPage = isLogin || isRegister;
 
-  // Où pointe le logo :
-  // - /, /login, /register -> /
-  // - commerçant -> /merchant
-  // - admin -> /admin
-  // - sinon -> /dashboard
   const logoHref =
     isAuthPage || isHome
       ? "/"
@@ -112,17 +106,33 @@ export function ClientHeader() {
       ? "/admin"
       : "/dashboard";
 
-  const homeHref = isMerchant
-    ? "/merchant"
-    : isAdmin
-    ? "/admin"
-    : "/dashboard";
+  const homeHref = isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
 
   const isActive = (href: string) => currentPath === href;
 
+  const menuItemStyle = (hovered: boolean) => ({
+    padding: "8px 12px",
+    borderRadius: "10px",
+    fontSize: "14px",
+    textDecoration: "none",
+    color: "#111827",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    backgroundColor: hovered ? "rgba(17, 24, 39, 0.08)" : "transparent",
+    transition: "background-color 0.12s ease",
+  });
+
+  const itemHandlers = (href: string) => ({
+    onMouseEnter: () => setHoveredHref(href),
+    onMouseLeave: () => setHoveredHref(null),
+    onFocus: () => setHoveredHref(href),
+    onBlur: () => setHoveredHref(null),
+  });
+
   useEffect(() => {
-    // On ferme le menu quand on change de page
     setMenuOpen(false);
+    setHoveredHref(null);
   }, [currentPath]);
 
   const handleLogout = async () => {
@@ -161,7 +171,6 @@ export function ClientHeader() {
           position: "relative",
         }}
       >
-        {/* Logo / titre */}
         <Link
           href={logoHref}
           style={{
@@ -175,18 +184,9 @@ export function ClientHeader() {
           PawPass
         </Link>
 
-        {/* ===========================
-            MENU CLIENT / COMMERCANT / ADMIN
-           ============================ */}
         {isClientArea && (
-          <nav
-            style={{
-              display: "flex",
-              gap: "8px",
-              flexShrink: 0,
-            }}
-          >
-            {/* Accueil (client / commerçant / admin) */}
+          <nav style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+            {/* ✅ On garde uniquement Accueil + Menu */}
             <Link
               href={homeHref}
               style={{
@@ -204,49 +204,6 @@ export function ClientHeader() {
               Accueil
             </Link>
 
-            {/* Bouton Transactions – UNIQUEMENT pour les comptes commerçants */}
-            {isMerchant && (
-              <Link
-                href="/merchant/transactions"
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: "999px",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  border: "1px solid rgba(15, 23, 42, 0.08)",
-                  backgroundColor: isActive("/merchant/transactions")
-                    ? "#111827"
-                    : "#FFFFFF",
-                  color: isActive("/merchant/transactions")
-                    ? "#FFFFFF"
-                    : "#111827",
-                  textDecoration: "none",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Transactions
-              </Link>
-            )}
-
-            {/* Scanner */}
-            <Link
-              href="/scan"
-              style={{
-                padding: "6px 14px",
-                borderRadius: "999px",
-                fontSize: "14px",
-                fontWeight: 600,
-                border: "1px solid rgba(15, 23, 42, 0.08)",
-                backgroundColor: isActive("/scan") ? "#111827" : "#FFFFFF",
-                color: isActive("/scan") ? "#FFFFFF" : "#111827",
-                textDecoration: "none",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Scanner
-            </Link>
-
-            {/* Menu (overlay) */}
             <button
               type="button"
               onClick={() => setMenuOpen((prev) => !prev)}
@@ -265,16 +222,19 @@ export function ClientHeader() {
               Menu
             </button>
 
-            {/* Overlay menu */}
             {menuOpen && (
               <div
+                data-dropdown
                 style={{
                   position: "absolute",
                   top: "46px",
                   right: "16px",
-                  backgroundColor: "#ffffff",
+                  background: "rgba(255, 255, 255, 0.94)",
                   borderRadius: "16px",
-                  boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
+                  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.18)",
+                  border: "1px solid rgba(0, 0, 0, 0.06)",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
                   padding: "12px 8px",
                   minWidth: "260px",
                   display: "flex",
@@ -283,42 +243,50 @@ export function ClientHeader() {
                   zIndex: 40,
                 }}
               >
+                {/* ✅ Scanner pour tout le monde */}
+                <Link
+                  href="/scan"
+                  onClick={() => setMenuOpen(false)}
+                  {...itemHandlers("/scan")}
+                  style={menuItemStyle(hoveredHref === "/scan")}
+                >
+                  <span>📷</span>
+                  <span>Scanner</span>
+                </Link>
+
+                {/* ✅ Transactions uniquement commerçant */}
+                {isMerchant && (
+                  <Link
+                    href="/merchant/transactions"
+                    onClick={() => setMenuOpen(false)}
+                    {...itemHandlers("/merchant/transactions")}
+                    style={menuItemStyle(
+                      hoveredHref === "/merchant/transactions"
+                    )}
+                  >
+                    <span>📊</span>
+                    <span>Transactions</span>
+                  </Link>
+                )}
+
                 {/* === SECTION COMMERCANT : QR + Paramètres === */}
                 {isMerchant && (
                   <>
-                    {/* QR Code commerçant */}
                     <Link
                       href="/merchant"
                       onClick={() => setMenuOpen(false)}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: "10px",
-                        fontSize: "14px",
-                        textDecoration: "none",
-                        color: "#111827",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
+                      {...itemHandlers("/merchant")}
+                      style={menuItemStyle(hoveredHref === "/merchant")}
                     >
                       <span>📌</span>
                       <span>Mon QR code commerçant</span>
                     </Link>
 
-                    {/* Paramètres commerçant */}
                     <Link
                       href="/merchant/settings"
                       onClick={() => setMenuOpen(false)}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: "10px",
-                        fontSize: "14px",
-                        textDecoration: "none",
-                        color: "#111827",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
+                      {...itemHandlers("/merchant/settings")}
+                      style={menuItemStyle(hoveredHref === "/merchant/settings")}
                     >
                       <span>⚙️</span>
                       <span>Paramètres commerçant</span>
@@ -326,20 +294,11 @@ export function ClientHeader() {
                   </>
                 )}
 
-                {/* Liens généraux */}
                 <Link
                   href="/commerces"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    color: "#111827",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
+                  {...itemHandlers("/commerces")}
+                  style={menuItemStyle(hoveredHref === "/commerces")}
                 >
                   <span>🏪</span>
                   <span>Commerçants partenaires</span>
@@ -348,16 +307,8 @@ export function ClientHeader() {
                 <Link
                   href="/parrainage"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    color: "#111827",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
+                  {...itemHandlers("/parrainage")}
+                  style={menuItemStyle(hoveredHref === "/parrainage")}
                 >
                   <span>🤝</span>
                   <span>Parrainer un ami</span>
@@ -366,16 +317,8 @@ export function ClientHeader() {
                 <Link
                   href="/comment-ca-marche"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    color: "#111827",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
+                  {...itemHandlers("/comment-ca-marche")}
+                  style={menuItemStyle(hoveredHref === "/comment-ca-marche")}
                 >
                   <span>📖</span>
                   <span>Comment ça marche ?</span>
@@ -384,16 +327,8 @@ export function ClientHeader() {
                 <Link
                   href="/faq"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    color: "#111827",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
+                  {...itemHandlers("/faq")}
+                  style={menuItemStyle(hoveredHref === "/faq")}
                 >
                   <span>❓</span>
                   <span>FAQ</span>
@@ -402,16 +337,8 @@ export function ClientHeader() {
                 <Link
                   href="/contact"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    color: "#111827",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
+                  {...itemHandlers("/contact")}
+                  style={menuItemStyle(hoveredHref === "/contact")}
                 >
                   <span>✉️</span>
                   <span>Contact</span>
@@ -420,16 +347,8 @@ export function ClientHeader() {
                 <Link
                   href="/mentions-legales"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    color: "#111827",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
+                  {...itemHandlers("/mentions-legales")}
+                  style={menuItemStyle(hoveredHref === "/mentions-legales")}
                 >
                   <span>📄</span>
                   <span>Mentions légales</span>
@@ -438,16 +357,8 @@ export function ClientHeader() {
                 <Link
                   href="/cgu"
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "10px",
-                    fontSize: "14px",
-                    textDecoration: "none",
-                    color: "#111827",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
+                  {...itemHandlers("/cgu")}
+                  style={menuItemStyle(hoveredHref === "/cgu")}
                 >
                   <span>📜</span>
                   <span>CGU</span>
@@ -455,7 +366,7 @@ export function ClientHeader() {
 
                 <div
                   style={{
-                    borderTop: "1px solid #E5E7EB",
+                    borderTop: "1px solid rgba(0,0,0,0.08)",
                     margin: "6px 0 4px",
                   }}
                 />
@@ -497,35 +408,16 @@ export function ClientHeader() {
           </nav>
         )}
 
-        {/* ===========================
-            PAGES D'AUTH
-           ============================ */}
-
         {isLogin && (
-          <nav
-            style={{
-              display: "flex",
-              gap: "8px",
-              marginLeft: "auto",
-            }}
-          >
-            <Link
-              href="/register"
-              style={{ fontSize: "14px", fontWeight: 600 }}
-            >
+          <nav style={{ display: "flex", gap: "8px", marginLeft: "auto" }}>
+            <Link href="/register" style={{ fontSize: "14px", fontWeight: 600 }}>
               Créer un compte
             </Link>
           </nav>
         )}
 
         {isRegister && (
-          <nav
-            style={{
-              display: "flex",
-              gap: "8px",
-              marginLeft: "auto",
-            }}
-          >
+          <nav style={{ display: "flex", gap: "8px", marginLeft: "auto" }}>
             <Link href="/login" style={{ fontSize: "14px" }}>
               Connexion
             </Link>
