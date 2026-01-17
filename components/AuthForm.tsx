@@ -15,6 +15,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const searchParams = useSearchParams();
   const supabase = createClient();
 
+  // Si on a un redirectTo (ex: /scan, /dashboard, etc.)
+  // on le respecte au login. Pour le register, on force /tutorial.
   const redirectTo = searchParams.get('redirectTo') || '/dashboard';
 
   const [email, setEmail] = useState('');
@@ -36,18 +38,29 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setErrorMsg(null);
     setLoading(true);
 
+    // ======================
+    // LOGIN
+    // ======================
     if (mode === 'login') {
-      console.log('[AuthForm] Tentative de login', { email });
-
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      console.log('[AuthForm] Résultat login', { data, error });
-
       if (error) {
         setErrorMsg(error.message || 'Erreur de connexion.');
+        setLoading(false);
+        return;
+      }
+
+      const user = data.user;
+      const hasSeenTutorial = Boolean((user?.user_metadata as any)?.has_seen_tutorial);
+
+      // Si on veut forcer le tuto une seule fois même après login (optionnel)
+      // Ici: si l'utilisateur arrive sur /login et n'a pas vu le tuto, on l'envoie au tuto.
+      // Mais on respecte redirectTo si c'est une route spécifique.
+      if (!hasSeenTutorial && (redirectTo === '/dashboard' || redirectTo === '/')) {
+        router.push(`/tutorial?next=${encodeURIComponent('/dashboard')}`);
         setLoading(false);
         return;
       }
@@ -57,7 +70,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
       return;
     }
 
-    // 🆕 Création de compte
+    // ======================
+    // REGISTER (Création de compte)
+    // ======================
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -71,7 +86,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     const user = data.user;
     if (!user) {
-      setErrorMsg("Impossible de créer le compte.");
+      setErrorMsg('Impossible de créer le compte.');
       setLoading(false);
       return;
     }
@@ -90,10 +105,13 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
       if (appError) {
         console.error('Erreur création demande commerçant :', appError);
+        // On ne bloque pas la création du compte si la demande commerçant échoue
       }
     }
 
-    router.push('/dashboard');
+    // ✅ Après création de compte → tuto
+    // On passe "next" pour savoir où aller après "Ignorer"
+    router.push(`/tutorial?next=${encodeURIComponent('/dashboard')}`);
 
     setLoading(false);
   };
@@ -105,9 +123,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
     >
       {/* Email */}
       <div className="space-y-1">
-        <label className="block text-sm font-medium text-slate-700">
-          Email
-        </label>
+        <label className="block text-sm font-medium text-slate-700">Email</label>
         <input
           type="email"
           required
@@ -120,9 +136,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
       {/* Mot de passe */}
       <div className="space-y-1">
-        <label className="block text-sm font-medium text-slate-700">
-          Mot de passe
-        </label>
+        <label className="block text-sm font-medium text-slate-700">Mot de passe</label>
         <input
           type="password"
           required
@@ -132,9 +146,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="••••••••"
         />
-        <p className="text-xs text-slate-500">
-          6 caractères minimum. Tu pourras le modifier plus tard.
-        </p>
+        <p className="text-xs text-slate-500">6 caractères minimum. Tu pourras le modifier plus tard.</p>
       </div>
 
       {/* Zone commerçant uniquement en création de compte */}
@@ -152,9 +164,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           {wantsMerchant && (
             <div className="space-y-3 pl-1">
               <div className="space-y-1">
-                <label className="block text-sm font-medium text-slate-700">
-                  Nom du commerce
-                </label>
+                <label className="block text-sm font-medium text-slate-700">Nom du commerce</label>
                 <input
                   type="text"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
@@ -165,9 +175,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-sm font-medium text-slate-700">
-                  Ville
-                </label>
+                <label className="block text-sm font-medium text-slate-700">Ville</label>
                 <input
                   type="text"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
@@ -178,9 +186,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-sm font-medium text-slate-700">
-                  Téléphone
-                </label>
+                <label className="block text-sm font-medium text-slate-700">Téléphone</label>
                 <input
                   type="text"
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
@@ -191,8 +197,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               </div>
 
               <p className="text-xs text-slate-500">
-                Votre demande sera transmise à l’équipe PawPass pour validation. Vous serez
-                contacté par email.
+                Votre demande sera transmise à l’équipe PawPass pour validation. Vous serez contacté par email.
               </p>
             </div>
           )}
@@ -205,13 +210,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         disabled={loading}
         className="w-full rounded-full px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm transition disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        {loading
-          ? mode === 'login'
-            ? 'Connexion...'
-            : 'Création du compte...'
-          : mode === 'login'
-          ? 'Se connecter'
-          : 'Créer un compte'}
+        {loading ? (mode === 'login' ? 'Connexion...' : 'Création du compte...') : mode === 'login' ? 'Se connecter' : 'Créer un compte'}
       </button>
 
       {errorMsg && (
@@ -229,9 +228,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         </div>
       )}
 
-      <p className="text-xs text-slate-500 text-center pt-1">
-        En continuant, vous acceptez les CGU de PawPass.
-      </p>
+      <p className="text-xs text-slate-500 text-center pt-1">En continuant, vous acceptez les CGU de PawPass.</p>
     </form>
   );
 }

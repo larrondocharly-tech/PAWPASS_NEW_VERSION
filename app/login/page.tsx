@@ -26,42 +26,56 @@ function LoginPageInner() {
       password,
     });
 
-      setLoading(false);
+    setLoading(false);
 
-      if (error) {
-        setErrorMsg(error.message);
-        return;
-      }
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
 
-      const user = data.user;
-      const userMeta = (user?.user_metadata ?? {}) as any;
-      const appMeta = (user?.app_metadata ?? {}) as any;
+    const user = data.user;
+    const userMeta = (user?.user_metadata ?? {}) as any;
+    const appMeta = (user?.app_metadata ?? {}) as any;
 
-      let role: string | undefined = userMeta.role || appMeta.role;
+    let role: string | undefined = userMeta.role || appMeta.role;
 
-      if (!role && appMeta.is_admin) {
-        role = "admin";
-      }
+    if (!role && appMeta.is_admin) {
+      role = "admin";
+    }
 
-      if (!role && user?.email === "admin@admin.com") {
-        role = "admin";
-      }
+    if (!role && user?.email === "admin@admin.com") {
+      role = "admin";
+    }
 
-      if (role !== "merchant" && role !== "admin") {
-        role = "user";
-      }
+    if (role !== "merchant" && role !== "admin") {
+      role = "user";
+    }
 
-      const redirectTo = searchParams.get("redirectTo");
+    const redirectTo = searchParams.get("redirectTo");
+    const hasSeenTutorial = Boolean(userMeta?.has_seen_tutorial);
 
-      if (role === "merchant") {
-        router.push("/merchant");
-      } else if (role === "admin") {
-        router.push("/admin");
-      } else if (redirectTo) {
-        router.push(redirectTo);
-      } else {
-        router.push("/dashboard");
-      }
+    // Merchants/admins : flux actuel
+    if (role === "merchant") {
+      router.push("/merchant");
+      return;
+    }
+    if (role === "admin") {
+      router.push("/admin");
+      return;
+    }
+
+    // Users : si pas vu le tuto → tuto (une seule fois)
+    if (!hasSeenTutorial) {
+      router.push(`/tutorial?next=${encodeURIComponent(redirectTo || "/dashboard")}`);
+      return;
+    }
+
+    // Sinon comportement normal
+    if (redirectTo) {
+      router.push(redirectTo);
+    } else {
+      router.push("/dashboard");
+    }
   };
 
   return (
@@ -134,9 +148,7 @@ function LoginPageInner() {
             6 caractères minimum. Tu pourras le modifier plus tard.
           </p>
 
-          {errorMsg && (
-            <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>
-          )}
+          {errorMsg && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>}
 
           <button
             type="submit"

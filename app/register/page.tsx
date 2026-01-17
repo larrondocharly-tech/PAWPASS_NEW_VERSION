@@ -26,15 +26,16 @@ export default function RegisterPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
+    setInfoMsg("");
     setLoading(true);
 
     const role = isMerchant ? "merchant" : "user";
 
-    // 1) Création du compte dans auth + métadonnées
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -42,6 +43,8 @@ export default function RegisterPage() {
         data: {
           role,
           is_merchant: isMerchant,
+          has_seen_tutorial: false,
+
           // Infos commerçant pour vérification admin
           merchant_name: isMerchant ? shopName : null,
           merchant_responsible_name: isMerchant ? responsibleName : null,
@@ -50,7 +53,7 @@ export default function RegisterPage() {
           merchant_city: isMerchant ? city : null,
           merchant_phone: isMerchant ? phone : null,
           merchant_siret: isMerchant ? siret : null,
-          merchant_status: isMerchant ? "pending_validation" : null, // en attente de validation admin
+          merchant_status: isMerchant ? "pending_validation" : null,
         },
       },
     });
@@ -62,7 +65,23 @@ export default function RegisterPage() {
     }
 
     const newUser = data.user;
-    const newRole = (data.user?.user_metadata as any)?.role || role;
+
+    // ✅ CAS IMPORTANT: si la confirmation email est activée, data.session peut être null
+    // Donc l'utilisateur n'est pas connecté -> on ne doit PAS l'envoyer sur /tutorial directement
+    if (!data.session) {
+      setLoading(false);
+
+      setInfoMsg(
+        "Compte créé. Vérifiez vos emails pour confirmer votre adresse, puis connectez-vous."
+      );
+
+      // Tu peux rediriger automatiquement vers /login après 1s (optionnel)
+      setTimeout(() => {
+        router.push("/login");
+      }, 900);
+
+      return;
+    }
 
     // 2) Si commerçant : créer aussi une demande dans merchant_applications
     if (isMerchant && newUser?.id) {
@@ -93,13 +112,14 @@ export default function RegisterPage() {
 
     setLoading(false);
 
-    // 3) Redirection selon le rôle
+    const newRole = (data.user?.user_metadata as any)?.role || role;
+
     if (newRole === "merchant") {
       router.push("/merchant");
     } else if (newRole === "admin") {
       router.push("/admin");
     } else {
-      router.push("/dashboard");
+      router.push(`/tutorial?next=${encodeURIComponent("/dashboard")}`);
     }
   };
 
@@ -328,13 +348,7 @@ export default function RegisterPage() {
                 }}
               />
 
-              <p
-                style={{
-                  fontSize: 11,
-                  color: "#9ca3af",
-                  marginTop: 4,
-                }}
-              >
+              <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
                 Ces données ne sont utilisées que pour la vérification de votre
                 commerce et la lutte contre la fraude.
               </p>
@@ -343,6 +357,10 @@ export default function RegisterPage() {
 
           {errorMsg && (
             <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>
+          )}
+
+          {infoMsg && (
+            <p style={{ color: "#065f46", marginBottom: 12 }}>{infoMsg}</p>
           )}
 
           <button
