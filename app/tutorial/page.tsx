@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
@@ -19,6 +19,10 @@ function TutorialInner() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // ✅ pour mobile: autoplay peut être bloqué => on détecte et on affiche un bouton "Lancer"
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [needsManualPlay, setNeedsManualPlay] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +53,26 @@ function TutorialInner() {
     };
   }, [router, supabase, next]);
 
+  // ✅ tentative autoplay (certains mobiles refusent => on montre un bouton)
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const tryPlay = async () => {
+      try {
+        // iOS/Android peuvent refuser autoplay même muted.
+        // Si ça échoue => bouton manuel.
+        await v.play();
+        setNeedsManualPlay(false);
+      } catch {
+        setNeedsManualPlay(true);
+      }
+    };
+
+    const t = setTimeout(tryPlay, 250);
+    return () => clearTimeout(t);
+  }, [loading]);
+
   const markSeenAndGo = async () => {
     setSaving(true);
     setErrorMsg(null);
@@ -64,6 +88,18 @@ function TutorialInner() {
     }
 
     router.push(next);
+  };
+
+  const handleManualPlay = async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      await v.play();
+      setNeedsManualPlay(false);
+    } catch {
+      // si le navigateur refuse encore, l'utilisateur peut utiliser les contrôles
+      setNeedsManualPlay(true);
+    }
   };
 
   if (loading) {
@@ -114,12 +150,13 @@ function TutorialInner() {
               alignItems: "center",
               padding: 10,
               maxHeight: "60vh",
+              position: "relative",
             }}
           >
             <video
+              ref={videoRef}
               src="/tutorial.mp4"
               controls
-              autoPlay
               muted
               playsInline
               preload="metadata"
@@ -132,6 +169,26 @@ function TutorialInner() {
                 background: "#0b1220",
               }}
             />
+
+            {needsManualPlay && (
+              <button
+                onClick={handleManualPlay}
+                style={{
+                  position: "absolute",
+                  bottom: 14,
+                  left: 14,
+                  padding: "10px 14px",
+                  borderRadius: 999,
+                  border: "none",
+                  fontWeight: 800,
+                  backgroundColor: "#059669",
+                  color: "white",
+                  cursor: "pointer",
+                }}
+              >
+                Lancer la vidéo
+              </button>
+            )}
           </div>
 
           {/* Actions */}

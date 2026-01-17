@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
+// ❌ on enlève next/image (problèmes fréquents avec GIF sur mobile/Vercel)
 import { createClient } from "@/lib/supabaseClient";
 import QrScannerRaw from "react-qr-scanner";
 
@@ -21,8 +21,7 @@ export default function ScanInner() {
   const supabase = createClient();
 
   // On accepte ?code= ou ?m= pour être compatible avec /scan
-  const initialCode =
-    searchParams.get("code") || searchParams.get("m") || null;
+  const initialCode = searchParams.get("code") || searchParams.get("m") || null;
 
   const [scanned, setScanned] = useState(false);
   const [merchantCode, setMerchantCode] = useState<string | null>(initialCode);
@@ -137,8 +136,7 @@ export default function ScanInner() {
     setScanned(true);
     setMerchantCode(code);
 
-    const currentCode =
-      searchParams.get("code") || searchParams.get("m") || null;
+    const currentCode = searchParams.get("code") || searchParams.get("m") || null;
 
     if (currentCode !== code) {
       // On normalise sur ?m= pour être cohérent avec /scan
@@ -161,16 +159,12 @@ export default function ScanInner() {
     } else {
       // Montant > seuil → ticket obligatoire
       if (!receiptFile) {
-        setErrorMsg(
-          `Ticket de caisse obligatoire pour les achats > ${minReceiptAmount} €.`
-        );
+        setErrorMsg(`Ticket de caisse obligatoire pour les achats > ${minReceiptAmount} €.`);
         return null;
       }
     }
 
-    if (!receiptFile) {
-      return null;
-    }
+    if (!receiptFile) return null;
 
     setIsUploadingReceipt(true);
 
@@ -189,9 +183,7 @@ export default function ScanInner() {
 
     if (uploadError || !data) {
       console.error("Upload ticket error:", uploadError);
-      setError(
-        "Impossible d'envoyer le ticket. Vérifiez le fichier et réessayez."
-      );
+      setError("Impossible d'envoyer le ticket. Vérifiez le fichier et réessayez.");
       return null;
     }
 
@@ -228,37 +220,28 @@ export default function ScanInner() {
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) {
-      router.push(
-        `/register?from=scan&code=${merchantCode ?? ""}&amount=${amount}`
-      );
+      router.push(`/register?from=scan&code=${merchantCode ?? ""}&amount=${amount}`);
       return;
     }
 
     const minReceiptAmount = getMinReceiptAmount();
 
     // Gestion du ticket de caisse / upload
-    const receiptPath = await uploadReceiptIfNeeded(
-      auth.user.id,
-      amountNumber,
-      minReceiptAmount
-    );
+    const receiptPath = await uploadReceiptIfNeeded(auth.user.id, amountNumber, minReceiptAmount);
     if (amountNumber > minReceiptAmount && !receiptPath) {
       // erreur déjà affichée (absence de fichier ou upload raté)
       return;
     }
 
-    const { error: rpcError } = await supabase.rpc(
-      "apply_cashback_transaction",
-      {
-        p_merchant_code: merchantCode,
-        p_amount: amountNumber,
-        p_spa_id: selectedSpaId,
-        p_use_wallet: false,
-        p_wallet_spent: 0,
-        p_donation_percent: donationPercent,
-        p_receipt_image_url: receiptPath ?? null,
-      }
-    );
+    const { error: rpcError } = await supabase.rpc("apply_cashback_transaction", {
+      p_merchant_code: merchantCode,
+      p_amount: amountNumber,
+      p_spa_id: selectedSpaId,
+      p_use_wallet: false,
+      p_wallet_spent: 0,
+      p_donation_percent: donationPercent,
+      p_receipt_image_url: receiptPath ?? null,
+    });
 
     if (rpcError) {
       console.error(rpcError);
@@ -274,21 +257,15 @@ export default function ScanInner() {
       }
 
       if (msg.includes("RECEIPT_REQUIRED")) {
-        setError(
-          `Ticket requis pour les achats de plus de ${minReceiptAmount} €. Merci d'ajouter une photo ou un PDF.`
-        );
+        setError(`Ticket requis pour les achats de plus de ${minReceiptAmount} €. Merci d'ajouter une photo ou un PDF.`);
         return;
       }
 
-      setError(
-        `Erreur lors de l'enregistrement de la transaction : ${rpcError.message}`
-      );
+      setError(`Erreur lors de l'enregistrement de la transaction : ${rpcError.message}`);
       return;
     }
 
-    // =========================
     // Succès : popup de remerciement
-    // =========================
     setShowThankYou(true);
   };
 
@@ -301,9 +278,7 @@ export default function ScanInner() {
     <div style={{ padding: 20 }}>
       <h1>Scanner un commerçant</h1>
 
-      {(error || errorMsg) && (
-        <p style={{ color: "red", marginTop: 8 }}>{error || errorMsg}</p>
-      )}
+      {(error || errorMsg) && <p style={{ color: "red", marginTop: 8 }}>{error || errorMsg}</p>}
 
       {/* Si aucun code marchand → scanner interne */}
       {!merchantCode && (
@@ -322,9 +297,7 @@ export default function ScanInner() {
       )}
 
       {/* Chargement commerçant */}
-      {merchantCode && loadingMerchant && (
-        <p style={{ marginTop: 16 }}>Chargement commerçant…</p>
-      )}
+      {merchantCode && loadingMerchant && <p style={{ marginTop: 16 }}>Chargement commerçant…</p>}
 
       {/* Formulaire d'achat si commerçant trouvé */}
       {merchantCode && merchantFound && !loadingMerchant && (
@@ -342,13 +315,7 @@ export default function ScanInner() {
 
           {/* Ticket de caisse */}
           <div style={{ marginTop: 16 }}>
-            <label
-              style={{
-                display: "block",
-                fontWeight: 600,
-                marginBottom: 8,
-              }}
-            >
+            <label style={{ display: "block", fontWeight: 600, marginBottom: 8 }}>
               Ticket de caisse (photo ou PDF)
             </label>
             <input
@@ -360,27 +327,13 @@ export default function ScanInner() {
               }}
               style={{ marginBottom: 4 }}
             />
-            <p
-              style={{
-                fontSize: 12,
-                color: "#92400E",
-                marginTop: 4,
-              }}
-            >
+            <p style={{ fontSize: 12, color: "#92400E", marginTop: 4 }}>
               Obligatoire pour les achats &gt; {minReceiptAmountForUI} €.
             </p>
           </div>
 
           {/* Refuge */}
-          <label
-            style={{
-              fontWeight: 600,
-              marginTop: 16,
-              display: "block",
-            }}
-          >
-            Refuge bénéficiaire
-          </label>
+          <label style={{ fontWeight: 600, marginTop: 16, display: "block" }}>Refuge bénéficiaire</label>
 
           <select
             value={selectedSpaId}
@@ -396,22 +349,10 @@ export default function ScanInner() {
           </select>
 
           {/* Don 50 / 100 % */}
-          <label
-            style={{
-              display: "block",
-              marginTop: 15,
-              marginBottom: 8,
-              fontWeight: 600,
-            }}
-          >
+          <label style={{ display: "block", marginTop: 15, marginBottom: 8, fontWeight: 600 }}>
             Pourcentage de don
           </label>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-            }}
-          >
+          <div style={{ display: "flex", gap: 8 }}>
             <button
               type="button"
               onClick={() => setDonationPercent(50)}
@@ -419,12 +360,8 @@ export default function ScanInner() {
                 flex: 1,
                 padding: "10px 0",
                 borderRadius: 8,
-                border:
-                  donationPercent === 50
-                    ? "2px solid #0A8F44"
-                    : "1px solid #ccc",
-                backgroundColor:
-                  donationPercent === 50 ? "#0A8F44" : "white",
+                border: donationPercent === 50 ? "2px solid #0A8F44" : "1px solid #ccc",
+                backgroundColor: donationPercent === 50 ? "#0A8F44" : "white",
                 color: donationPercent === 50 ? "white" : "#111827",
                 fontWeight: 600,
               }}
@@ -438,12 +375,8 @@ export default function ScanInner() {
                 flex: 1,
                 padding: "10px 0",
                 borderRadius: 8,
-                border:
-                  donationPercent === 100
-                    ? "2px solid #0A8F44"
-                    : "1px solid #ccc",
-                backgroundColor:
-                  donationPercent === 100 ? "#0A8F44" : "white",
+                border: donationPercent === 100 ? "2px solid #0A8F44" : "1px solid #ccc",
+                backgroundColor: donationPercent === 100 ? "#0A8F44" : "white",
                 color: donationPercent === 100 ? "white" : "#111827",
                 fontWeight: 600,
               }}
@@ -474,9 +407,7 @@ export default function ScanInner() {
         <p style={{ marginTop: 16 }}>Commerçant introuvable.</p>
       )}
 
-      {/* =========================
-          POPUP "Les petits loups vous remercient pour votre don !"
-      ========================== */}
+      {/* Popup remerciement */}
       {showThankYou && (
         <div
           style={{
@@ -501,15 +432,18 @@ export default function ScanInner() {
             }}
           >
             <div style={{ marginBottom: 12 }}>
-              <Image
-                src="/goat-thankyou.gif"
+              {/* ✅ GIF: <img> + cache bust + contain (pas de rognage) */}
+              <img
+                src="/goat-thankyou.gif?v=3"
                 alt="Les petits loups vous remercient pour votre don !"
-                width={260}
-                height={260}
-                unoptimized
                 style={{
+                  width: 260,
+                  height: 260,
                   borderRadius: 16,
-                  objectFit: "cover",
+                  objectFit: "contain",
+                  display: "block",
+                  margin: "0 auto",
+                  backgroundColor: "transparent",
                 }}
               />
             </div>
@@ -525,15 +459,8 @@ export default function ScanInner() {
               Les petits loups vous remercient pour votre don !
             </p>
 
-            <p
-              style={{
-                fontSize: 14,
-                margin: 0,
-                color: "#555555",
-              }}
-            >
-              Grâce à vous, les animaux des refuges locaux sont un peu mieux
-              soutenus.
+            <p style={{ fontSize: 14, margin: 0, color: "#555555" }}>
+              Grâce à vous, les animaux des refuges locaux sont un peu mieux soutenus.
             </p>
 
             <button

@@ -1,18 +1,13 @@
-// components/DonationThankYouModal.tsx
 "use client";
 
 import { useEffect } from "react";
-import Image from "next/image";
 
 interface DonationThankYouModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-export default function DonationThankYouModal({
-  open,
-  onClose,
-}: DonationThankYouModalProps) {
+export default function DonationThankYouModal({ open, onClose }: DonationThankYouModalProps) {
   // Fermeture auto après 3 secondes
   useEffect(() => {
     if (!open) return;
@@ -49,16 +44,19 @@ export default function DonationThankYouModal({
           textAlign: "center",
         }}
       >
-        {/* GIF de la chèvre */}
-        <div style={{ marginBottom: "12px" }}>
-          <Image
-            src="/goat-thankyou.gif"
+        {/* ✅ GIF: <img> (pas next/image) + cache bust */}
+        <div style={{ marginBottom: 12 }}>
+          <img
+            src="/goat-thankyou.gif?v=3"
             alt="Les petits loups vous remercient pour votre don !"
-            width={260}
-            height={260}
             style={{
-              borderRadius: "16px",
-              objectFit: "cover",
+              width: 260,
+              height: 260,
+              borderRadius: 16,
+              objectFit: "contain",
+              display: "block",
+              margin: "0 auto",
+              backgroundColor: "transparent",
             }}
           />
         </div>
@@ -67,7 +65,7 @@ export default function DonationThankYouModal({
         <p
           style={{
             fontWeight: 700,
-            fontSize: "18px",
+            fontSize: 18,
             margin: "0 0 6px",
             color: "#222222",
           }}
@@ -75,16 +73,9 @@ export default function DonationThankYouModal({
           Les petits loups vous remercient pour votre don !
         </p>
 
-        {/* Texte secondaire optionnel */}
-        <p
-          style={{
-            fontSize: "14px",
-            margin: 0,
-            color: "#555555",
-          }}
-        >
-          Grâce à vous, les animaux des refuges locaux sont un peu mieux
-          soutenus.
+        {/* Texte secondaire */}
+        <p style={{ fontSize: 14, margin: 0, color: "#555555" }}>
+          Grâce à vous, les animaux des refuges locaux sont un peu mieux soutenus.
         </p>
       </div>
     </div>
