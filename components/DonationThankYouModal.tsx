@@ -53,7 +53,7 @@ export default function DonationThankYouModal({
         <div style={{ marginBottom: "12px" }}>
           <Image
             src="/goat-thankyou.gif"
-            alt="Merci pour votre don"
+            alt="Les petits loups vous remercient pour votre don !"
             width={260}
             height={260}
             style={{
@@ -72,7 +72,7 @@ export default function DonationThankYouModal({
             color: "#222222",
           }}
         >
-          Meeeeh-rciiii pour votre don !
+          Les petits loups vous remercient pour votre don !
         </p>
 
         {/* Texte secondaire optionnel */}
