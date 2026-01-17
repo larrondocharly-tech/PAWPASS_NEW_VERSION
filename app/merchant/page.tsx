@@ -96,7 +96,7 @@ export default function MerchantDashboard() {
     };
 
     loadData();
-  }, []);
+  }, [supabase]);
 
   if (loading) return <p style={{ padding: 20 }}>Chargement...</p>;
 
@@ -150,17 +150,26 @@ export default function MerchantDashboard() {
     }
   };
 
+  const cashbackPct =
+    typeof merchant.cashback_rate === "number"
+      ? Math.round(merchant.cashback_rate * 1000) / 10
+      : null;
+
   return (
     <>
-      {/* ZONE CACHÉE : modèle du chevalet pour le PDF */}
+      {/* =========================
+          ZONE CACHÉE : modèle du chevalet pour le PDF
+          IMPORTANT: ne plus utiliser left:-9999px (crée un overflow horizontal sur mobile)
+      ========================== */}
       <div
         style={{
-          position: "absolute",
-          left: "-9999px",
-          top: 0,
+          position: "fixed",
+          inset: 0,
           opacity: 0,
           pointerEvents: "none",
+          zIndex: -1,
         }}
+        aria-hidden="true"
       >
         <div
           ref={chevaletRef}
@@ -218,8 +227,7 @@ export default function MerchantDashboard() {
           >
             Après chaque achat, flashez ce code pour{" "}
             <strong>gagner du cashback</strong> et{" "}
-            <strong>soutenir les refuges animaliers</strong> du Pays
-            Basque.
+            <strong>soutenir les refuges animaliers</strong> du Pays Basque.
           </p>
 
           {/* QR code au centre */}
@@ -269,9 +277,8 @@ export default function MerchantDashboard() {
             }}
           >
             <p style={{ marginBottom: "8px" }}>
-              À chaque achat, une partie du montant est reversée en
-              cashback sur votre cagnotte PawPass, et une autre
-              partie est envoyée aux{" "}
+              À chaque achat, une partie du montant est reversée en cashback sur
+              votre cagnotte PawPass, et une autre partie est envoyée aux{" "}
               <strong>refuges partenaires</strong>.
             </p>
             <p style={{ marginBottom: "4px" }}>
@@ -284,14 +291,24 @@ export default function MerchantDashboard() {
         </div>
       </div>
 
-      {/* CONTENU VISIBLE : espace commerçant */}
-      <div style={{ padding: "20px", maxWidth: 900, margin: "0 auto" }}>
+      {/* =========================
+          CONTENU VISIBLE : espace commerçant
+      ========================== */}
+      <div
+        style={{
+          padding: "20px",
+          maxWidth: 900,
+          margin: "0 auto",
+          width: "100%",
+          overflowX: "hidden",
+        }}
+      >
         <h1>Espace commerçant</h1>
 
         <p>
-          Vous êtes déjà commerçant partenaire PawPass. Utilisez ce code pour
-          vos affiches et pour permettre à vos clients de scanner votre QR code
-          en boutique.
+          Vous êtes déjà commerçant partenaire PawPass. Utilisez ce code pour vos
+          affiches et pour permettre à vos clients de scanner votre QR code en
+          boutique.
         </p>
 
         <div style={{ display: "flex", gap: 30, flexWrap: "wrap" }}>
@@ -329,7 +346,7 @@ export default function MerchantDashboard() {
           </div>
 
           {/* Infos commerçant */}
-          <div>
+          <div style={{ minWidth: 260, flex: 1 }}>
             <h2>{merchant.name}</h2>
             <p>
               {merchant.city} · {merchant.address}
@@ -352,12 +369,13 @@ export default function MerchantDashboard() {
                 padding: "8px",
                 borderRadius: "6px",
                 border: "1px solid #ccc",
+                boxSizing: "border-box",
               }}
             />
 
             <p style={{ marginTop: 10 }}>
               <strong>Taux de cashback actuel :</strong>{" "}
-              {merchant.cashback_rate * 100}%
+              {cashbackPct === null ? "—" : `${cashbackPct}%`}
             </p>
           </div>
         </div>

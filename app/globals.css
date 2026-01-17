@@ -19,13 +19,17 @@
 /* ===========================
    RESET & BASE
 =========================== */
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html {
   font-family: var(--font-sans), sans-serif;
   font-size: 16px;
+  width: 100%;
+  overflow-x: hidden; /* IMPORTANT: évite la bande blanche à droite sur mobile */
 }
 
 body {
@@ -33,10 +37,21 @@ body {
   line-height: 1.5;
   background: var(--bg);
   color: var(--text);
+  width: 100%;
+  overflow-x: hidden; /* IMPORTANT: sécurité iOS */
 }
 
 main {
   min-height: 100vh;
+}
+
+/* Sécurité anti-débordements (canvas/html2canvas/qr/svg/images) */
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+  height: auto;
 }
 
 a {
@@ -274,7 +289,7 @@ p { margin: 0 0 0.5rem; }
 .client-dashboard-overlay {
   min-height: 100vh;
   padding: 32px 20px;
-  background: rgba(249, 249, 244, 0); /* proche de ton --bg */
+  background: rgba(249, 249, 244, 0);
   backdrop-filter: blur(6px);
 }
 
@@ -389,21 +404,23 @@ nav .dropdown a:hover {
 
 /* ===========================
    MENU DÉROULANT (div inline) – OPAQUE
+   Limité au mobile pour éviter les effets de bord desktop
 =========================== */
+@media (max-width: 767px) {
+  nav > div[style*="position: absolute"] {
+    background: rgba(255, 255, 255, 0.94) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 
-nav > div[style*="position: absolute"] {
-  background: rgba(255, 255, 255, 0.94) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 10px 12px;
 
-  border-radius: 16px;
-  padding: 10px 12px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+  }
 
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-nav > div[style*="position: absolute"] a:hover {
-  background: rgba(95, 211, 179, 0.12);
-  border-radius: 10px;
+  nav > div[style*="position: absolute"] a:hover {
+    background: rgba(95, 211, 179, 0.12);
+    border-radius: 10px;
+  }
 }
