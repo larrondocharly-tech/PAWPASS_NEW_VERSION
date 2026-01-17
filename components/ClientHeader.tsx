@@ -260,12 +260,23 @@ export function ClientHeader() {
                     href="/merchant/transactions"
                     onClick={() => setMenuOpen(false)}
                     {...itemHandlers("/merchant/transactions")}
-                    style={menuItemStyle(
-                      hoveredHref === "/merchant/transactions"
-                    )}
+                    style={menuItemStyle(hoveredHref === "/merchant/transactions")}
                   >
                     <span>📊</span>
                     <span>Transactions</span>
+                  </Link>
+                )}
+
+                {/* ✅ Dashboard "client" pour un commerçant (en tant qu'utilisateur) */}
+                {isMerchant && (
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setMenuOpen(false)}
+                    {...itemHandlers("/dashboard")}
+                    style={menuItemStyle(hoveredHref === "/dashboard")}
+                  >
+                    <span>👤</span>
+                    <span>Mon tableau de bord (client)</span>
                   </Link>
                 )}
 
