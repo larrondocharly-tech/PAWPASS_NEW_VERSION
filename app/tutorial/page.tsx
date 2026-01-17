@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-export default function TutorialPage() {
+function TutorialInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -113,7 +113,6 @@ export default function TutorialPage() {
               justifyContent: "center",
               alignItems: "center",
               padding: 10,
-              // limite la place occupée sans imposer un ratio faux
               maxHeight: "60vh",
             }}
           >
@@ -126,9 +125,9 @@ export default function TutorialPage() {
               preload="metadata"
               style={{
                 width: "100%",
-                height: "auto",      // ✅ laisse la vidéo garder son ratio
-                maxHeight: "56vh",   // ✅ empêche de prendre tout l'écran
-                maxWidth: 520,       // ✅ sur PC, évite le “géant”
+                height: "auto",
+                maxHeight: "56vh",
+                maxWidth: 520,
                 display: "block",
                 background: "#0b1220",
               }}
@@ -193,7 +192,6 @@ export default function TutorialPage() {
 
           <style jsx>{`
             @media (max-width: 480px) {
-              /* Sur téléphone, on limite un peu plus la hauteur */
               video {
                 max-height: 48vh !important;
                 max-width: 100% !important;
@@ -206,5 +204,13 @@ export default function TutorialPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TutorialPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 16 }}>Chargement...</div>}>
+      <TutorialInner />
+    </Suspense>
   );
 }
