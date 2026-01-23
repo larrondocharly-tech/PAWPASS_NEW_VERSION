@@ -1,10 +1,11 @@
 // app/dashboard/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
+import DonationFeedTicker from "@/components/DonationFeedTicker";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +25,14 @@ interface RecentTransaction {
   donation_amount: number;
 }
 
+function clamp01(n: number) {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+
 export default function DashboardPage() {
-  const supabase = createClient();
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
 
   const [availableBalance, setAvailableBalance] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -38,8 +44,40 @@ export default function DashboardPage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [recentTx, setRecentTx] = useState<RecentTransaction[]>([]);
+  const [historyErrorMsg, setHistoryErrorMsg] = useState<string | null>(null);
 
-  const formatEuro = (value: number) => value.toFixed(2) + " €";
+  const ui = {
+    maxW: 1120,
+    radius: 18,
+    radiusSm: 14,
+    shadow: "0 18px 50px rgba(15, 23, 42, 0.12)",
+    shadowSoft: "0 10px 28px rgba(15, 23, 42, 0.10)",
+    border: "1px solid rgba(15, 23, 42, 0.07)",
+    text: "#0F172A",
+    subtext: "rgba(15, 23, 42, 0.65)",
+    subtext2: "rgba(15, 23, 42, 0.55)",
+    brand: "#FF7A3C",
+    blue: "#2563EB",
+    green: "#16A34A",
+    greenBg: "rgba(22, 163, 74, 0.10)",
+    amberBg: "rgba(255, 122, 60, 0.10)",
+    surface: "rgba(255,255,255,0.86)",
+    surfaceStrong: "rgba(255,255,255,0.94)",
+    blur: "blur(10px)",
+  };
+
+  const cardBase: React.CSSProperties = {
+    borderRadius: ui.radius,
+    background: ui.surface,
+    border: ui.border,
+    boxShadow: ui.shadowSoft,
+    backdropFilter: ui.blur,
+  };
+
+  const formatEuro = (value: number) => {
+    const safe = Number.isFinite(value) ? value : 0;
+    return safe.toFixed(2) + " €";
+  };
 
   const formatDate = (value: string) => {
     try {
@@ -53,16 +91,31 @@ export default function DashboardPage() {
     }
   };
 
+  const formatTime = (value: string) => {
+    try {
+      return new Date(value).toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "";
+    }
+  };
+
   useEffect(() => {
+    let cancelled = false;
+
     const loadData = async () => {
       setLoading(true);
       setError(null);
+      setHistoryErrorMsg(null);
 
-      // 1) Utilisateur
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
+
+      if (cancelled) return;
 
       if (userError || !user) {
         setError("Vous devez être connecté pour accéder à votre tableau de bord.");
@@ -71,56 +124,50 @@ export default function DashboardPage() {
         return;
       }
 
-      // 2) Rôle admin
-      const { data: profileData, error: profileError } = await supabase
+      const { data: profileData } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .maybeSingle();
 
-      if (!profileError && profileData?.role === "admin") {
-        setIsAdmin(true);
-      }
+      if (profileData?.role === "admin") setIsAdmin(true);
 
-      // 3) Statistiques + solde calculé à partir des transactions VALIDÉES
       const { data: txData, error: txError } = await supabase
         .from("transactions")
         .select("cashback_amount, donation_amount, status, wallet_spent")
         .eq("user_id", user.id);
 
-      if (txError) {
-        console.error(txError);
-      } else if (txData) {
-        const list = txData as StatTransaction[];
+      if (!cancelled) {
+        if (txError) {
+          console.error("transactions stats error:", txError);
+        } else if (txData) {
+          const list = txData as StatTransaction[];
+          const approved = list.filter(
+            (tx) => tx.status === "approved" || tx.status === "validated"
+          );
 
-        const approved = list.filter(
-          (tx) => tx.status === "approved" || tx.status === "validated"
-        );
+          const totalCb = approved.reduce(
+            (sum, tx) => sum + (typeof tx.cashback_amount === "number" ? tx.cashback_amount : 0),
+            0
+          );
+          const totalDon = approved.reduce(
+            (sum, tx) => sum + (typeof tx.donation_amount === "number" ? tx.donation_amount : 0),
+            0
+          );
+          const totalSpent = approved.reduce(
+            (sum, tx) => sum + (typeof tx.wallet_spent === "number" ? tx.wallet_spent : 0),
+            0
+          );
 
-        const totalCb = approved.reduce((sum, tx) => {
-          const v = typeof tx.cashback_amount === "number" ? tx.cashback_amount : 0;
-          return sum + v;
-        }, 0);
+          const available = Math.max(totalCb - totalSpent, 0);
 
-        const totalDon = approved.reduce((sum, tx) => {
-          const v = typeof tx.donation_amount === "number" ? tx.donation_amount : 0;
-          return sum + v;
-        }, 0);
-
-        const totalSpent = approved.reduce((sum, tx) => {
-          const v = typeof tx.wallet_spent === "number" ? tx.wallet_spent : 0;
-          return sum + v;
-        }, 0);
-
-        const available = Math.max(totalCb - totalSpent, 0);
-
-        setTotalCashback(totalCb);
-        setTotalDonation(totalDon);
-        setTxCount(approved.length);
-        setAvailableBalance(available);
+          setTotalCashback(totalCb);
+          setTotalDonation(totalDon);
+          setTxCount(approved.length);
+          setAvailableBalance(available);
+        }
       }
 
-      // 4) Dernières transactions (vue client_transactions_history)
       const { data: historyData, error: historyError } = await supabase
         .from("client_transactions_history")
         .select("*")
@@ -128,278 +175,763 @@ export default function DashboardPage() {
         .order("created_at", { ascending: false })
         .limit(5);
 
-      if (historyError) {
-        console.error(historyError);
-      } else if (historyData) {
-        const mapped: RecentTransaction[] =
-          historyData?.map((row: any) => ({
-            id: row.id,
-            created_at: row.created_at,
-            merchant_name: row.merchant_name ?? null,
-            purchase_amount: Number(row.purchase_amount ?? row.amount ?? 0),
-            cashback_to_user: Number(row.cashback_to_user ?? row.cashback_amount ?? 0),
-            donation_amount: Number(row.donation_amount ?? row.donation ?? 0),
-          })) ?? [];
+      if (!cancelled) {
+        if (historyError) {
+          console.error("client_transactions_history error:", historyError);
+          setHistoryErrorMsg(historyError.message);
+          setRecentTx([]);
+        } else if (historyData) {
+          const mapped: RecentTransaction[] =
+            historyData.map((row: any) => ({
+              id: row.id,
+              created_at: row.created_at,
+              merchant_name: row.merchant_name ?? null,
+              purchase_amount: Number(row.purchase_amount ?? row.amount ?? 0),
+              cashback_to_user: Number(row.cashback_to_user ?? row.cashback_amount ?? 0),
+              donation_amount: Number(row.donation_amount ?? row.donation ?? 0),
+            })) ?? [];
 
-        setRecentTx(mapped);
+          setRecentTx(mapped);
+        }
       }
 
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     };
 
     loadData();
+    return () => {
+      cancelled = true;
+    };
   }, [supabase, router]);
+
+  const donationGoal = 10;
+  const goalPct = clamp01(totalDonation / donationGoal);
+
+  const emptyStateTip =
+    txCount === 0
+      ? "Commencez par scanner un QR commerçant. En 10 secondes, votre 1er don apparaît ici."
+      : availableBalance <= 0
+      ? "Votre cagnotte est à 0€. Faites un nouveau scan pour regagner des crédits."
+      : "Vous pouvez utiliser une partie de votre cagnotte dès maintenant.";
 
   return (
     <main>
-      <div className="container" style={{ maxWidth: 1100 }}>
-        {/* En-tête */}
-        <header
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            marginBottom: 24,
-            paddingTop: 16,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            <h1 style={{ fontSize: 28, margin: 0, color: "#222222" }}>
-              Tableau de bord
-            </h1>
-            <p style={{ margin: 0, color: "#666666" }}>
-              Suivez votre cagnotte, vos dons et vos réductions en un coup d&apos;œil.
-            </p>
-          </div>
-
-          {isAdmin && (
+      <div className="ppWrap">
+        {/* Header */}
+        <header className="ppHeader">
+          <div className="ppHeaderTop">
             <div>
+              <h1 className="ppTitle">Tableau de bord</h1>
+              <p className="ppSubtitle">
+                Suivez votre cagnotte, vos dons et vos réductions en un coup d&apos;œil.
+              </p>
+            </div>
+
+            {isAdmin && (
               <button
                 onClick={() => router.push("/admin")}
-                className="button secondary"
-                style={{
-                  borderRadius: 999,
-                  padding: "8px 16px",
-                  fontSize: 14,
-                  whiteSpace: "nowrap",
-                }}
+                className="ppBtn ppBtnSecondary"
               >
                 Accéder à l&apos;admin
               </button>
+            )}
+          </div>
+
+          <div className="ppBanner" style={cardBase}>
+            <div style={{ minWidth: 0 }}>
+              <div className="ppBannerTitle">{txCount === 0 ? "Votre première action" : "Prochaine étape"}</div>
+              <div className="ppBannerText">{emptyStateTip}</div>
             </div>
-          )}
+            <button onClick={() => router.push("/scan")} className="ppBtn ppBtnPrimary">
+              Scanner un QR
+            </button>
+          </div>
         </header>
 
-        {loading && <p>Chargement…</p>}
+        {loading && (
+          <div style={{ ...cardBase, padding: 14 }}>
+            <p style={{ margin: 0, color: ui.subtext }}>Chargement…</p>
+          </div>
+        )}
 
-        {error && <p style={{ color: "red", marginBottom: 16 }}>{error}</p>}
+        {error && (
+          <div style={{ ...cardBase, padding: 14 }}>
+            <p style={{ color: "#B91C1C", margin: 0 }}>{error}</p>
+          </div>
+        )}
 
         {!loading && !error && (
           <>
-            {/* Cartes principales */}
-            <section
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-                gap: 20,
-              }}
-            >
-              {/* Carte bienvenue */}
-              <div className="card" style={{ borderRadius: 16 }}>
-                <p
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    color: "#FF7A3C",
-                    marginBottom: 8,
-                  }}
-                >
-                  Bienvenue
-                </p>
-                <h2 style={{ fontSize: 20, marginBottom: 10, color: "#222222" }}>
-                  Un scan, et votre cashback démarre
-                </h2>
-                <p style={{ margin: 0, color: "#666666" }}>
-                  Scannez un QR commerçant pour enregistrer vos achats et accumuler du cashback
-                  solidaire.
-                </p>
-              </div>
-
-              {/* Carte cagnotte */}
-              <div className="card" style={{ borderRadius: 16 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <h2 style={{ fontSize: 20, marginBottom: 4, color: "#222222" }}>
-                    Ma cagnotte PawPass
-                  </h2>
-                  <p style={{ margin: 0, color: "#666666", fontSize: 14 }}>
-                    Solde disponible pour vos réductions
+            {/* Cards grid */}
+            <section className="ppCards">
+              {/* Welcome */}
+              <div className="ppCard" style={cardBase}>
+                <div className="ppCardGlow ppCardGlowWarm" />
+                <div className="ppCardInner">
+                  <div className="ppPill">Bienvenue</div>
+                  <h2 className="ppH2">Un scan, et votre cashback démarre</h2>
+                  <p className="ppP">
+                    Scannez un QR commerçant pour enregistrer vos achats et accumuler du cashback
+                    solidaire.
                   </p>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 32, fontWeight: 700, color: "#222222" }}>
-                      {formatEuro(availableBalance)}
-                    </span>
-                    <span
-                      style={{
-                        background: "#ECFDF3",
-                        color: "#1B5E20",
-                        borderRadius: 999,
-                        padding: "6px 12px",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
+                  <div className="ppRow">
+                    <button
+                      onClick={() => router.push("/comment-ca-marche")}
+                      className="ppBtn ppBtnSecondary"
                     >
-                      Total donné aux SPA : {formatEuro(totalDonation)}
-                    </span>
+                      Comment ça marche
+                    </button>
+                    <button
+                      onClick={() => router.push("/commerces")}
+                      className="ppBtn ppBtnSecondary"
+                    >
+                      Voir les commerces
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Wallet */}
+              <div className="ppCard ppCardHero" style={{ ...cardBase, boxShadow: ui.shadow }}>
+                <div className="ppCardGlow ppCardGlowGreen" />
+                <div className="ppCardInner">
+                  <div className="ppWalletTop">
+                    <div>
+                      <h2 className="ppH2" style={{ marginBottom: 2 }}>Ma cagnotte PawPass</h2>
+                      <div className="ppSmall">Solde disponible pour vos réductions</div>
+                    </div>
+                    <div className="ppChipGreen">Donné : {formatEuro(totalDonation)}</div>
                   </div>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                      gap: 12,
-                      marginTop: 8,
-                    }}
-                  >
-                    <div style={{ background: "#FFF7ED", borderRadius: 12, padding: 12 }}>
-                      <p style={{ margin: 0, fontSize: 12, color: "#666666" }}>Cashback gagné</p>
-                      <p style={{ margin: 0, fontWeight: 700, fontSize: 16, color: "#222222" }}>
-                        {formatEuro(totalCashback)}
-                      </p>
+                  <div className="ppWalletMid">
+                    <div>
+                      <div className="ppBig">{formatEuro(availableBalance)}</div>
+                      <div className="ppSmall">
+                        Cashback gagné : <b style={{ color: ui.text }}>{formatEuro(totalCashback)}</b>
+                        {"  "}•{"  "}
+                        Transactions : <b style={{ color: ui.text }}>{txCount}</b>
+                      </div>
                     </div>
 
-                    <div style={{ background: "#F1F5F9", borderRadius: 12, padding: 12 }}>
-                      <p style={{ margin: 0, fontSize: 12, color: "#666666" }}>Transactions</p>
-                      <p style={{ margin: 0, fontWeight: 700, fontSize: 16, color: "#222222" }}>
-                        {txCount}
-                      </p>
+                    <button
+                      onClick={() => router.push("/scan?mode=redeem")}
+                      className="ppBtn ppBtnGreen"
+                      disabled={availableBalance <= 0}
+                      title={availableBalance <= 0 ? "Vous n'avez pas encore de crédits." : "Utiliser vos crédits"}
+                    >
+                      Utiliser
+                    </button>
+                  </div>
+
+                  <div className="ppGoal">
+                    <div className="ppGoalTop">
+                      <span className="ppSmall">
+                        Objectif dons : <b style={{ color: ui.text }}>{formatEuro(donationGoal)}</b>
+                      </span>
+                      <span className="ppSmall">{Math.round(goalPct * 100)}%</span>
+                    </div>
+                    <div className="ppBar">
+                      <div className="ppBarFill" style={{ width: `${Math.round(goalPct * 100)}%` }} />
+                    </div>
+                    <div className="ppTiny">
+                      {goalPct >= 1
+                        ? "Objectif atteint. Continuez, chaque scan aide une SPA."
+                        : "Chaque scan fait avancer la cagnotte et aide une SPA locale."}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Carte réductions */}
-              <div className="card" style={{ borderRadius: 16 }}>
-                <h2 style={{ fontSize: 20, marginBottom: 8, color: "#222222" }}>
-                  Réductions disponibles
-                </h2>
-                <p style={{ margin: 0, color: "#666666", fontSize: 14 }}>
-                  Solde cashback : {formatEuro(availableBalance)}
-                </p>
+              {/* Redeem */}
+              <div className="ppCard" style={cardBase}>
+                <div className="ppCardGlow ppCardGlowBlue" />
+                <div className="ppCardInner">
+                  <h2 className="ppH2">Réductions disponibles</h2>
 
-                <button
-                  onClick={() => router.push("/scan?mode=redeem")}
-                  className="button"
-                  style={{
-                    marginTop: 16,
-                    width: "100%",
-                    borderRadius: 14,
-                    background: "#4CAF50",
-                    color: "white",
-                    fontSize: 15,
-                  }}
-                >
-                  Utiliser mes crédits
-                </button>
+                  <div className="ppInfoBox">
+                    <div className="ppInfoLabel">Solde cashback</div>
+                    <div className="ppInfoValue">{formatEuro(availableBalance)}</div>
+                  </div>
 
-                <p style={{ marginTop: 12, fontSize: 13, color: "#666666" }}>
-                  Vous pouvez utiliser une partie de votre cagnotte dès maintenant chez les
-                  commerçants partenaires.
-                </p>
+                  <button
+                    onClick={() => router.push("/scan?mode=redeem")}
+                    className="ppBtn ppBtnGreenFull"
+                    disabled={availableBalance <= 0}
+                  >
+                    Utiliser mes crédits
+                  </button>
+
+                  <p className="ppP" style={{ marginTop: 10 }}>
+                    {availableBalance > 0
+                      ? "Utilisez une partie de votre cagnotte chez les commerçants partenaires."
+                      : "Faites un scan pour débloquer vos premières réductions."}
+                  </p>
+
+                  <button onClick={() => router.push("/scan")} className="ppBtn ppBtnSecondaryFull">
+                    Scanner maintenant
+                  </button>
+                </div>
               </div>
             </section>
 
-            {/* Dernières transactions */}
-            {recentTx.length > 0 && (
-              <section
-                style={{
-                  marginTop: 36,
-                  maxWidth: 900,
-                  marginLeft: "auto",
-                  marginRight: "auto",
-                }}
-              >
-                <div className="card" style={{ borderRadius: 16, padding: 16 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <h2 style={{ fontSize: 18, margin: 0, color: "#111827" }}>
-                      Dernières transactions
-                    </h2>
-                    <Link
-                      href="/transactions"
-                      style={{
-                        fontSize: 13,
-                        textDecoration: "underline",
-                        color: "#2563EB",
-                        fontWeight: 500,
-                      }}
-                    >
+            {/* Donation ticker */}
+            <section className="ppSectionNarrow">
+              <DonationFeedTicker limit={6} />
+            </section>
+
+            {/* Transactions */}
+            <section className="ppSectionNarrow">
+              <div className="ppCard" style={cardBase}>
+                <div className="ppCardInner">
+                  <div className="ppSectionHeader">
+                    <h2 className="ppH2" style={{ margin: 0 }}>Dernières transactions</h2>
+                    <Link className="ppLink" href="/transactions">
                       Voir tout l&apos;historique
                     </Link>
                   </div>
 
-                  <div>
-                    {recentTx.map((tx) => (
-                      <div
-                        key={tx.id}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "2.2fr 1fr 1fr 1fr",
-                          fontSize: 14,
-                          padding: "8px 4px",
-                          borderBottom: "1px solid #F3F4F6",
-                          alignItems: "center",
-                          columnGap: 8,
-                        }}
-                      >
-                        <div
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          <span style={{ fontWeight: 600 }}>
-                            {tx.merchant_name || "Commerçant"}
-                          </span>
-                          <span style={{ marginLeft: 6, color: "#9CA3AF", fontSize: 12 }}>
-                            • Achat {formatEuro(tx.purchase_amount)}
-                          </span>
-                        </div>
+                  {historyErrorMsg && (
+                    <div className="ppErrorBox">
+                      Impossible de charger l&apos;historique : {historyErrorMsg}
+                    </div>
+                  )}
 
-                        <span style={{ fontSize: 13, color: "#6B7280" }}>
-                          {formatDate(tx.created_at)}
-                        </span>
-
-                        <span style={{ textAlign: "right", fontWeight: 600 }}>
-                          {formatEuro(tx.cashback_to_user)}
-                        </span>
-
-                        <span style={{ textAlign: "right", fontWeight: 500, color: "#16A34A" }}>
-                          {formatEuro(tx.donation_amount)}
-                        </span>
+                  {recentTx.length === 0 ? (
+                    <div className="ppEmptyBox">Aucune transaction pour le moment.</div>
+                  ) : (
+                    <>
+                      {/* Desktop table */}
+                      <div className="ppTxDesktop">
+                        {recentTx.map((tx) => (
+                          <div className="ppTxRow" key={tx.id}>
+                            <div className="ppTxMerchant">
+                              <b>{tx.merchant_name || "Commerçant"}</b>
+                              <span className="ppTxMeta">• Achat {formatEuro(tx.purchase_amount)}</span>
+                            </div>
+                            <div className="ppTxDate">{formatDate(tx.created_at)}</div>
+                            <div className="ppTxCb">{formatEuro(tx.cashback_to_user)}</div>
+                            <div className="ppTxDon">{formatEuro(tx.donation_amount)}</div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+
+                      {/* Mobile list */}
+                      <div className="ppTxMobile">
+                        {recentTx.map((tx) => (
+                          <div className="ppTxCard" key={tx.id}>
+                            <div className="ppTxCardTop">
+                              <div className="ppTxCardMerchant">
+                                {tx.merchant_name || "Commerçant"}
+                              </div>
+                              <div className="ppTxCardDate">
+                                {formatDate(tx.created_at)} • {formatTime(tx.created_at)}
+                              </div>
+                            </div>
+
+                            <div className="ppTxCardMid">
+                              <div className="ppTxCardSmall">Achat</div>
+                              <div className="ppTxCardVal">{formatEuro(tx.purchase_amount)}</div>
+                            </div>
+
+                            <div className="ppTxCardBottom">
+                              <div className="ppTag ppTagBlue">Cashback {formatEuro(tx.cashback_to_user)}</div>
+                              <div className="ppTag ppTagGreen">Don {formatEuro(tx.donation_amount)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
-              </section>
-            )}
+              </div>
+            </section>
           </>
         )}
+
+        {/* CSS responsive minimal (dans CE fichier uniquement) */}
+        <style jsx global>{`
+          .ppWrap {
+            max-width: ${ui.maxW}px;
+            margin: 0 auto;
+            padding: 18px 14px 48px;
+          }
+
+          .ppHeader {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 14px;
+          }
+
+          .ppHeaderTop {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+          }
+
+          .ppTitle {
+            margin: 0;
+            font-size: 28px;
+            letter-spacing: -0.02em;
+            color: ${ui.text};
+          }
+
+          .ppSubtitle {
+            margin: 6px 0 0 0;
+            color: ${ui.subtext};
+            line-height: 1.35;
+            font-size: 14px;
+          }
+
+          .ppBanner {
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+          }
+
+          .ppBannerTitle {
+            font-weight: 900;
+            color: ${ui.text};
+            font-size: 13px;
+          }
+
+          .ppBannerText {
+            margin-top: 2px;
+            color: ${ui.subtext};
+            font-size: 13px;
+            line-height: 1.35;
+          }
+
+          .ppCards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+          }
+
+          .ppSectionNarrow {
+            margin-top: 18px;
+            max-width: 920px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+
+          .ppCard {
+            position: relative;
+            overflow: hidden;
+          }
+
+          .ppCardInner {
+            padding: 14px;
+            position: relative;
+            z-index: 2;
+          }
+
+          .ppCardGlow {
+            position: absolute;
+            inset: -1px;
+            z-index: 1;
+            pointer-events: none;
+          }
+          .ppCardGlowWarm {
+            background: radial-gradient(600px 200px at 10% 0%, rgba(255,122,60,0.18) 0%, rgba(255,255,255,0) 60%),
+                        radial-gradient(520px 200px at 90% 30%, rgba(37,99,235,0.14) 0%, rgba(255,255,255,0) 60%);
+          }
+          .ppCardGlowGreen {
+            background: radial-gradient(540px 220px at 85% 0%, rgba(22,163,74,0.16) 0%, rgba(255,255,255,0) 60%),
+                        radial-gradient(540px 240px at 0% 100%, rgba(255,122,60,0.12) 0%, rgba(255,255,255,0) 60%);
+          }
+          .ppCardGlowBlue {
+            background: radial-gradient(560px 240px at 20% 0%, rgba(37,99,235,0.16) 0%, rgba(255,255,255,0) 62%);
+          }
+
+          .ppPill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: ${ui.amberBg};
+            color: ${ui.brand};
+            font-weight: 900;
+            font-size: 12px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+          }
+
+          .ppH2 {
+            margin: 0;
+            font-size: 18px;
+            color: ${ui.text};
+            line-height: 1.2;
+          }
+
+          .ppP {
+            margin: 10px 0 0 0;
+            color: ${ui.subtext};
+            line-height: 1.5;
+            font-size: 14px;
+          }
+
+          .ppSmall {
+            color: ${ui.subtext2};
+            font-size: 13px;
+            line-height: 1.35;
+          }
+
+          .ppTiny {
+            color: ${ui.subtext2};
+            font-size: 12px;
+            line-height: 1.35;
+            margin-top: 8px;
+          }
+
+          .ppRow {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+          }
+
+          .ppBtn {
+            border: none;
+            border-radius: 999px;
+            padding: 10px 12px;
+            font-weight: 900;
+            font-size: 14px;
+            cursor: pointer;
+            white-space: nowrap;
+          }
+
+          .ppBtnPrimary {
+            background: ${ui.brand};
+            color: white;
+            box-shadow: 0 16px 34px rgba(255, 122, 60, 0.30);
+          }
+
+          .ppBtnSecondary {
+            background: ${ui.surfaceStrong};
+            border: ${ui.border};
+            color: ${ui.text};
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.10);
+          }
+
+          .ppBtnGreen {
+            background: #16a34a;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 14px;
+            box-shadow: 0 18px 34px rgba(22,163,74,0.28);
+          }
+
+          .ppBtnGreen:disabled,
+          .ppBtnGreenFull:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: none;
+          }
+
+          .ppBtnGreenFull {
+            width: 100%;
+            border-radius: 14px;
+            background: #16a34a;
+            color: white;
+            padding: 12px 14px;
+            box-shadow: 0 18px 34px rgba(22,163,74,0.28);
+          }
+
+          .ppBtnSecondaryFull {
+            width: 100%;
+            border-radius: 999px;
+            padding: 10px 12px;
+            background: ${ui.surfaceStrong};
+            border: ${ui.border};
+            color: ${ui.text};
+            margin-top: 10px;
+          }
+
+          .ppWalletTop {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+          }
+
+          .ppChipGreen {
+            background: ${ui.greenBg};
+            color: ${ui.green};
+            border-radius: 999px;
+            padding: 7px 10px;
+            font-size: 12px;
+            font-weight: 900;
+            border: 1px solid rgba(22,163,74,0.18);
+            white-space: nowrap;
+          }
+
+          .ppWalletMid {
+            margin-top: 10px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+          }
+
+          .ppBig {
+            font-size: 40px;
+            font-weight: 950;
+            color: ${ui.text};
+            letter-spacing: -0.03em;
+            line-height: 1;
+          }
+
+          .ppGoal {
+            margin-top: 12px;
+          }
+
+          .ppGoalTop {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          }
+
+          .ppBar {
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(15,23,42,0.08);
+            overflow: hidden;
+            margin-top: 8px;
+          }
+
+          .ppBarFill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(255,122,60,0.95) 0%, rgba(22,163,74,0.95) 100%);
+            transition: width 260ms ease;
+          }
+
+          .ppInfoBox {
+            margin-top: 10px;
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(37,99,235,0.10);
+            border: 1px solid rgba(37,99,235,0.16);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          }
+
+          .ppInfoLabel {
+            font-size: 13px;
+            font-weight: 900;
+            color: ${ui.blue};
+          }
+
+          .ppInfoValue {
+            font-size: 18px;
+            font-weight: 950;
+            color: ${ui.text};
+          }
+
+          .ppSectionHeader {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+          }
+
+          .ppLink {
+            font-size: 13px;
+            font-weight: 800;
+            color: ${ui.blue};
+            text-decoration: underline;
+            white-space: nowrap;
+          }
+
+          .ppErrorBox {
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(185, 28, 28, 0.08);
+            border: 1px solid rgba(185, 28, 28, 0.16);
+            color: #b91c1c;
+            font-size: 13px;
+            margin-bottom: 10px;
+          }
+
+          .ppEmptyBox {
+            border-radius: 14px;
+            padding: 14px;
+            background: rgba(15,23,42,0.05);
+            border: 1px solid rgba(15,23,42,0.07);
+            color: ${ui.subtext};
+            font-size: 13px;
+          }
+
+          /* Transactions desktop */
+          .ppTxDesktop {
+            display: block;
+          }
+          .ppTxRow {
+            display: grid;
+            grid-template-columns: 2.2fr 1fr 1fr 1fr;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 6px;
+            border-bottom: 1px solid rgba(15,23,42,0.06);
+            font-size: 14px;
+          }
+          .ppTxMerchant {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: ${ui.text};
+          }
+          .ppTxMeta {
+            margin-left: 8px;
+            color: ${ui.subtext2};
+            font-size: 12px;
+          }
+          .ppTxDate {
+            color: ${ui.subtext2};
+            font-size: 13px;
+          }
+          .ppTxCb {
+            text-align: right;
+            font-weight: 900;
+            color: ${ui.text};
+          }
+          .ppTxDon {
+            text-align: right;
+            font-weight: 900;
+            color: ${ui.green};
+          }
+
+          /* Transactions mobile */
+          .ppTxMobile {
+            display: none;
+          }
+          .ppTxCard {
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(255,255,255,0.75);
+            border: 1px solid rgba(15,23,42,0.07);
+            margin-top: 10px;
+          }
+          .ppTxCardTop {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+          }
+          .ppTxCardMerchant {
+            font-weight: 950;
+            color: ${ui.text};
+          }
+          .ppTxCardDate {
+            font-size: 12px;
+            color: ${ui.subtext2};
+            white-space: nowrap;
+          }
+          .ppTxCardMid {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 10px;
+          }
+          .ppTxCardSmall {
+            font-size: 12px;
+            color: ${ui.subtext2};
+            font-weight: 800;
+          }
+          .ppTxCardVal {
+            font-weight: 950;
+            color: ${ui.text};
+          }
+          .ppTxCardBottom {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+          }
+          .ppTag {
+            padding: 7px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 950;
+            white-space: nowrap;
+          }
+          .ppTagBlue {
+            background: rgba(37,99,235,0.10);
+            border: 1px solid rgba(37,99,235,0.16);
+            color: ${ui.blue};
+          }
+          .ppTagGreen {
+            background: rgba(22,163,74,0.10);
+            border: 1px solid rgba(22,163,74,0.16);
+            color: ${ui.green};
+          }
+
+          /* ✅ Mobile adjustments */
+          @media (max-width: 640px) {
+            .ppWrap {
+              padding: 14px 12px 44px;
+            }
+
+            .ppHeaderTop {
+              flex-direction: column;
+              align-items: stretch;
+            }
+
+            .ppTitle {
+              font-size: 24px;
+            }
+
+            .ppBanner {
+              flex-direction: column;
+              align-items: stretch;
+            }
+
+            .ppBtnPrimary {
+              width: 100%;
+            }
+
+            .ppBig {
+              font-size: 34px;
+            }
+
+            .ppWalletMid {
+              flex-direction: column;
+              align-items: stretch;
+            }
+
+            .ppBtnGreen {
+              width: 100%;
+            }
+
+            /* switch tx */
+            .ppTxDesktop {
+              display: none;
+            }
+            .ppTxMobile {
+              display: block;
+            }
+          }
+
+          /* Focus */
+          button:focus-visible,
+          a:focus-visible {
+            outline: 3px solid rgba(37, 99, 235, 0.28);
+            outline-offset: 2px;
+            border-radius: 12px;
+          }
+        `}</style>
       </div>
     </main>
   );

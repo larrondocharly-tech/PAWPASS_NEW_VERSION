@@ -1,12 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-// ❌ on enlève next/image (problèmes fréquents avec GIF sur mobile/Vercel)
 import { createClient } from "@/lib/supabaseClient";
-import QrScannerRaw from "react-qr-scanner";
-
-const QrScanner: any = QrScannerRaw;
 
 export const dynamic = "force-dynamic";
 
@@ -18,32 +14,26 @@ interface Spa {
 export default function ScanInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
 
-  // On accepte ?code= ou ?m= pour être compatible avec /scan
-  const initialCode = searchParams.get("code") || searchParams.get("m") || null;
+  // ✅ ne pas recréer supabase à chaque render
+  const supabase = useMemo(() => createClient(), []);
 
-  const [scanned, setScanned] = useState(false);
-  const [merchantCode, setMerchantCode] = useState<string | null>(initialCode);
+  const merchantCode = searchParams.get("m") || searchParams.get("code") || null;
+
   const [merchantFound, setMerchantFound] = useState<any>(null);
   const [loadingMerchant, setLoadingMerchant] = useState(false);
 
   const [amount, setAmount] = useState("");
   const [spas, setSpas] = useState<Spa[]>([]);
   const [selectedSpaId, setSelectedSpaId] = useState("");
-  // Choix limité : 50% ou 100%
   const [donationPercent, setDonationPercent] = useState<50 | 100>(50);
 
-  // Ticket de caisse (photo / pdf)
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
 
-  // errorMsg: erreurs de validation (montant vide, SPA non choisie, etc.)
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // error: erreurs venant de Supabase (RPC / trigger 2h / autres)
   const [error, setError] = useState<string | null>(null);
 
-  // Popup de remerciement
   const [showThankYou, setShowThankYou] = useState(false);
 
   // =========================
@@ -98,66 +88,31 @@ export default function ScanInner() {
     loadMerchant();
   }, [merchantCode, supabase]);
 
-  // =========================
-  // Seuil ticket pour ce commerçant
-  // =========================
   const getMinReceiptAmount = (): number => {
     if (!merchantFound) return 20;
 
-    // Colonne actuelle en BDD : merchants.receipt_threshold
-    if (
-      typeof merchantFound.receipt_threshold === "number" &&
-      !Number.isNaN(merchantFound.receipt_threshold)
-    ) {
+    if (typeof merchantFound.receipt_threshold === "number" && !Number.isNaN(merchantFound.receipt_threshold)) {
       return merchantFound.receipt_threshold;
     }
 
-    // Ancien nom possible, au cas où
-    if (
-      typeof merchantFound.min_receipt_amount === "number" &&
-      !Number.isNaN(merchantFound.min_receipt_amount)
-    ) {
+    if (typeof merchantFound.min_receipt_amount === "number" && !Number.isNaN(merchantFound.min_receipt_amount)) {
       return merchantFound.min_receipt_amount;
     }
 
-    // Valeur par défaut
     return 20;
   };
 
   // =========================
-  // Scan QR interne (si on vient directement sur /scan-inner)
-  // =========================
-  const handleScan = (result: any) => {
-    if (!result || scanned) return;
-
-    const code = (result.text || "").trim();
-    if (!code) return;
-
-    setScanned(true);
-    setMerchantCode(code);
-
-    const currentCode = searchParams.get("code") || searchParams.get("m") || null;
-
-    if (currentCode !== code) {
-      // On normalise sur ?m= pour être cohérent avec /scan
-      router.push(`/scan?m=${encodeURIComponent(code)}`);
-    }
-  };
-
-  // =========================
-  // Upload du ticket dans le bucket "receipts"
+  // Upload du ticket
   // =========================
   const uploadReceiptIfNeeded = async (
     userId: string,
     amountNumber: number,
     minReceiptAmount: number
   ): Promise<string | null> => {
-    // Si montant <= seuil → ticket facultatif
     if (amountNumber <= minReceiptAmount) {
       if (!receiptFile) return null;
-      // s'il y a un fichier même pour un montant inférieur, on l'uploade quand même
     } else {
-      // Montant > seuil → ticket obligatoire
       if (!receiptFile) {
         setErrorMsg(`Ticket de caisse obligatoire pour les achats > ${minReceiptAmount} €.`);
         return null;
@@ -174,10 +129,7 @@ export default function ScanInner() {
 
     const { data, error: uploadError } = await supabase.storage
       .from("receipts")
-      .upload(filePath, receiptFile, {
-        cacheControl: "3600",
-        upsert: false,
-      });
+      .upload(filePath, receiptFile, { cacheControl: "3600", upsert: false });
 
     setIsUploadingReceipt(false);
 
@@ -187,18 +139,21 @@ export default function ScanInner() {
       return null;
     }
 
-    // On stocke simplement le path (admin pourra générer une URL signée)
     return data.path;
   };
 
   // =========================
-  // Soumission du formulaire (création transaction)
+  // Soumission (RPC)
   // =========================
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrorMsg(null);
     setError(null);
 
+    if (!merchantCode) {
+      setErrorMsg("QR commerçant manquant.");
+      return;
+    }
     if (!merchantFound) {
       setErrorMsg("Commerçant introuvable.");
       return;
@@ -220,18 +175,14 @@ export default function ScanInner() {
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) {
-      router.push(`/register?from=scan&code=${merchantCode ?? ""}&amount=${amount}`);
+      router.push(`/register?from=scan&m=${encodeURIComponent(merchantCode)}&amount=${encodeURIComponent(amount)}`);
       return;
     }
 
     const minReceiptAmount = getMinReceiptAmount();
 
-    // Gestion du ticket de caisse / upload
     const receiptPath = await uploadReceiptIfNeeded(auth.user.id, amountNumber, minReceiptAmount);
-    if (amountNumber > minReceiptAmount && !receiptPath) {
-      // erreur déjà affichée (absence de fichier ou upload raté)
-      return;
-    }
+    if (amountNumber > minReceiptAmount && !receiptPath) return;
 
     const { error: rpcError } = await supabase.rpc("apply_cashback_transaction", {
       p_merchant_code: merchantCode,
@@ -245,8 +196,7 @@ export default function ScanInner() {
 
     if (rpcError) {
       console.error(rpcError);
-
-      const msg = rpcError.message.toUpperCase();
+      const msg = (rpcError.message || "").toUpperCase();
 
       if (msg.includes("DOUBLE_SCAN_2H")) {
         setError(
@@ -261,153 +211,249 @@ export default function ScanInner() {
         return;
       }
 
-      setError(`Erreur lors de l'enregistrement de la transaction : ${rpcError.message}`);
+      setError(`Erreur lors de l'enregistrement : ${rpcError.message}`);
       return;
     }
 
-    // Succès : popup de remerciement
     setShowThankYou(true);
   };
 
-  // =========================
-  // Rendu
-  // =========================
   const minReceiptAmountForUI = getMinReceiptAmount();
 
+  // =========================
+  // UI
+  // =========================
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Scanner un commerçant</h1>
-
-      {(error || errorMsg) && <p style={{ color: "red", marginTop: 8 }}>{error || errorMsg}</p>}
-
-      {/* Si aucun code marchand → scanner interne */}
-      {!merchantCode && (
-        <QrScanner
-          delay={250}
-          style={{ width: "100%", marginTop: 16 }}
-          constraints={{
-            video: { facingMode: { ideal: "environment" } },
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "transparent",
+        padding: "16px 0 28px",
+      }}
+    >
+      <div className="container" style={{ maxWidth: 560 }}>
+        <section
+          className="card"
+          style={{
+            borderRadius: 20,
+            padding: 16,
+            background: "rgba(255,255,255,0.88)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            border: "1px solid rgba(0,0,0,0.06)",
+            boxShadow: "0 14px 30px rgba(0,0,0,0.08)",
           }}
-          onScan={handleScan}
-          onError={(err: any) => {
-            console.error("QR error:", err);
-            setError("Erreur du scanner QR.");
-          }}
-        />
-      )}
-
-      {/* Chargement commerçant */}
-      {merchantCode && loadingMerchant && <p style={{ marginTop: 16 }}>Chargement commerçant…</p>}
-
-      {/* Formulaire d'achat si commerçant trouvé */}
-      {merchantCode && merchantFound && !loadingMerchant && (
-        <form onSubmit={handleSubmit} style={{ marginTop: 20 }}>
-          <h2>{merchantFound.name}</h2>
-
-          {/* Montant */}
-          <input
-            type="number"
-            placeholder="Montant"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            style={{ width: "100%", padding: 10, marginTop: 10 }}
-          />
-
-          {/* Ticket de caisse */}
-          <div style={{ marginTop: 16 }}>
-            <label style={{ display: "block", fontWeight: 600, marginBottom: 8 }}>
-              Ticket de caisse (photo ou PDF)
-            </label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => {
-                const file = e.target.files?.[0] ?? null;
-                setReceiptFile(file);
+        >
+          <header style={{ marginBottom: 12 }}>
+            <p
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "#FF7A3C",
+                margin: 0,
               }}
-              style={{ marginBottom: 4 }}
-            />
-            <p style={{ fontSize: 12, color: "#92400E", marginTop: 4 }}>
-              Obligatoire pour les achats &gt; {minReceiptAmountForUI} €.
+            >
+              Scan confirmé
             </p>
-          </div>
+            <h1 style={{ fontSize: 22, margin: "6px 0 0", color: "#0f172a" }}>
+              Enregistrer un achat
+            </h1>
+          </header>
 
-          {/* Refuge */}
-          <label style={{ fontWeight: 600, marginTop: 16, display: "block" }}>Refuge bénéficiaire</label>
-
-          <select
-            value={selectedSpaId}
-            onChange={(e) => setSelectedSpaId(e.target.value)}
-            style={{ width: "100%", padding: 10 }}
-          >
-            <option value="">Choisir…</option>
-            {spas.map((spa) => (
-              <option key={spa.id} value={spa.id}>
-                {spa.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Don 50 / 100 % */}
-          <label style={{ display: "block", marginTop: 15, marginBottom: 8, fontWeight: 600 }}>
-            Pourcentage de don
-          </label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => setDonationPercent(50)}
+          {(error || errorMsg) && (
+            <div
               style={{
-                flex: 1,
-                padding: "10px 0",
-                borderRadius: 8,
-                border: donationPercent === 50 ? "2px solid #0A8F44" : "1px solid #ccc",
-                backgroundColor: donationPercent === 50 ? "#0A8F44" : "white",
-                color: donationPercent === 50 ? "white" : "#111827",
-                fontWeight: 600,
+                background: "#fee2e2",
+                color: "#b91c1c",
+                padding: 10,
+                borderRadius: 12,
+                fontSize: 13,
+                marginBottom: 12,
               }}
             >
-              50%
-            </button>
-            <button
-              type="button"
-              onClick={() => setDonationPercent(100)}
-              style={{
-                flex: 1,
-                padding: "10px 0",
-                borderRadius: 8,
-                border: donationPercent === 100 ? "2px solid #0A8F44" : "1px solid #ccc",
-                backgroundColor: donationPercent === 100 ? "#0A8F44" : "white",
-                color: donationPercent === 100 ? "white" : "#111827",
-                fontWeight: 600,
-              }}
-            >
-              100%
-            </button>
-          </div>
+              {error || errorMsg}
+            </div>
+          )}
 
-          <button
-            type="submit"
-            disabled={isUploadingReceipt}
-            style={{
-              marginTop: 20,
-              padding: "10px 20px",
-              background: "#0A8F44",
-              color: "white",
-              borderRadius: 8,
-              opacity: isUploadingReceipt ? 0.7 : 1,
-            }}
-          >
-            {isUploadingReceipt ? "Envoi du ticket..." : "Valider"}
-          </button>
-        </form>
-      )}
+          {loadingMerchant && <p style={{ marginTop: 10 }}>Chargement commerçant…</p>}
 
-      {/* Cas commerçant introuvable */}
-      {merchantCode && !merchantFound && !loadingMerchant && !error && (
-        <p style={{ marginTop: 16 }}>Commerçant introuvable.</p>
-      )}
+          {merchantCode && merchantFound && !loadingMerchant && (
+            <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  background: "#FFF7ED",
+                  border: "1px solid #FED7AA",
+                  padding: "10px 12px",
+                  borderRadius: 14,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, color: "#111827", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {merchantFound.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#92400E" }}>
+                    QR: {merchantCode}
+                  </div>
+                </div>
 
-      {/* Popup remerciement */}
+                <button
+                  type="button"
+                  onClick={() => router.push("/scan")}
+                  style={{
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    background: "white",
+                    borderRadius: 999,
+                    padding: "8px 10px",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Rescanner
+                </button>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
+                  Montant de l’achat (€)
+                </label>
+                <input
+                  inputMode="decimal"
+                  type="number"
+                  step="0.01"
+                  placeholder="Ex : 12,50"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    borderRadius: 14,
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    outline: "none",
+                    fontSize: 16,
+                    background: "rgba(255,255,255,0.9)",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
+                  Refuge bénéficiaire
+                </label>
+                <select
+                  value={selectedSpaId}
+                  onChange={(e) => setSelectedSpaId(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    borderRadius: 14,
+                    border: "1px solid rgba(0,0,0,0.12)",
+                    background: "rgba(255,255,255,0.9)",
+                    fontSize: 15,
+                  }}
+                >
+                  <option value="">Choisir…</option>
+                  {spas.map((spa) => (
+                    <option key={spa.id} value={spa.id}>
+                      {spa.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 8, color: "#0f172a" }}>
+                  Pourcentage de don
+                </label>
+                <div style={{ display: "flex", gap: 10 }}>
+                  {[50, 100].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setDonationPercent(p as 50 | 100)}
+                      style={{
+                        flex: 1,
+                        padding: "12px 0",
+                        borderRadius: 14,
+                        border: donationPercent === p ? "2px solid #0A8F44" : "1px solid rgba(0,0,0,0.14)",
+                        background: donationPercent === p ? "#0A8F44" : "rgba(255,255,255,0.9)",
+                        color: donationPercent === p ? "white" : "#111827",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {p}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
+                  Ticket de caisse (photo ou PDF)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+                />
+                <div style={{ fontSize: 12, color: "#92400E", marginTop: 6 }}>
+                  Obligatoire pour les achats &gt; {minReceiptAmountForUI} €.
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isUploadingReceipt}
+                style={{
+                  marginTop: 4,
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: 14,
+                  border: "none",
+                  fontWeight: 900,
+                  fontSize: 16,
+                  background: "#0A8F44",
+                  color: "white",
+                  opacity: isUploadingReceipt ? 0.7 : 1,
+                  cursor: isUploadingReceipt ? "not-allowed" : "pointer",
+                }}
+              >
+                {isUploadingReceipt ? "Envoi du ticket..." : "Valider l’achat"}
+              </button>
+            </form>
+          )}
+
+          {merchantCode && !merchantFound && !loadingMerchant && !error && (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ margin: 0 }}>Commerçant introuvable.</p>
+              <button
+                type="button"
+                onClick={() => router.push("/scan")}
+                style={{
+                  marginTop: 10,
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  background: "white",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                Rescanner
+              </button>
+            </div>
+          )}
+        </section>
+      </div>
+
       {showThankYou && (
         <div
           style={{
@@ -418,62 +464,58 @@ export default function ScanInner() {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 9999,
+            padding: 16,
           }}
         >
           <div
             style={{
-              backgroundColor: "#FFFFFB",
-              borderRadius: "20px",
-              padding: "20px 18px 18px",
-              width: "90%",
-              maxWidth: "360px",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              backgroundColor: "rgba(255,255,255,0.92)",
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              borderRadius: 22,
+              padding: "18px 16px 16px",
+              width: "100%",
+              maxWidth: 380,
+              boxShadow: "0 16px 40px rgba(0,0,0,0.18)",
               textAlign: "center",
+              border: "1px solid rgba(0,0,0,0.06)",
             }}
           >
-            <div style={{ marginBottom: 12 }}>
-              {/* ✅ GIF: <img> + cache bust + contain (pas de rognage) */}
+            <div style={{ marginBottom: 10 }}>
               <img
                 src="/goat-thankyou.gif?v=3"
-                alt="Les petits loups vous remercient pour votre don !"
+                alt="Merci !"
                 style={{
-                  width: 260,
-                  height: 260,
+                  width: "100%",
+                  maxWidth: 260,
+                  height: "auto",
                   borderRadius: 16,
                   objectFit: "contain",
                   display: "block",
                   margin: "0 auto",
-                  backgroundColor: "transparent",
                 }}
               />
             </div>
 
-            <p
-              style={{
-                fontWeight: 700,
-                fontSize: 18,
-                margin: "0 0 6px",
-                color: "#222222",
-              }}
-            >
-              Les petits loups vous remercient pour votre don !
+            <p style={{ fontWeight: 900, fontSize: 18, margin: "0 0 6px", color: "#0f172a" }}>
+              Merci pour votre don !
             </p>
-
-            <p style={{ fontSize: 14, margin: 0, color: "#555555" }}>
+            <p style={{ fontSize: 14, margin: 0, color: "#475569" }}>
               Grâce à vous, les animaux des refuges locaux sont un peu mieux soutenus.
             </p>
 
             <button
               onClick={() => router.push("/dashboard")}
               style={{
-                marginTop: 16,
-                padding: "10px 18px",
-                borderRadius: 10,
-                fontWeight: 600,
+                marginTop: 14,
+                padding: "12px 16px",
+                borderRadius: 14,
+                fontWeight: 900,
                 backgroundColor: "#0A8F44",
                 color: "white",
                 border: "none",
                 width: "100%",
+                cursor: "pointer",
               }}
             >
               Retour au tableau de bord
@@ -481,6 +523,6 @@ export default function ScanInner() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
