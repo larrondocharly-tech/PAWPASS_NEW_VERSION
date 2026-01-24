@@ -1,80 +1,101 @@
+// app/scan/ScanPageClient.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamicImport from "next/dynamic";
-import { createClient } from "@/lib/supabaseClient";
 import ScanInner from "./scan-inner";
 
-const QrScanner = dynamicImport(() => import("react-qr-scanner"), { ssr: false }) as any;
+export const dynamic = "force-dynamic";
 
 type Mode = "scan" | "redeem";
 
+const QrScanner = dynamicImport(() => import("react-qr-scanner"), { ssr: false }) as any;
 const videoConstraints = { video: { facingMode: { ideal: "environment" } } };
 
 export default function ScanPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = useMemo(() => createClient(), []);
 
-  const modeParam = searchParams.get("mode");
+  const modeParam = (searchParams.get("mode") || "").toLowerCase().trim();
   const mode: Mode = modeParam === "redeem" ? "redeem" : "scan";
-  const merchantCode = searchParams.get("m");
+
+  // compat: ?m= ou ?code=
+  const merchantCode = (searchParams.get("m") || searchParams.get("code") || "").trim();
 
   const [error, setError] = useState<string | null>(null);
 
-  // anti-double scan + UX
+  // anti double scan
   const [scanned, setScanned] = useState(false);
   const scannedAt = useRef<number>(0);
+  const scanLock = useRef(false);
 
-  // fallback saisie manuelle
+  // forcer restart caméra
+  const [scannerKey, setScannerKey] = useState(1);
+
+  // saisie manuelle
   const [manualOpen, setManualOpen] = useState(false);
   const [manualCode, setManualCode] = useState("");
 
-  // reset scan quand on change de route / mode
   useEffect(() => {
     setError(null);
     setScanned(false);
     scannedAt.current = 0;
+    scanLock.current = false;
     setManualOpen(false);
     setManualCode("");
+    setScannerKey((k) => k + 1);
   }, [mode, merchantCode]);
 
+  const extractCode = (rawInput: string) => {
+    const raw = (rawInput || "").trim();
+    if (!raw) return "";
+
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      try {
+        const url = new URL(raw);
+        const fromUrl = url.searchParams.get("m") || url.searchParams.get("code");
+        return (fromUrl || raw).trim();
+      } catch {
+        return raw;
+      }
+    }
+    return raw;
+  };
+
+  const pushToMode = (code: string) => {
+    const safe = encodeURIComponent(code);
+    if (mode === "redeem") router.push(`/scan?mode=redeem&m=${safe}`);
+    else router.push(`/scan?m=${safe}`);
+  };
+
   const handleScan = (data: any) => {
-    if (!data || scanned) return;
+    if (!data) return;
+    if (scanned) return;
+    if (scanLock.current) return;
 
     const text =
       typeof data === "string"
         ? data
         : data?.text || data?.data || data?.qrCodeMessage;
 
-    const raw = (text || "").trim();
-    if (!raw) return;
+    const code = extractCode(text || "");
+    if (!code) return;
 
-    // throttle (évite 2 triggers rapprochés)
     const now = Date.now();
     if (now - scannedAt.current < 1200) return;
     scannedAt.current = now;
 
+    scanLock.current = true;
     setScanned(true);
 
     try {
-      let code = raw;
-
-      if (raw.startsWith("http://") || raw.startsWith("https://")) {
-        const url = new URL(raw);
-        code = url.searchParams.get("m") || url.searchParams.get("code") || raw;
-      }
-
-      if (mode === "redeem") {
-        router.push(`/scan?mode=redeem&m=${encodeURIComponent(code)}`);
-      } else {
-        router.push(`/scan?m=${encodeURIComponent(code)}`);
-      }
+      pushToMode(code);
     } catch (e) {
       console.error(e);
       setError("Erreur lors de la lecture du QR code.");
       setScanned(false);
+      scanLock.current = false;
     }
   };
 
@@ -83,37 +104,12 @@ export default function ScanPageClient() {
     setError("Erreur du scanner QR. Vérifiez l’autorisation caméra.");
   };
 
-  // ✅ MODE SCAN normal : si m existe → formulaire
-  if (mode === "scan" && merchantCode) {
+  // ✅ si on a déjà un commerçant -> on laisse ScanInner gérer achat/redeem
+  if (merchantCode) {
     return <ScanInner />;
   }
 
-  // (Ton mode redeem est long chez toi : je ne le modifie pas ici.
-  //  Si tu veux, on appliquera le même scanner overlay + UI à redeem aussi.)
-  if (mode === "redeem" && merchantCode) {
-    // laisse ton ancien flux redeem ici si tu veux le garder.
-    // Pour l’instant, on ne casse rien :
-    return (
-      <main style={{ minHeight: "100vh", background: "#FAFAF5", padding: "16px 0" }}>
-        <div className="container" style={{ maxWidth: 720 }}>
-          <div className="card" style={{ borderRadius: 16, padding: 16 }}>
-            <p style={{ margin: 0 }}>
-              Mode redeem détecté avec commerçant. (On peut harmoniser l’UI ensuite.)
-            </p>
-            <button
-              className="button"
-              style={{ marginTop: 12 }}
-              onClick={() => router.push("/dashboard")}
-            >
-              Retour dashboard
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // ✅ ÉCRAN SCANNER (scan normal OU redeem sans m)
+  // ✅ sinon -> écran scanner QR
   return (
     <main style={{ minHeight: "100vh", background: "transparent", padding: "16px 0 28px" }}>
       <div className="container" style={{ maxWidth: 560 }}>
@@ -165,7 +161,6 @@ export default function ScanPageClient() {
             boxShadow: "0 16px 34px rgba(0,0,0,0.10)",
           }}
         >
-          {/* Zone caméra + overlay */}
           <div
             style={{
               position: "relative",
@@ -175,22 +170,20 @@ export default function ScanPageClient() {
               border: "1px solid rgba(255,255,255,0.10)",
             }}
           >
-            <QrScanner
-              delay={300}
-              onError={handleScanError}
-              onScan={handleScan}
-              constraints={videoConstraints}
-              style={{ width: "100%" }}
-            />
+            {!scanned ? (
+              <QrScanner
+                key={scannerKey}
+                delay={300}
+                onError={handleScanError}
+                onScan={handleScan}
+                constraints={videoConstraints}
+                style={{ width: "100%" }}
+              />
+            ) : (
+              <div style={{ width: "100%", aspectRatio: "4 / 3" }} />
+            )}
 
-            {/* Overlay sombre + cadre */}
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                pointerEvents: "none",
-              }}
-            >
+            <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
               <div
                 style={{
                   position: "absolute",
@@ -231,7 +224,6 @@ export default function ScanPageClient() {
             </div>
           </div>
 
-          {/* Actions */}
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -239,7 +231,9 @@ export default function ScanPageClient() {
                 onClick={() => {
                   setScanned(false);
                   scannedAt.current = 0;
+                  scanLock.current = false;
                   setError(null);
+                  setScannerKey((k) => k + 1);
                 }}
                 style={{
                   flex: 1,
@@ -281,13 +275,21 @@ export default function ScanPageClient() {
                   padding: 12,
                 }}
               >
-                <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: 900,
+                    fontSize: 13,
+                    marginBottom: 6,
+                    color: "#0f172a",
+                  }}
+                >
                   Code commerçant
                 </label>
                 <input
                   value={manualCode}
                   onChange={(e) => setManualCode(e.target.value)}
-                  placeholder="Ex : BAB-1234"
+                  placeholder="Ex : PP_XXXX"
                   style={{
                     width: "100%",
                     padding: 12,
@@ -301,11 +303,7 @@ export default function ScanPageClient() {
                   onClick={() => {
                     const code = manualCode.trim();
                     if (!code) return;
-                    if (mode === "redeem") {
-                      router.push(`/scan?mode=redeem&m=${encodeURIComponent(code)}`);
-                    } else {
-                      router.push(`/scan?m=${encodeURIComponent(code)}`);
-                    }
+                    pushToMode(code);
                   }}
                   style={{
                     marginTop: 10,

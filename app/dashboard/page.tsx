@@ -1,7 +1,6 @@
-// app/dashboard/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
@@ -10,10 +9,10 @@ import DonationFeedTicker from "@/components/DonationFeedTicker";
 export const dynamic = "force-dynamic";
 
 interface StatTransaction {
-  cashback_amount: number | null;
-  donation_amount: number | null;
+  cashback_to_user: number | string | null;
+  donation_amount: number | string | null;
   status: string | null;
-  wallet_spent: number | null;
+  wallet_spent: number | string | null;
 }
 
 interface RecentTransaction {
@@ -28,6 +27,11 @@ interface RecentTransaction {
 function clamp01(n: number) {
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(1, n));
+}
+
+function toNum(v: unknown): number {
+  const n = typeof v === "number" ? v : Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export default function DashboardPage() {
@@ -66,7 +70,7 @@ export default function DashboardPage() {
     blur: "blur(10px)",
   };
 
-  const cardBase: React.CSSProperties = {
+  const cardBase: CSSProperties = {
     borderRadius: ui.radius,
     background: ui.surface,
     border: ui.border,
@@ -102,6 +106,7 @@ export default function DashboardPage() {
     }
   };
 
+  // ✅ Option C: refresh dashboard on mount + on focus/visibility
   useEffect(() => {
     let cancelled = false;
 
@@ -124,22 +129,47 @@ export default function DashboardPage() {
         return;
       }
 
+      // role
       const { data: profileData } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .maybeSingle();
 
-      if (profileData?.role === "admin") setIsAdmin(true);
+      if (!cancelled) {
+        if ((profileData?.role || "").toLowerCase() === "admin") setIsAdmin(true);
+        else setIsAdmin(false);
+      }
 
+      // ✅ SOLDE = wallets.balance (numeric peut revenir en string)
+      const { data: walletRow, error: walletErr } = await supabase
+        .from("wallets")
+        .select("balance")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!cancelled) {
+        if (walletErr) {
+          console.error("wallets error:", walletErr);
+          setAvailableBalance(0);
+        } else {
+          const bal = toNum((walletRow as any)?.balance);
+          setAvailableBalance(Math.max(bal, 0));
+        }
+      }
+
+      // ✅ Stats: utiliser cashback_to_user (pas cashback_amount)
       const { data: txData, error: txError } = await supabase
         .from("transactions")
-        .select("cashback_amount, donation_amount, status, wallet_spent")
+        .select("cashback_to_user, donation_amount, status, wallet_spent")
         .eq("user_id", user.id);
 
       if (!cancelled) {
         if (txError) {
           console.error("transactions stats error:", txError);
+          setTotalCashback(0);
+          setTotalDonation(0);
+          setTxCount(0);
         } else if (txData) {
           const list = txData as StatTransaction[];
           const approved = list.filter(
@@ -147,27 +177,22 @@ export default function DashboardPage() {
           );
 
           const totalCb = approved.reduce(
-            (sum, tx) => sum + (typeof tx.cashback_amount === "number" ? tx.cashback_amount : 0),
-            0
-          );
-          const totalDon = approved.reduce(
-            (sum, tx) => sum + (typeof tx.donation_amount === "number" ? tx.donation_amount : 0),
-            0
-          );
-          const totalSpent = approved.reduce(
-            (sum, tx) => sum + (typeof tx.wallet_spent === "number" ? tx.wallet_spent : 0),
+            (sum, tx) => sum + toNum(tx.cashback_to_user),
             0
           );
 
-          const available = Math.max(totalCb - totalSpent, 0);
+          const totalDon = approved.reduce(
+            (sum, tx) => sum + toNum(tx.donation_amount),
+            0
+          );
 
           setTotalCashback(totalCb);
           setTotalDonation(totalDon);
           setTxCount(approved.length);
-          setAvailableBalance(available);
         }
       }
 
+      // Historique (view)
       const { data: historyData, error: historyError } = await supabase
         .from("client_transactions_history")
         .select("*")
@@ -186,9 +211,9 @@ export default function DashboardPage() {
               id: row.id,
               created_at: row.created_at,
               merchant_name: row.merchant_name ?? null,
-              purchase_amount: Number(row.purchase_amount ?? row.amount ?? 0),
-              cashback_to_user: Number(row.cashback_to_user ?? row.cashback_amount ?? 0),
-              donation_amount: Number(row.donation_amount ?? row.donation ?? 0),
+              purchase_amount: toNum(row.purchase_amount ?? row.amount ?? 0),
+              cashback_to_user: toNum(row.cashback_to_user ?? row.cashback_amount ?? 0),
+              donation_amount: toNum(row.donation_amount ?? row.donation ?? 0),
             })) ?? [];
 
           setRecentTx(mapped);
@@ -198,9 +223,22 @@ export default function DashboardPage() {
       if (!cancelled) setLoading(false);
     };
 
+    // initial
     loadData();
+
+    // refresh on focus / tab visible
+    const onFocus = () => loadData();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") loadData();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [supabase, router]);
 
@@ -228,10 +266,7 @@ export default function DashboardPage() {
             </div>
 
             {isAdmin && (
-              <button
-                onClick={() => router.push("/admin")}
-                className="ppBtn ppBtnSecondary"
-              >
+              <button onClick={() => router.push("/admin")} className="ppBtn ppBtnSecondary">
                 Accéder à l&apos;admin
               </button>
             )}
@@ -239,7 +274,9 @@ export default function DashboardPage() {
 
           <div className="ppBanner" style={cardBase}>
             <div style={{ minWidth: 0 }}>
-              <div className="ppBannerTitle">{txCount === 0 ? "Votre première action" : "Prochaine étape"}</div>
+              <div className="ppBannerTitle">
+                {txCount === 0 ? "Votre première action" : "Prochaine étape"}
+              </div>
               <div className="ppBannerText">{emptyStateTip}</div>
             </div>
             <button onClick={() => router.push("/scan")} className="ppBtn ppBtnPrimary">
@@ -298,7 +335,9 @@ export default function DashboardPage() {
                 <div className="ppCardInner">
                   <div className="ppWalletTop">
                     <div>
-                      <h2 className="ppH2" style={{ marginBottom: 2 }}>Ma cagnotte PawPass</h2>
+                      <h2 className="ppH2" style={{ marginBottom: 2 }}>
+                        Ma cagnotte PawPass
+                      </h2>
                       <div className="ppSmall">Solde disponible pour vos réductions</div>
                     </div>
                     <div className="ppChipGreen">Donné : {formatEuro(totalDonation)}</div>
@@ -315,10 +354,14 @@ export default function DashboardPage() {
                     </div>
 
                     <button
-                      onClick={() => router.push("/scan?mode=redeem")}
+                      onClick={() => router.push("/scan?mode=redeem&scan=1")}
                       className="ppBtn ppBtnGreen"
                       disabled={availableBalance <= 0}
-                      title={availableBalance <= 0 ? "Vous n'avez pas encore de crédits." : "Utiliser vos crédits"}
+                      title={
+                        availableBalance <= 0
+                          ? "Vous n'avez pas encore de crédits."
+                          : "Utiliser vos crédits"
+                      }
                     >
                       Utiliser
                     </button>
@@ -327,7 +370,8 @@ export default function DashboardPage() {
                   <div className="ppGoal">
                     <div className="ppGoalTop">
                       <span className="ppSmall">
-                        Objectif dons : <b style={{ color: ui.text }}>{formatEuro(donationGoal)}</b>
+                        Objectif dons :{" "}
+                        <b style={{ color: ui.text }}>{formatEuro(donationGoal)}</b>
                       </span>
                       <span className="ppSmall">{Math.round(goalPct * 100)}%</span>
                     </div>
@@ -355,7 +399,7 @@ export default function DashboardPage() {
                   </div>
 
                   <button
-                    onClick={() => router.push("/scan?mode=redeem")}
+                    onClick={() => router.push("/scan?mode=redeem&scan=1")}
                     className="ppBtn ppBtnGreenFull"
                     disabled={availableBalance <= 0}
                   >
@@ -368,7 +412,10 @@ export default function DashboardPage() {
                       : "Faites un scan pour débloquer vos premières réductions."}
                   </p>
 
-                  <button onClick={() => router.push("/scan")} className="ppBtn ppBtnSecondaryFull">
+                  <button
+                    onClick={() => router.push("/scan")}
+                    className="ppBtn ppBtnSecondaryFull"
+                  >
                     Scanner maintenant
                   </button>
                 </div>
@@ -385,7 +432,9 @@ export default function DashboardPage() {
               <div className="ppCard" style={cardBase}>
                 <div className="ppCardInner">
                   <div className="ppSectionHeader">
-                    <h2 className="ppH2" style={{ margin: 0 }}>Dernières transactions</h2>
+                    <h2 className="ppH2" style={{ margin: 0 }}>
+                      Dernières transactions
+                    </h2>
                     <Link className="ppLink" href="/transactions">
                       Voir tout l&apos;historique
                     </Link>
@@ -407,7 +456,9 @@ export default function DashboardPage() {
                           <div className="ppTxRow" key={tx.id}>
                             <div className="ppTxMerchant">
                               <b>{tx.merchant_name || "Commerçant"}</b>
-                              <span className="ppTxMeta">• Achat {formatEuro(tx.purchase_amount)}</span>
+                              <span className="ppTxMeta">
+                                • Achat {formatEuro(tx.purchase_amount)}
+                              </span>
                             </div>
                             <div className="ppTxDate">{formatDate(tx.created_at)}</div>
                             <div className="ppTxCb">{formatEuro(tx.cashback_to_user)}</div>
@@ -435,8 +486,12 @@ export default function DashboardPage() {
                             </div>
 
                             <div className="ppTxCardBottom">
-                              <div className="ppTag ppTagBlue">Cashback {formatEuro(tx.cashback_to_user)}</div>
-                              <div className="ppTag ppTagGreen">Don {formatEuro(tx.donation_amount)}</div>
+                              <div className="ppTag ppTagBlue">
+                                Cashback {formatEuro(tx.cashback_to_user)}
+                              </div>
+                              <div className="ppTag ppTagGreen">
+                                Don {formatEuro(tx.donation_amount)}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -537,15 +592,35 @@ export default function DashboardPage() {
             pointer-events: none;
           }
           .ppCardGlowWarm {
-            background: radial-gradient(600px 200px at 10% 0%, rgba(255,122,60,0.18) 0%, rgba(255,255,255,0) 60%),
-                        radial-gradient(520px 200px at 90% 30%, rgba(37,99,235,0.14) 0%, rgba(255,255,255,0) 60%);
+            background: radial-gradient(
+                600px 200px at 10% 0%,
+                rgba(255, 122, 60, 0.18) 0%,
+                rgba(255, 255, 255, 0) 60%
+              ),
+              radial-gradient(
+                520px 200px at 90% 30%,
+                rgba(37, 99, 235, 0.14) 0%,
+                rgba(255, 255, 255, 0) 60%
+              );
           }
           .ppCardGlowGreen {
-            background: radial-gradient(540px 220px at 85% 0%, rgba(22,163,74,0.16) 0%, rgba(255,255,255,0) 60%),
-                        radial-gradient(540px 240px at 0% 100%, rgba(255,122,60,0.12) 0%, rgba(255,255,255,0) 60%);
+            background: radial-gradient(
+                540px 220px at 85% 0%,
+                rgba(22, 163, 74, 0.16) 0%,
+                rgba(255, 255, 255, 0) 60%
+              ),
+              radial-gradient(
+                540px 240px at 0% 100%,
+                rgba(255, 122, 60, 0.12) 0%,
+                rgba(255, 255, 255, 0) 60%
+              );
           }
           .ppCardGlowBlue {
-            background: radial-gradient(560px 240px at 20% 0%, rgba(37,99,235,0.16) 0%, rgba(255,255,255,0) 62%);
+            background: radial-gradient(
+              560px 240px at 20% 0%,
+              rgba(37, 99, 235, 0.16) 0%,
+              rgba(255, 255, 255, 0) 62%
+            );
           }
 
           .ppPill {
@@ -610,14 +685,14 @@ export default function DashboardPage() {
           .ppBtnPrimary {
             background: ${ui.brand};
             color: white;
-            box-shadow: 0 16px 34px rgba(255, 122, 60, 0.30);
+            box-shadow: 0 16px 34px rgba(255, 122, 60, 0.3);
           }
 
           .ppBtnSecondary {
             background: ${ui.surfaceStrong};
             border: ${ui.border};
             color: ${ui.text};
-            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.10);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.1);
           }
 
           .ppBtnGreen {
@@ -625,7 +700,7 @@ export default function DashboardPage() {
             color: white;
             padding: 10px 14px;
             border-radius: 14px;
-            box-shadow: 0 18px 34px rgba(22,163,74,0.28);
+            box-shadow: 0 18px 34px rgba(22, 163, 74, 0.28);
           }
 
           .ppBtnGreen:disabled,
@@ -641,7 +716,7 @@ export default function DashboardPage() {
             background: #16a34a;
             color: white;
             padding: 12px 14px;
-            box-shadow: 0 18px 34px rgba(22,163,74,0.28);
+            box-shadow: 0 18px 34px rgba(22, 163, 74, 0.28);
           }
 
           .ppBtnSecondaryFull {
@@ -668,7 +743,7 @@ export default function DashboardPage() {
             padding: 7px 10px;
             font-size: 12px;
             font-weight: 900;
-            border: 1px solid rgba(22,163,74,0.18);
+            border: 1px solid rgba(22, 163, 74, 0.18);
             white-space: nowrap;
           }
 
@@ -702,7 +777,7 @@ export default function DashboardPage() {
           .ppBar {
             height: 10px;
             border-radius: 999px;
-            background: rgba(15,23,42,0.08);
+            background: rgba(15, 23, 42, 0.08);
             overflow: hidden;
             margin-top: 8px;
           }
@@ -710,7 +785,11 @@ export default function DashboardPage() {
           .ppBarFill {
             height: 100%;
             border-radius: 999px;
-            background: linear-gradient(90deg, rgba(255,122,60,0.95) 0%, rgba(22,163,74,0.95) 100%);
+            background: linear-gradient(
+              90deg,
+              rgba(255, 122, 60, 0.95) 0%,
+              rgba(22, 163, 74, 0.95) 100%
+            );
             transition: width 260ms ease;
           }
 
@@ -718,8 +797,8 @@ export default function DashboardPage() {
             margin-top: 10px;
             border-radius: 14px;
             padding: 12px;
-            background: rgba(37,99,235,0.10);
-            border: 1px solid rgba(37,99,235,0.16);
+            background: rgba(37, 99, 235, 0.1);
+            border: 1px solid rgba(37, 99, 235, 0.16);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -767,8 +846,8 @@ export default function DashboardPage() {
           .ppEmptyBox {
             border-radius: 14px;
             padding: 14px;
-            background: rgba(15,23,42,0.05);
-            border: 1px solid rgba(15,23,42,0.07);
+            background: rgba(15, 23, 42, 0.05);
+            border: 1px solid rgba(15, 23, 42, 0.07);
             color: ${ui.subtext};
             font-size: 13px;
           }
@@ -783,7 +862,7 @@ export default function DashboardPage() {
             gap: 10px;
             align-items: center;
             padding: 10px 6px;
-            border-bottom: 1px solid rgba(15,23,42,0.06);
+            border-bottom: 1px solid rgba(15, 23, 42, 0.06);
             font-size: 14px;
           }
           .ppTxMerchant {
@@ -819,8 +898,8 @@ export default function DashboardPage() {
           .ppTxCard {
             border-radius: 14px;
             padding: 12px;
-            background: rgba(255,255,255,0.75);
-            border: 1px solid rgba(15,23,42,0.07);
+            background: rgba(255, 255, 255, 0.75);
+            border: 1px solid rgba(15, 23, 42, 0.07);
             margin-top: 10px;
           }
           .ppTxCardTop {
@@ -868,17 +947,16 @@ export default function DashboardPage() {
             white-space: nowrap;
           }
           .ppTagBlue {
-            background: rgba(37,99,235,0.10);
-            border: 1px solid rgba(37,99,235,0.16);
+            background: rgba(37, 99, 235, 0.1);
+            border: 1px solid rgba(37, 99, 235, 0.16);
             color: ${ui.blue};
           }
           .ppTagGreen {
-            background: rgba(22,163,74,0.10);
-            border: 1px solid rgba(22,163,74,0.16);
+            background: rgba(22, 163, 74, 0.1);
+            border: 1px solid rgba(22, 163, 74, 0.16);
             color: ${ui.green};
           }
 
-          /* ✅ Mobile adjustments */
           @media (max-width: 640px) {
             .ppWrap {
               padding: 14px 12px 44px;
@@ -915,7 +993,6 @@ export default function DashboardPage() {
               width: 100%;
             }
 
-            /* switch tx */
             .ppTxDesktop {
               display: none;
             }
@@ -924,7 +1001,6 @@ export default function DashboardPage() {
             }
           }
 
-          /* Focus */
           button:focus-visible,
           a:focus-visible {
             outline: 3px solid rgba(37, 99, 235, 0.28);

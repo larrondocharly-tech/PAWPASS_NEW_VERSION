@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabaseClient";
 
 interface Profile {
@@ -24,6 +24,9 @@ export function ClientHeader() {
   // ✅ hover (PC) — on grise UNIQUEMENT au survol
   const [hoveredHref, setHoveredHref] = useState<string | null>(null);
 
+  // Évite les double-calls / race conditions
+  const loadingRef = useRef(false);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -34,37 +37,56 @@ export function ClientHeader() {
     };
 
     const loadProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      if (loadingRef.current) return;
+      loadingRef.current = true;
 
-      if (!user) {
-        applyNoUser();
-        return;
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        // Si pas de session ou erreur => comportement "non connecté"
+        if (userError || !user) {
+          applyNoUser();
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role, merchant_id")
+          .eq("id", user.id)
+          .maybeSingle<Profile>(); // ✅ au lieu de single()
+
+        if (!isMounted) return;
+
+        // maybeSingle() peut retourner profile = null sans erreur
+        if (profileError) {
+          // On log uniquement les erreurs "réelles" (pas l'absence de profil)
+          console.error("Erreur chargement profil header :", profileError);
+          applyNoUser();
+          return;
+        }
+
+        if (!profile) {
+          // Profil absent (ex: ancien user sans ligne profiles)
+          // => pas d'erreur console, juste un état neutre
+          applyNoUser();
+          return;
+        }
+
+        const role = profile.role?.toLowerCase() || null;
+        setIsMerchant(role === "merchant" || profile.merchant_id !== null);
+        setIsAdmin(role === "admin");
+      } finally {
+        loadingRef.current = false;
       }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role, merchant_id")
-        .eq("id", user.id)
-        .single<Profile>();
-
-      if (!isMounted) return;
-
-      if (profileError || !profile) {
-        console.error("Erreur chargement profil header :", profileError);
-        applyNoUser();
-        return;
-      }
-
-      const role = profile.role?.toLowerCase() || null;
-
-      setIsMerchant(role === "merchant" || profile.merchant_id !== null);
-      setIsAdmin(role === "admin");
     };
 
+    // 1er chargement
     loadProfile();
 
+    // Rechargement lors des changements de session
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
       loadProfile();
     });
@@ -137,6 +159,7 @@ export function ClientHeader() {
 
   const handleLogout = async () => {
     setLogoutError(null);
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -243,7 +266,7 @@ export function ClientHeader() {
                   zIndex: 40,
                 }}
               >
-                {/* ✅ Scanner pour tout le monde */}
+                {/* ✅ Scanner achat */}
                 <Link
                   href="/scan"
                   onClick={() => setMenuOpen(false)}
@@ -251,7 +274,18 @@ export function ClientHeader() {
                   style={menuItemStyle(hoveredHref === "/scan")}
                 >
                   <span>📷</span>
-                  <span>Scanner</span>
+                  <span>Scanner (achat)</span>
+                </Link>
+
+                {/* ✅ Utiliser mes crédits (redeem / coupon) */}
+                <Link
+                  href="/scan?mode=redeem&scan=1"
+                  onClick={() => setMenuOpen(false)}
+                  {...itemHandlers("/scan?mode=redeem")}
+                  style={menuItemStyle(hoveredHref === "/scan?mode=redeem")}
+                >
+                  <span>🎟️</span>
+                  <span>Utiliser mes crédits</span>
                 </Link>
 
                 {/* ✅ Transactions uniquement commerçant */}
