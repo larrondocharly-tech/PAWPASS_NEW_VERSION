@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import dynamicImport from "next/dynamic";
 import ScanInner from "./scan-inner";
+import type { Html5Qrcode } from "html5-qrcode";
 
 export const dynamic = "force-dynamic";
 
 type Mode = "scan" | "coupon";
-
-const QrScanner = dynamicImport(() => import("react-qr-scanner"), { ssr: false }) as any;
-const videoConstraints = { video: { facingMode: { ideal: "environment" } } };
 
 function CouponStart({
   onScan,
@@ -113,31 +110,138 @@ function normalizeMode(raw: string): Mode {
 }
 
 /**
- * Scan-only:
- * - On n'accepte PLUS m= / code= (ni depuis URL, ni depuis QR)
- * - On accepte uniquement un token de scan "t" (ou "token") provenant du QR
+ * Compat scan token:
+ * - Nouveau format: ?t= ou ?token=
+ * - Ancien format (compat): ?m= ou ?code=
+ * - Texte brut: accepté tel quel
  */
 function extractScanToken(rawInput: string) {
   const raw = (rawInput || "").trim();
   if (!raw) return "";
 
-  // Cas URL => on lit uniquement t / token
   if (raw.startsWith("http://") || raw.startsWith("https://")) {
     try {
       const url = new URL(raw);
-      const t = url.searchParams.get("t") || url.searchParams.get("token") || "";
+      const t =
+        url.searchParams.get("t") ||
+        url.searchParams.get("token") ||
+        url.searchParams.get("m") ||
+        url.searchParams.get("code") ||
+        "";
       return (t || "").trim();
     } catch {
-      // Si c'est une URL invalide, on retombe en "texte brut" (mais on exigera un token propre)
       return "";
     }
   }
 
-  /**
-   * Cas texte brut scanné (si un jour tu mets un QR qui contient juste le token)
-   * => on accepte si ça ressemble à un token non trivial
-   */
   return raw;
+}
+
+/**
+ * Scanner caméra robuste iOS/Android via html5-qrcode.
+ */
+function CameraScanner({
+  scannerKey,
+  onText,
+  onError,
+  onDebug,
+}: {
+  scannerKey: number;
+  onText: (decodedText: string) => void;
+  onError: (err: unknown) => void;
+  onDebug?: (msg: string) => void;
+}) {
+  const regionId = useMemo(() => `pp-qr-region-${scannerKey}-${Math.random().toString(36).slice(2)}`, [scannerKey]);
+  const qrRef = useRef<Html5Qrcode | null>(null);
+  const lastRef = useRef<string>("");
+  const startingRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function start() {
+      if (startingRef.current) return;
+      startingRef.current = true;
+
+      try {
+        const mod = await import("html5-qrcode");
+        if (cancelled) return;
+
+        const Html5QrcodeCtor = mod.Html5Qrcode;
+        const getCameras = mod.Html5Qrcode.getCameras;
+
+        onDebug?.("Initialisation caméra…");
+
+        const cameras = await getCameras();
+        if (cancelled) return;
+
+        if (!cameras || cameras.length === 0) {
+          throw new Error("Aucune caméra détectée sur cet appareil.");
+        }
+
+        // Priorité caméra arrière si possible
+        const back =
+          cameras.find((d) => /back|rear|environment/i.test(d.label)) ??
+          cameras[cameras.length - 1] ??
+          cameras[0];
+
+        const qr = new Html5QrcodeCtor(regionId);
+        qrRef.current = qr;
+
+        await qr.start(
+          { deviceId: { exact: back.id } },
+          { fps: 12, qrbox: { width: 260, height: 260 } },
+          (decodedText: string) => {
+            if (cancelled) return;
+
+            const txt = (decodedText || "").trim();
+            if (!txt) return;
+
+            if (txt === lastRef.current) return;
+            lastRef.current = txt;
+
+            onDebug?.(`QR détecté: ${txt.slice(0, 60)}${txt.length > 60 ? "…" : ""}`);
+            onText(txt);
+          },
+          () => {}
+        );
+
+        onDebug?.("Caméra OK. En attente de QR…");
+      } catch (e) {
+        onDebug?.("Erreur caméra/scanner.");
+        onError(e);
+      } finally {
+        startingRef.current = false;
+      }
+    }
+
+    start();
+
+    return () => {
+      cancelled = true;
+      lastRef.current = "";
+      const inst = qrRef.current;
+      qrRef.current = null;
+
+      if (inst) {
+        inst.stop().catch(() => {});
+        try {
+          inst.clear();
+        } catch {}
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regionId]);
+
+  return (
+    <div
+      id={regionId}
+      style={{
+        width: "100%",
+        minHeight: 260,
+      }}
+    />
+  );
 }
 
 export default function ScanPageClient() {
@@ -147,10 +251,7 @@ export default function ScanPageClient() {
   const modeParam = searchParams.get("mode") || "";
   const mode: Mode = normalizeMode(modeParam);
 
-  // ✅ Scan-only : on ne lit plus m/code
   const scanToken = (searchParams.get("t") || searchParams.get("token") || "").trim();
-
-  // scan=1 => on force l’écran caméra
   const scanFlag = (searchParams.get("scan") || "").trim() === "1";
 
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +261,8 @@ export default function ScanPageClient() {
   const scanLock = useRef(false);
   const [scannerKey, setScannerKey] = useState(1);
 
-  // Dernier commerçant = dernier token scanné (pas un code)
+  const [debugMsg, setDebugMsg] = useState<string>("");
+
   const [lastMerchantToken, setLastMerchantToken] = useState<string>("");
 
   useEffect(() => {
@@ -177,10 +279,11 @@ export default function ScanPageClient() {
     setScanned(false);
     scannedAt.current = 0;
     scanLock.current = false;
+    setDebugMsg("");
     setScannerKey((k) => k + 1);
   }, [mode, scanToken, scanFlag]);
 
-  // ✅ Normalise aussi l’URL si on arrive en mode=redeem => mode=coupon (propre)
+  // Normalise URL ancien mode=redeem
   useEffect(() => {
     const raw = (modeParam || "").toLowerCase().trim();
     if (raw === "redeem") {
@@ -191,7 +294,7 @@ export default function ScanPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ Si quelqu'un arrive avec ?m= ou ?code=, on ignore et on "nettoie" l'URL (anti-triche)
+  // Si quelqu'un arrive avec ?m= ou ?code=, on nettoie l'URL
   useEffect(() => {
     const m = (searchParams.get("m") || "").trim();
     const c = (searchParams.get("code") || "").trim();
@@ -213,14 +316,16 @@ export default function ScanPageClient() {
     router.replace(`/scan?mode=${encodeURIComponent(mode)}&t=${safe}`);
   };
 
-  const handleScan = (data: any) => {
-    if (!data) return;
+  const handleDecodedText = (decodedText: string) => {
+    if (!decodedText) return;
     if (scanned) return;
     if (scanLock.current) return;
 
-    const text = typeof data === "string" ? data : data?.text || data?.data || data?.qrCodeMessage;
-    const token = extractScanToken(text || "");
-    if (!token) return;
+    const token = extractScanToken(decodedText);
+    if (!token) {
+      setDebugMsg("QR détecté mais token introuvable (attendu: URL avec ?t=/?token= ou token brut).");
+      return;
+    }
 
     const now = Date.now();
     if (now - scannedAt.current < 1200) return;
@@ -239,17 +344,28 @@ export default function ScanPageClient() {
     }
   };
 
-  const handleScanError = (err: any) => {
+  const handleScanError = (err: unknown) => {
     console.error(err);
-    setError("Erreur du scanner QR. Vérifiez l’autorisation caméra.");
+
+    const msg = String((err as any)?.message || err || "");
+    if (/NotAllowedError|Permission|denied/i.test(msg)) {
+      setError("Accès caméra refusé. Autorise la caméra dans Safari/Chrome puis recharge la page.");
+      return;
+    }
+    if (/NotFoundError|no camera|Aucune caméra/i.test(msg)) {
+      setError("Aucune caméra détectée sur cet appareil.");
+      return;
+    }
+
+    setError("Erreur du scanner QR. Vérifie l’autorisation caméra et réessaie.");
   };
 
-  // ✅ Si on a un token => ScanInner gère scan/coupon
+  // Si on a un token => ScanInner gère scan/coupon
   if (scanToken) {
     return <ScanInner />;
   }
 
-  // ✅ Mode coupon sans commerçant : écran start (pas caméra)
+  // Mode coupon sans commerçant : écran start
   if (mode === "coupon" && !scanFlag) {
     return (
       <CouponStart
@@ -265,7 +381,7 @@ export default function ScanPageClient() {
     );
   }
 
-  // ✅ Sinon : écran caméra
+  // Sinon : écran caméra
   return (
     <main style={{ minHeight: "100vh", background: "transparent", padding: "16px 0 28px" }}>
       <div className="container" style={{ maxWidth: 560 }}>
@@ -327,14 +443,14 @@ export default function ScanPageClient() {
             }}
           >
             {!scanned ? (
-              <QrScanner
-                key={scannerKey}
-                delay={300}
-                onError={handleScanError}
-                onScan={handleScan}
-                constraints={videoConstraints}
-                style={{ width: "100%" }}
-              />
+              <div style={{ width: "100%" }}>
+                <CameraScanner
+                  scannerKey={scannerKey}
+                  onText={handleDecodedText}
+                  onError={handleScanError}
+                  onDebug={(m) => setDebugMsg(m)}
+                />
+              </div>
             ) : (
               <div style={{ width: "100%", aspectRatio: "4 / 3" }} />
             )}
@@ -380,6 +496,10 @@ export default function ScanPageClient() {
             </div>
           </div>
 
+          <div style={{ marginTop: 10, fontSize: 12, color: "#64748b", textAlign: "center", wordBreak: "break-word" }}>
+            {debugMsg || "Initialisation…"}
+          </div>
+
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -389,6 +509,7 @@ export default function ScanPageClient() {
                   scannedAt.current = 0;
                   scanLock.current = false;
                   setError(null);
+                  setDebugMsg("");
                   setScannerKey((k) => k + 1);
                 }}
                 style={{
@@ -404,7 +525,6 @@ export default function ScanPageClient() {
                 Reprendre
               </button>
 
-              {/* Scan-only: plus de saisie manuelle */}
               <button
                 type="button"
                 onClick={() => {
