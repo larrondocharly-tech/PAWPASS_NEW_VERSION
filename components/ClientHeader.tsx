@@ -27,6 +27,10 @@ export function ClientHeader() {
   // Évite les double-calls / race conditions
   const loadingRef = useRef(false);
 
+  // Refs pour fermer le menu au clic extérieur
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const menuBtnRef = useRef<HTMLButtonElement | null>(null);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -56,21 +60,17 @@ export function ClientHeader() {
           .from("profiles")
           .select("role, merchant_id")
           .eq("id", user.id)
-          .maybeSingle<Profile>(); // ✅ au lieu de single()
+          .maybeSingle<Profile>();
 
         if (!isMounted) return;
 
-        // maybeSingle() peut retourner profile = null sans erreur
         if (profileError) {
-          // On log uniquement les erreurs "réelles" (pas l'absence de profil)
           console.error("Erreur chargement profil header :", profileError);
           applyNoUser();
           return;
         }
 
         if (!profile) {
-          // Profil absent (ex: ancien user sans ligne profiles)
-          // => pas d'erreur console, juste un état neutre
           applyNoUser();
           return;
         }
@@ -83,10 +83,8 @@ export function ClientHeader() {
       }
     };
 
-    // 1er chargement
     loadProfile();
 
-    // Rechargement lors des changements de session
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
       loadProfile();
     });
@@ -157,6 +155,37 @@ export function ClientHeader() {
     setHoveredHref(null);
   }, [currentPath]);
 
+  // ✅ Fermer le menu au clic extérieur + ESC
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+
+    const onPointerDown = (e: MouseEvent | PointerEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+
+      // Click sur le bouton => on laisse le toggle gérer
+      if (menuBtnRef.current && menuBtnRef.current.contains(target)) return;
+
+      // Click dans le dropdown => on laisse
+      if (dropdownRef.current && dropdownRef.current.contains(target)) return;
+
+      // Sinon => on ferme
+      setMenuOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [menuOpen]);
+
   const handleLogout = async () => {
     setLogoutError(null);
 
@@ -178,8 +207,13 @@ export function ClientHeader() {
         position: "sticky",
         top: 0,
         zIndex: 20,
-        backgroundColor: "#ffffff",
-        borderBottom: "1px solid #E5E7EB",
+
+        // ✅ Visuel transparent (tu gardes la structure / boutons)
+        backgroundColor: "transparent",
+        borderBottom: "none",
+
+        // petit padding visuel pour que ça “respire”
+        paddingTop: 6,
       }}
     >
       <div
@@ -202,6 +236,9 @@ export function ClientHeader() {
             letterSpacing: "0.03em",
             textDecoration: "none",
             color: "#111827",
+
+            // Pour que le logo reste lisible même sur fond clair/chargé
+            textShadow: "0 1px 0 rgba(255,255,255,0.35)",
           }}
         >
           PawPass
@@ -209,7 +246,7 @@ export function ClientHeader() {
 
         {isClientArea && (
           <nav style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-            {/* ✅ On garde uniquement Accueil + Menu */}
+            {/* ✅ Accueil */}
             <Link
               href={homeHref}
               style={{
@@ -218,46 +255,66 @@ export function ClientHeader() {
                 fontSize: "14px",
                 fontWeight: 600,
                 border: "1px solid rgba(15, 23, 42, 0.08)",
-                backgroundColor: isActive(homeHref) ? "#111827" : "#FFFFFF",
+                backgroundColor: isActive(homeHref) ? "#111827" : "rgba(255,255,255,0.92)",
                 color: isActive(homeHref) ? "#FFFFFF" : "#111827",
                 textDecoration: "none",
                 whiteSpace: "nowrap",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
               }}
             >
               Accueil
             </Link>
 
+            {/* ✅ Menu = hamburger (3 traits) */}
             <button
+              ref={menuBtnRef}
               type="button"
               onClick={() => setMenuOpen((prev) => !prev)}
+              aria-label="Ouvrir le menu"
+              aria-expanded={menuOpen}
               style={{
-                padding: "6px 14px",
-                borderRadius: "999px",
-                fontSize: "14px",
-                fontWeight: 600,
+                // hitbox confortable mobile
+                width: 44,
+                height: 38,
+                borderRadius: 999,
                 border: "1px solid rgba(15, 23, 42, 0.08)",
-                backgroundColor: "#FFFFFF",
+                backgroundColor: "rgba(255,255,255,0.92)",
                 color: "#111827",
-                whiteSpace: "nowrap",
                 cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
               }}
             >
-              Menu
+              <span className="ppHamburger" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
             </button>
 
             {menuOpen && (
               <div
+                ref={dropdownRef}
                 data-dropdown
                 style={{
                   position: "absolute",
                   top: "46px",
                   right: "16px",
-                  background: "rgba(255, 255, 255, 0.94)",
+
+                  // ✅ menu opaque / lisible
+                  background: "rgba(255, 255, 255, 0.98)",
                   borderRadius: "16px",
                   boxShadow: "0 20px 50px rgba(0, 0, 0, 0.18)",
                   border: "1px solid rgba(0, 0, 0, 0.06)",
+
+                  // tu peux garder le blur si tu veux, mais opaque = plus “pro”
                   backdropFilter: "blur(10px)",
                   WebkitBackdropFilter: "blur(10px)",
+
                   padding: "12px 8px",
                   minWidth: "260px",
                   display: "flex",
@@ -279,7 +336,7 @@ export function ClientHeader() {
 
                 {/* ✅ Utiliser mes crédits (redeem / coupon) */}
                 <Link
-                  href="/scan?mode=redeem&scan=1"
+                  href="/scan?mode=coupon"
                   onClick={() => setMenuOpen(false)}
                   {...itemHandlers("/scan?mode=redeem")}
                   style={menuItemStyle(hoveredHref === "/scan?mode=redeem")}
@@ -469,6 +526,24 @@ export function ClientHeader() {
           </nav>
         )}
       </div>
+
+      {/* Styles hamburger : 3 traits horizontaux */}
+      <style jsx global>{`
+        .ppHamburger {
+          width: 18px;
+          height: 12px;
+          display: inline-flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        .ppHamburger span {
+          height: 2px;
+          border-radius: 999px;
+          background: #111827;
+          display: block;
+          opacity: 0.9;
+        }
+      `}</style>
     </header>
   );
 }

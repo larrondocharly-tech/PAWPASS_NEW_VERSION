@@ -64,6 +64,7 @@ export default function DashboardPage() {
     blue: "#2563EB",
     green: "#16A34A",
     greenBg: "rgba(22, 163, 74, 0.10)",
+    blueBg: "rgba(37, 99, 235, 0.10)",
     amberBg: "rgba(255, 122, 60, 0.10)",
     surface: "rgba(255,255,255,0.86)",
     surfaceStrong: "rgba(255,255,255,0.94)",
@@ -106,7 +107,6 @@ export default function DashboardPage() {
     }
   };
 
-  // ✅ Option C: refresh dashboard on mount + on focus/visibility
   useEffect(() => {
     let cancelled = false;
 
@@ -141,7 +141,7 @@ export default function DashboardPage() {
         else setIsAdmin(false);
       }
 
-      // ✅ SOLDE = wallets.balance (numeric peut revenir en string)
+      // SOLDE wallets.balance
       const { data: walletRow, error: walletErr } = await supabase
         .from("wallets")
         .select("balance")
@@ -158,7 +158,7 @@ export default function DashboardPage() {
         }
       }
 
-      // ✅ Stats: utiliser cashback_to_user (pas cashback_amount)
+      // Stats
       const { data: txData, error: txError } = await supabase
         .from("transactions")
         .select("cashback_to_user, donation_amount, status, wallet_spent")
@@ -223,10 +223,8 @@ export default function DashboardPage() {
       if (!cancelled) setLoading(false);
     };
 
-    // initial
     loadData();
 
-    // refresh on focus / tab visible
     const onFocus = () => loadData();
     const onVisibility = () => {
       if (document.visibilityState === "visible") loadData();
@@ -261,7 +259,7 @@ export default function DashboardPage() {
             <div>
               <h1 className="ppTitle">Tableau de bord</h1>
               <p className="ppSubtitle">
-                Suivez votre cagnotte, vos dons et vos réductions en un coup d&apos;œil.
+                Suivez votre contribution et votre cagnotte en un coup d&apos;œil.
               </p>
             </div>
 
@@ -329,6 +327,31 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Contribution */}
+              <div className="ppCard" style={cardBase}>
+                <div className="ppCardGlow ppCardGlowGreenSoft" />
+                <div className="ppCardInner">
+                  <div className="ppPill ppPillGreen">Ma contribution</div>
+                  <h2 className="ppH2">Ma contribution PawPass</h2>
+                  <p className="ppP" style={{ marginTop: 8 }}>
+                    Voici l&apos;impact total de vos passages chez les commerçants partenaires.
+                  </p>
+
+                  <div className="ppContributionBox">
+                    <div className="ppContributionLabel">Total des dons depuis le début</div>
+                    <div className="ppContributionValue">{formatEuro(totalDonation)}</div>
+                    <div className="ppContributionMeta">
+                      Basé sur <b>{txCount}</b> transaction{txCount > 1 ? "s" : ""} validée
+                      {txCount > 1 ? "s" : ""}.
+                    </div>
+                  </div>
+
+                  <div className="ppTiny" style={{ marginTop: 10 }}>
+                    Merci. Chaque scan aide une SPA locale.
+                  </div>
+                </div>
+              </div>
+
               {/* Wallet */}
               <div className="ppCard ppCardHero" style={{ ...cardBase, boxShadow: ui.shadow }}>
                 <div className="ppCardGlow ppCardGlowGreen" />
@@ -338,9 +361,8 @@ export default function DashboardPage() {
                       <h2 className="ppH2" style={{ marginBottom: 2 }}>
                         Ma cagnotte PawPass
                       </h2>
-                      <div className="ppSmall">Solde disponible pour vos réductions</div>
+                      <div className="ppSmall">Cashback disponible pour vos réductions</div>
                     </div>
-                    <div className="ppChipGreen">Donné : {formatEuro(totalDonation)}</div>
                   </div>
 
                   <div className="ppWalletMid">
@@ -360,10 +382,10 @@ export default function DashboardPage() {
                       title={
                         availableBalance <= 0
                           ? "Vous n'avez pas encore de crédits."
-                          : "Utiliser vos crédits"
+                          : "Utiliser votre cashback"
                       }
                     >
-                      Utiliser
+                      Utiliser mon cashback
                     </button>
                   </div>
 
@@ -384,40 +406,6 @@ export default function DashboardPage() {
                         : "Chaque scan fait avancer la cagnotte et aide une SPA locale."}
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Redeem */}
-              <div className="ppCard" style={cardBase}>
-                <div className="ppCardGlow ppCardGlowBlue" />
-                <div className="ppCardInner">
-                  <h2 className="ppH2">Réductions disponibles</h2>
-
-                  <div className="ppInfoBox">
-                    <div className="ppInfoLabel">Solde cashback</div>
-                    <div className="ppInfoValue">{formatEuro(availableBalance)}</div>
-                  </div>
-
-                  <button
-                    onClick={() => router.push("/scan?mode=redeem&scan=1")}
-                    className="ppBtn ppBtnGreenFull"
-                    disabled={availableBalance <= 0}
-                  >
-                    Utiliser mes crédits
-                  </button>
-
-                  <p className="ppP" style={{ marginTop: 10 }}>
-                    {availableBalance > 0
-                      ? "Utilisez une partie de votre cagnotte chez les commerçants partenaires."
-                      : "Faites un scan pour débloquer vos premières réductions."}
-                  </p>
-
-                  <button
-                    onClick={() => router.push("/scan")}
-                    className="ppBtn ppBtnSecondaryFull"
-                  >
-                    Scanner maintenant
-                  </button>
                 </div>
               </div>
             </section>
@@ -615,6 +603,18 @@ export default function DashboardPage() {
                 rgba(255, 255, 255, 0) 60%
               );
           }
+          .ppCardGlowGreenSoft {
+            background: radial-gradient(
+                520px 220px at 15% 0%,
+                rgba(22, 163, 74, 0.14) 0%,
+                rgba(255, 255, 255, 0) 62%
+              ),
+              radial-gradient(
+                520px 220px at 90% 60%,
+                rgba(37, 99, 235, 0.10) 0%,
+                rgba(255, 255, 255, 0) 62%
+              );
+          }
           .ppCardGlowBlue {
             background: radial-gradient(
               560px 240px at 20% 0%,
@@ -636,6 +636,11 @@ export default function DashboardPage() {
             letter-spacing: 0.06em;
             text-transform: uppercase;
             margin-bottom: 10px;
+          }
+
+          .ppPillGreen {
+            background: rgba(22, 163, 74, 0.12);
+            color: ${ui.green};
           }
 
           .ppH2 {
@@ -703,30 +708,10 @@ export default function DashboardPage() {
             box-shadow: 0 18px 34px rgba(22, 163, 74, 0.28);
           }
 
-          .ppBtnGreen:disabled,
-          .ppBtnGreenFull:disabled {
+          .ppBtnGreen:disabled {
             opacity: 0.5;
             cursor: not-allowed;
             box-shadow: none;
-          }
-
-          .ppBtnGreenFull {
-            width: 100%;
-            border-radius: 14px;
-            background: #16a34a;
-            color: white;
-            padding: 12px 14px;
-            box-shadow: 0 18px 34px rgba(22, 163, 74, 0.28);
-          }
-
-          .ppBtnSecondaryFull {
-            width: 100%;
-            border-radius: 999px;
-            padding: 10px 12px;
-            background: ${ui.surfaceStrong};
-            border: ${ui.border};
-            color: ${ui.text};
-            margin-top: 10px;
           }
 
           .ppWalletTop {
@@ -734,17 +719,6 @@ export default function DashboardPage() {
             align-items: flex-start;
             justify-content: space-between;
             gap: 10px;
-          }
-
-          .ppChipGreen {
-            background: ${ui.greenBg};
-            color: ${ui.green};
-            border-radius: 999px;
-            padding: 7px 10px;
-            font-size: 12px;
-            font-weight: 900;
-            border: 1px solid rgba(22, 163, 74, 0.18);
-            white-space: nowrap;
           }
 
           .ppWalletMid {
@@ -793,28 +767,31 @@ export default function DashboardPage() {
             transition: width 260ms ease;
           }
 
-          .ppInfoBox {
-            margin-top: 10px;
-            border-radius: 14px;
-            padding: 12px;
-            background: rgba(37, 99, 235, 0.1);
-            border: 1px solid rgba(37, 99, 235, 0.16);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
+          .ppContributionBox {
+            margin-top: 12px;
+            border-radius: 16px;
+            padding: 14px;
+            background: rgba(22, 163, 74, 0.09);
+            border: 1px solid rgba(22, 163, 74, 0.16);
           }
-
-          .ppInfoLabel {
+          .ppContributionLabel {
             font-size: 13px;
             font-weight: 900;
-            color: ${ui.blue};
+            color: ${ui.green};
           }
-
-          .ppInfoValue {
-            font-size: 18px;
+          .ppContributionValue {
+            margin-top: 6px;
+            font-size: 34px;
             font-weight: 950;
             color: ${ui.text};
+            letter-spacing: -0.03em;
+            line-height: 1.05;
+          }
+          .ppContributionMeta {
+            margin-top: 8px;
+            font-size: 13px;
+            color: ${ui.subtext};
+            line-height: 1.35;
           }
 
           .ppSectionHeader {
