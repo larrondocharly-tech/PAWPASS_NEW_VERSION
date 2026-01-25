@@ -53,8 +53,8 @@ function CouponStart({
           </h1>
 
           <p style={{ color: "#475569", marginTop: 8, lineHeight: 1.4 }}>
-            Pour utiliser ta cagnotte, sélectionne un commerçant (scan du QR) ou continue avec le dernier commerçant
-            scanné.
+            Pour utiliser ta cagnotte, sélectionne un commerçant en scannant son QR code, ou continue avec le dernier
+            commerçant scanné.
           </p>
 
           <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
@@ -112,6 +112,34 @@ function normalizeMode(raw: string): Mode {
   return "scan";
 }
 
+/**
+ * Scan-only:
+ * - On n'accepte PLUS m= / code= (ni depuis URL, ni depuis QR)
+ * - On accepte uniquement un token de scan "t" (ou "token") provenant du QR
+ */
+function extractScanToken(rawInput: string) {
+  const raw = (rawInput || "").trim();
+  if (!raw) return "";
+
+  // Cas URL => on lit uniquement t / token
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    try {
+      const url = new URL(raw);
+      const t = url.searchParams.get("t") || url.searchParams.get("token") || "";
+      return (t || "").trim();
+    } catch {
+      // Si c'est une URL invalide, on retombe en "texte brut" (mais on exigera un token propre)
+      return "";
+    }
+  }
+
+  /**
+   * Cas texte brut scanné (si un jour tu mets un QR qui contient juste le token)
+   * => on accepte si ça ressemble à un token non trivial
+   */
+  return raw;
+}
+
 export default function ScanPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -119,8 +147,8 @@ export default function ScanPageClient() {
   const modeParam = searchParams.get("mode") || "";
   const mode: Mode = normalizeMode(modeParam);
 
-  // compat: ?m= ou ?code=
-  const merchantCode = (searchParams.get("m") || searchParams.get("code") || "").trim();
+  // ✅ Scan-only : on ne lit plus m/code
+  const scanToken = (searchParams.get("t") || searchParams.get("token") || "").trim();
 
   // scan=1 => on force l’écran caméra
   const scanFlag = (searchParams.get("scan") || "").trim() === "1";
@@ -132,17 +160,15 @@ export default function ScanPageClient() {
   const scanLock = useRef(false);
   const [scannerKey, setScannerKey] = useState(1);
 
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualCode, setManualCode] = useState("");
-
-  const [lastMerchant, setLastMerchant] = useState<string>("");
+  // Dernier commerçant = dernier token scanné (pas un code)
+  const [lastMerchantToken, setLastMerchantToken] = useState<string>("");
 
   useEffect(() => {
     try {
-      const v = localStorage.getItem("pp_last_merchant") || "";
-      setLastMerchant(v.trim());
+      const v = localStorage.getItem("pp_last_merchant_token") || "";
+      setLastMerchantToken(v.trim());
     } catch {
-      setLastMerchant("");
+      setLastMerchantToken("");
     }
   }, []);
 
@@ -151,47 +177,40 @@ export default function ScanPageClient() {
     setScanned(false);
     scannedAt.current = 0;
     scanLock.current = false;
-    setManualOpen(false);
-    setManualCode("");
     setScannerKey((k) => k + 1);
-  }, [mode, merchantCode, scanFlag]);
+  }, [mode, scanToken, scanFlag]);
 
   // ✅ Normalise aussi l’URL si on arrive en mode=redeem => mode=coupon (propre)
   useEffect(() => {
     const raw = (modeParam || "").toLowerCase().trim();
     if (raw === "redeem") {
-      const m = merchantCode ? `&m=${encodeURIComponent(merchantCode)}` : "";
+      const t = scanToken ? `&t=${encodeURIComponent(scanToken)}` : "";
       const s = scanFlag ? `&scan=1` : "";
-      router.replace(`/scan?mode=coupon${m}${s}`);
+      router.replace(`/scan?mode=coupon${t}${s}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const extractCode = (rawInput: string) => {
-    const raw = (rawInput || "").trim();
-    if (!raw) return "";
-
-    if (raw.startsWith("http://") || raw.startsWith("https://")) {
-      try {
-        const url = new URL(raw);
-        const fromUrl = url.searchParams.get("m") || url.searchParams.get("code");
-        return (fromUrl || raw).trim();
-      } catch {
-        return raw;
-      }
+  // ✅ Si quelqu'un arrive avec ?m= ou ?code=, on ignore et on "nettoie" l'URL (anti-triche)
+  useEffect(() => {
+    const m = (searchParams.get("m") || "").trim();
+    const c = (searchParams.get("code") || "").trim();
+    if (m || c) {
+      const t = scanToken ? `&t=${encodeURIComponent(scanToken)}` : "";
+      const s = scanFlag ? `&scan=1` : "";
+      router.replace(`/scan?mode=${encodeURIComponent(mode)}${t}${s}`);
     }
-    return raw;
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
-  const pushToMode = (code: string) => {
-    const safe = encodeURIComponent(code);
+  const pushToModeWithToken = (token: string) => {
+    const safe = encodeURIComponent(token);
 
     try {
-      localStorage.setItem("pp_last_merchant", code);
+      localStorage.setItem("pp_last_merchant_token", token);
     } catch {}
 
-    // ✅ on force la canonicalisation: coupon/scan seulement
-    router.replace(`/scan?mode=${encodeURIComponent(mode)}&m=${safe}`);
+    router.replace(`/scan?mode=${encodeURIComponent(mode)}&t=${safe}`);
   };
 
   const handleScan = (data: any) => {
@@ -200,8 +219,8 @@ export default function ScanPageClient() {
     if (scanLock.current) return;
 
     const text = typeof data === "string" ? data : data?.text || data?.data || data?.qrCodeMessage;
-    const code = extractCode(text || "");
-    if (!code) return;
+    const token = extractScanToken(text || "");
+    if (!token) return;
 
     const now = Date.now();
     if (now - scannedAt.current < 1200) return;
@@ -211,7 +230,7 @@ export default function ScanPageClient() {
     setScanned(true);
 
     try {
-      pushToMode(code);
+      pushToModeWithToken(token);
     } catch (e) {
       console.error(e);
       setError("Erreur lors de la lecture du QR code.");
@@ -225,8 +244,8 @@ export default function ScanPageClient() {
     setError("Erreur du scanner QR. Vérifiez l’autorisation caméra.");
   };
 
-  // ✅ Si on a un commerçant => ScanInner gère scan/coupon
-  if (merchantCode) {
+  // ✅ Si on a un token => ScanInner gère scan/coupon
+  if (scanToken) {
     return <ScanInner />;
   }
 
@@ -234,10 +253,10 @@ export default function ScanPageClient() {
   if (mode === "coupon" && !scanFlag) {
     return (
       <CouponStart
-        hasLast={!!lastMerchant}
+        hasLast={!!lastMerchantToken}
         onUseLast={() => {
-          if (!lastMerchant) return;
-          router.replace(`/scan?mode=coupon&m=${encodeURIComponent(lastMerchant)}`);
+          if (!lastMerchantToken) return;
+          router.replace(`/scan?mode=coupon&t=${encodeURIComponent(lastMerchantToken)}`);
         }}
         onScan={() => {
           router.replace(`/scan?mode=coupon&scan=1`);
@@ -385,71 +404,27 @@ export default function ScanPageClient() {
                 Reprendre
               </button>
 
+              {/* Scan-only: plus de saisie manuelle */}
               <button
                 type="button"
-                onClick={() => setManualOpen((v) => !v)}
+                onClick={() => {
+                  setError("La saisie manuelle est désactivée. Merci de scanner le QR code du commerçant.");
+                }}
                 style={{
                   flex: 1,
                   padding: "12px 12px",
                   borderRadius: 14,
                   border: "none",
-                  background: "#FF7A3C",
+                  background: "#94a3b8",
                   color: "white",
                   fontWeight: 900,
-                  cursor: "pointer",
+                  cursor: "not-allowed",
                 }}
+                disabled
               >
-                Saisir un code
+                Scan obligatoire
               </button>
             </div>
-
-            {manualOpen && (
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.9)",
-                  border: "1px solid rgba(0,0,0,0.10)",
-                  borderRadius: 16,
-                  padding: 12,
-                }}
-              >
-                <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
-                  Code commerçant
-                </label>
-                <input
-                  value={manualCode}
-                  onChange={(e) => setManualCode(e.target.value)}
-                  placeholder="Ex : PP_XXXX"
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    borderRadius: 14,
-                    border: "1px solid rgba(0,0,0,0.12)",
-                    fontSize: 15,
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const code = manualCode.trim();
-                    if (!code) return;
-                    pushToMode(code);
-                  }}
-                  style={{
-                    marginTop: 10,
-                    width: "100%",
-                    padding: "12px 12px",
-                    borderRadius: 14,
-                    border: "none",
-                    background: "#0A8F44",
-                    color: "white",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  Continuer
-                </button>
-              </div>
-            )}
 
             <p style={{ fontSize: 12, color: "#64748b", margin: 0, textAlign: "center" }}>
               Astuce : si la luminosité est faible, rapprochez-vous d’une source de lumière.

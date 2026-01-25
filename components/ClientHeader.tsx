@@ -21,13 +21,10 @@ export function ClientHeader() {
   const [isMerchant, setIsMerchant] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // ✅ hover (PC) — on grise UNIQUEMENT au survol
   const [hoveredHref, setHoveredHref] = useState<string | null>(null);
 
-  // Évite les double-calls / race conditions
   const loadingRef = useRef(false);
 
-  // Refs pour fermer le menu au clic extérieur
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const menuBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -50,7 +47,6 @@ export function ClientHeader() {
           error: userError,
         } = await supabase.auth.getUser();
 
-        // Si pas de session ou erreur => comportement "non connecté"
         if (userError || !user) {
           applyNoUser();
           return;
@@ -64,13 +60,8 @@ export function ClientHeader() {
 
         if (!isMounted) return;
 
-        if (profileError) {
-          console.error("Erreur chargement profil header :", profileError);
-          applyNoUser();
-          return;
-        }
-
-        if (!profile) {
+        if (profileError || !profile) {
+          if (profileError) console.error("Erreur chargement profil header :", profileError);
           applyNoUser();
           return;
         }
@@ -118,13 +109,7 @@ export function ClientHeader() {
   const isAuthPage = isLogin || isRegister;
 
   const logoHref =
-    isAuthPage || isHome
-      ? "/"
-      : isMerchant
-      ? "/merchant"
-      : isAdmin
-      ? "/admin"
-      : "/dashboard";
+    isAuthPage || isHome ? "/" : isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
 
   const homeHref = isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
 
@@ -155,7 +140,6 @@ export function ClientHeader() {
     setHoveredHref(null);
   }, [currentPath]);
 
-  // ✅ Fermer le menu au clic extérieur + ESC
   useEffect(() => {
     if (!menuOpen) return;
 
@@ -167,13 +151,9 @@ export function ClientHeader() {
       const target = e.target as Node | null;
       if (!target) return;
 
-      // Click sur le bouton => on laisse le toggle gérer
       if (menuBtnRef.current && menuBtnRef.current.contains(target)) return;
-
-      // Click dans le dropdown => on laisse
       if (dropdownRef.current && dropdownRef.current.contains(target)) return;
 
-      // Sinon => on ferme
       setMenuOpen(false);
     };
 
@@ -207,12 +187,8 @@ export function ClientHeader() {
         position: "sticky",
         top: 0,
         zIndex: 20,
-
-        // ✅ Visuel transparent (tu gardes la structure / boutons)
         backgroundColor: "transparent",
         borderBottom: "none",
-
-        // petit padding visuel pour que ça “respire”
         paddingTop: 6,
       }}
     >
@@ -236,8 +212,6 @@ export function ClientHeader() {
             letterSpacing: "0.03em",
             textDecoration: "none",
             color: "#111827",
-
-            // Pour que le logo reste lisible même sur fond clair/chargé
             textShadow: "0 1px 0 rgba(255,255,255,0.35)",
           }}
         >
@@ -246,7 +220,6 @@ export function ClientHeader() {
 
         {isClientArea && (
           <nav style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-            {/* ✅ Accueil */}
             <Link
               href={homeHref}
               style={{
@@ -266,7 +239,6 @@ export function ClientHeader() {
               Accueil
             </Link>
 
-            {/* ✅ Menu = hamburger (3 traits) */}
             <button
               ref={menuBtnRef}
               type="button"
@@ -274,7 +246,6 @@ export function ClientHeader() {
               aria-label="Ouvrir le menu"
               aria-expanded={menuOpen}
               style={{
-                // hitbox confortable mobile
                 width: 44,
                 height: 38,
                 borderRadius: 999,
@@ -304,17 +275,12 @@ export function ClientHeader() {
                   position: "absolute",
                   top: "46px",
                   right: "16px",
-
-                  // ✅ menu opaque / lisible
                   background: "rgba(255, 255, 255, 0.98)",
                   borderRadius: "16px",
                   boxShadow: "0 20px 50px rgba(0, 0, 0, 0.18)",
                   border: "1px solid rgba(0, 0, 0, 0.06)",
-
-                  // tu peux garder le blur si tu veux, mais opaque = plus “pro”
                   backdropFilter: "blur(10px)",
                   WebkitBackdropFilter: "blur(10px)",
-
                   padding: "12px 8px",
                   minWidth: "260px",
                   display: "flex",
@@ -323,7 +289,6 @@ export function ClientHeader() {
                   zIndex: 40,
                 }}
               >
-                {/* ✅ Scanner achat */}
                 <Link
                   href="/scan"
                   onClick={() => setMenuOpen(false)}
@@ -334,18 +299,17 @@ export function ClientHeader() {
                   <span>Scanner (achat)</span>
                 </Link>
 
-                {/* ✅ Utiliser mes crédits (redeem / coupon) */}
+                {/* ✅ IMPORTANT : coupon SANS scan=1 => écran “coupon” (screen 2), pas caméra */}
                 <Link
                   href="/scan?mode=coupon"
                   onClick={() => setMenuOpen(false)}
-                  {...itemHandlers("/scan?mode=redeem")}
-                  style={menuItemStyle(hoveredHref === "/scan?mode=redeem")}
+                  {...itemHandlers("/scan?mode=coupon")}
+                  style={menuItemStyle(hoveredHref === "/scan?mode=coupon")}
                 >
                   <span>🎟️</span>
                   <span>Utiliser mes crédits</span>
                 </Link>
 
-                {/* ✅ Transactions uniquement commerçant */}
                 {isMerchant && (
                   <Link
                     href="/merchant/transactions"
@@ -358,7 +322,6 @@ export function ClientHeader() {
                   </Link>
                 )}
 
-                {/* ✅ Dashboard "client" pour un commerçant (en tant qu'utilisateur) */}
                 {isMerchant && (
                   <Link
                     href="/dashboard"
@@ -371,7 +334,6 @@ export function ClientHeader() {
                   </Link>
                 )}
 
-                {/* === SECTION COMMERCANT : QR + Paramètres === */}
                 {isMerchant && (
                   <>
                     <Link
@@ -466,12 +428,7 @@ export function ClientHeader() {
                   <span>CGU</span>
                 </Link>
 
-                <div
-                  style={{
-                    borderTop: "1px solid rgba(0,0,0,0.08)",
-                    margin: "6px 0 4px",
-                  }}
-                />
+                <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", margin: "6px 0 4px" }} />
 
                 <button
                   type="button"
@@ -495,13 +452,7 @@ export function ClientHeader() {
                 </button>
 
                 {logoutError && (
-                  <div
-                    style={{
-                      marginTop: "4px",
-                      fontSize: "11px",
-                      color: "#b91c1c",
-                    }}
-                  >
+                  <div style={{ marginTop: "4px", fontSize: "11px", color: "#b91c1c" }}>
                     {logoutError}
                   </div>
                 )}
@@ -527,7 +478,6 @@ export function ClientHeader() {
         )}
       </div>
 
-      {/* Styles hamburger : 3 traits horizontaux */}
       <style jsx global>{`
         .ppHamburger {
           width: 18px;

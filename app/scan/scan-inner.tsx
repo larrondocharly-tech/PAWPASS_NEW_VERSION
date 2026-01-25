@@ -37,8 +37,13 @@ export default function ScanInner() {
   // ✅ compat: mode=redeem => coupon
   const isCoupon = mode === "coupon" || mode === "redeem";
 
-  const merchantCodeRaw = searchParams.get("m") || searchParams.get("code") || null;
-  const merchantCode = merchantCodeRaw ? merchantCodeRaw.trim() : null;
+  /**
+   * ✅ SCAN-ONLY:
+   * On n'accepte PLUS m= / code=
+   * On accepte uniquement t= ou token=
+   */
+  const scanTokenRaw = searchParams.get("t") || searchParams.get("token") || null;
+  const scanToken = scanTokenRaw ? scanTokenRaw.trim() : null;
 
   // Merchant
   const [merchant, setMerchant] = useState<any>(null);
@@ -96,10 +101,13 @@ export default function ScanInner() {
     return 20;
   };
 
-  const buildUrl = (opts: { mode: "scan" | "coupon"; m?: string | null; scan?: 0 | 1 }) => {
+  /**
+   * ✅ SCAN-ONLY: URLs construits avec t= (pas m=)
+   */
+  const buildUrl = (opts: { mode: "scan" | "coupon"; t?: string | null; scan?: 0 | 1 }) => {
     const params = new URLSearchParams();
     params.set("mode", opts.mode);
-    if (opts.m) params.set("m", opts.m);
+    if (opts.t) params.set("t", opts.t);
     if (opts.scan === 1) params.set("scan", "1");
     return `/scan?${params.toString()}`;
   };
@@ -108,12 +116,12 @@ export default function ScanInner() {
     window.location.assign(buildUrl({ mode: isCoupon ? "coupon" : "scan", scan: 1 }));
   };
   const goAchat = () => {
-    if (!merchantCode) return router.replace(buildUrl({ mode: "scan", scan: 1 }));
-    router.replace(buildUrl({ mode: "scan", m: merchantCode }));
+    if (!scanToken) return router.replace(buildUrl({ mode: "scan", scan: 1 }));
+    router.replace(buildUrl({ mode: "scan", t: scanToken }));
   };
   const goCoupon = () => {
-    if (!merchantCode) return router.replace(buildUrl({ mode: "coupon", scan: 1 }));
-    router.replace(buildUrl({ mode: "coupon", m: merchantCode }));
+    if (!scanToken) return router.replace(buildUrl({ mode: "coupon", scan: 1 }));
+    router.replace(buildUrl({ mode: "coupon", t: scanToken }));
   };
 
   // Wallet load
@@ -212,7 +220,7 @@ export default function ScanInner() {
     setDonationPercent(50);
     setReceiptFile(null);
 
-    if (!merchantCode) {
+    if (!scanToken) {
       setMerchant(null);
       return;
     }
@@ -220,7 +228,10 @@ export default function ScanInner() {
     const loadMerchant = async () => {
       setLoadingMerchant(true);
 
-      const { data, error } = await supabase.from("merchants").select("*").eq("qr_token", merchantCode).single();
+      /**
+       * ✅ Le token (t/token) correspond à merchants.qr_token
+       */
+      const { data, error } = await supabase.from("merchants").select("*").eq("qr_token", scanToken).single();
 
       if (error) {
         console.error(error);
@@ -234,7 +245,7 @@ export default function ScanInner() {
     };
 
     loadMerchant();
-  }, [merchantCode, supabase, isCoupon]);
+  }, [scanToken, supabase, isCoupon]);
 
   // Timer management
   const stopTimer = () => {
@@ -301,7 +312,7 @@ export default function ScanInner() {
     setErrorMsg(null);
     setError(null);
 
-    if (!merchantCode) return setErrorMsg("QR commerçant manquant.");
+    if (!scanToken) return setErrorMsg("QR commerçant manquant.");
     if (!merchant) return setErrorMsg("Commerçant introuvable.");
     if (!amount) return setErrorMsg("Montant invalide.");
     if (!selectedSpaId) return setErrorMsg("Choisissez une SPA.");
@@ -311,7 +322,7 @@ export default function ScanInner() {
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) {
-      router.push(`/register?from=scan&m=${encodeURIComponent(merchantCode)}&amount=${encodeURIComponent(amount)}&mode=scan`);
+      router.push(`/register?from=scan&t=${encodeURIComponent(scanToken)}&amount=${encodeURIComponent(amount)}&mode=scan`);
       return;
     }
 
@@ -320,7 +331,7 @@ export default function ScanInner() {
     if (amountNumber > minReceiptAmount && !receiptPath) return;
 
     const { error: rpcError } = await supabase.rpc("apply_cashback_transaction", {
-      p_merchant_code: merchantCode,
+      p_merchant_code: scanToken,
       p_amount: amountNumber,
       p_spa_id: selectedSpaId,
       p_use_wallet: false,
@@ -367,7 +378,7 @@ export default function ScanInner() {
 
   const createCouponAndStartTimer = async () => {
     if (!merchant) return;
-    if (!merchantCode) return;
+    if (!scanToken) return;
 
     setBusyCoupon(true);
     setError(null);
@@ -376,7 +387,7 @@ export default function ScanInner() {
     try {
       const { data: u } = await supabase.auth.getUser();
       if (!u?.user) {
-        router.push(`/register?from=scan&m=${encodeURIComponent(merchantCode)}&mode=coupon`);
+        router.push(`/register?from=scan&t=${encodeURIComponent(scanToken)}&mode=coupon`);
         return;
       }
 
@@ -385,7 +396,7 @@ export default function ScanInner() {
         p_merchant_id: (merchant as MerchantLite).id ?? merchant.id,
         p_requested_discount_eur: discountEur,
         p_merchant_name: merchant.name,
-        p_qr_token: merchantCode,
+        p_qr_token: scanToken,
       });
       if (error) throw error;
 
@@ -464,7 +475,7 @@ export default function ScanInner() {
     setErrorMsg(null);
     setError(null);
 
-    if (!merchantCode) return setErrorMsg("QR commerçant manquant.");
+    if (!scanToken) return setErrorMsg("QR commerçant manquant.");
     if (!merchant) return setErrorMsg("Commerçant introuvable.");
     if (!couponId) return setErrorMsg("Coupon manquant.");
     if (!selectedSpaId) return setErrorMsg("Choisissez une SPA.");
@@ -478,7 +489,7 @@ export default function ScanInner() {
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user) {
-      router.push(`/register?from=scan&m=${encodeURIComponent(merchantCode)}&mode=coupon`);
+      router.push(`/register?from=scan&t=${encodeURIComponent(scanToken)}&mode=coupon`);
       return;
     }
 
@@ -488,7 +499,7 @@ export default function ScanInner() {
 
     // ✅ On enregistre l'achat en utilisant le wallet (réduction)
     const { error: rpcError } = await supabase.rpc("apply_cashback_transaction", {
-      p_merchant_code: merchantCode,
+      p_merchant_code: scanToken,
       p_amount: total,
       p_spa_id: selectedSpaId,
       p_use_wallet: true,
@@ -613,7 +624,7 @@ export default function ScanInner() {
 
           {loadingMerchant && <p style={{ marginTop: 10 }}>Chargement commerçant…</p>}
 
-          {merchantCode && merchant && !loadingMerchant && (
+          {scanToken && merchant && !loadingMerchant && (
             <>
               <div
                 style={{
@@ -641,7 +652,7 @@ export default function ScanInner() {
                   >
                     {merchant.name}
                   </div>
-                  <div style={{ fontSize: 12, color: "#92400E" }}>QR: {merchantCode}</div>
+                  <div style={{ fontSize: 12, color: "#92400E" }}>QR: {scanToken}</div>
                 </div>
 
                 <button
