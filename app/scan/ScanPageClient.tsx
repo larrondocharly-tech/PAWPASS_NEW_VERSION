@@ -104,7 +104,6 @@ function CouponStart({
 
 function normalizeMode(raw: string): Mode {
   const m = (raw || "").toLowerCase().trim();
-  // compat: mode=redeem (ancien) => coupon
   if (m === "coupon" || m === "redeem") return "coupon";
   return "scan";
 }
@@ -112,7 +111,7 @@ function normalizeMode(raw: string): Mode {
 /**
  * Compat scan token:
  * - Nouveau format: ?t= ou ?token=
- * - Ancien format (compat): ?m= ou ?code=
+ * - Ancien format: ?m= ou ?code=
  * - Texte brut: accepté tel quel
  */
 function extractScanToken(rawInput: string) {
@@ -138,7 +137,10 @@ function extractScanToken(rawInput: string) {
 }
 
 /**
- * Scanner caméra robuste iOS/Android via html5-qrcode.
+ * Scanner robuste iOS/Android (html5-qrcode) :
+ * - iOS prod peut FREEZE sur getCameras() => on démarre d'abord en facingMode
+ * - fallback getCameras si facingMode échoue
+ * - si iOS exige un "user gesture", on affiche un bouton "Activer la caméra"
  */
 function CameraScanner({
   scannerKey,
@@ -151,96 +153,166 @@ function CameraScanner({
   onError: (err: unknown) => void;
   onDebug?: (msg: string) => void;
 }) {
-  const regionId = useMemo(() => `pp-qr-region-${scannerKey}-${Math.random().toString(36).slice(2)}`, [scannerKey]);
+  const regionId = useMemo(
+    () => `pp-qr-region-${scannerKey}-${Math.random().toString(36).slice(2)}`,
+    [scannerKey]
+  );
+
   const qrRef = useRef<Html5Qrcode | null>(null);
   const lastRef = useRef<string>("");
-  const startingRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const [needsTap, setNeedsTap] = useState(false);
+  const [starting, setStarting] = useState(false);
 
-    async function start() {
-      if (startingRef.current) return;
-      startingRef.current = true;
+  const safeStop = async () => {
+    const inst = qrRef.current;
+    qrRef.current = null;
+    if (!inst) return;
 
+    try {
+      await inst.stop();
+    } catch {}
+    try {
+      inst.clear();
+    } catch {}
+  };
+
+  const startScanner = async () => {
+    if (starting) return;
+    setStarting(true);
+    setNeedsTap(false);
+
+    try {
+      onDebug?.("Initialisation caméra…");
+      const mod = await import("html5-qrcode");
+      const Html5QrcodeCtor = mod.Html5Qrcode;
+
+      // stop ancien scanner si existant
+      await safeStop();
+
+      const qr = new Html5QrcodeCtor(regionId);
+      qrRef.current = qr;
+
+      const onDecoded = (decodedText: string) => {
+        const txt = (decodedText || "").trim();
+        if (!txt) return;
+        if (txt === lastRef.current) return;
+        lastRef.current = txt;
+        onDebug?.(`QR détecté: ${txt.slice(0, 60)}${txt.length > 60 ? "…" : ""}`);
+        onText(txt);
+      };
+
+      // 1) iOS: éviter getCameras() au début => facingMode direct
+      onDebug?.("Démarrage caméra arrière…");
+      await qr.start(
+        { facingMode: "environment" as any },
+        { fps: 12, qrbox: { width: 260, height: 260 } } as any,
+        onDecoded,
+        () => {}
+      );
+
+      onDebug?.("Caméra OK. En attente de QR…");
+      setStarting(false);
+      return;
+    } catch (e1) {
+      // 2) Fallback getCameras (utile sur certains Android/desktop)
       try {
+        onDebug?.("Fallback caméra…");
         const mod = await import("html5-qrcode");
-        if (cancelled) return;
-
         const Html5QrcodeCtor = mod.Html5Qrcode;
-        const getCameras = mod.Html5Qrcode.getCameras;
 
-        onDebug?.("Initialisation caméra…");
+        await safeStop();
 
-        const cameras = await getCameras();
-        if (cancelled) return;
+        const cams = await mod.Html5Qrcode.getCameras();
+        if (!cams?.length) throw e1;
 
-        if (!cameras || cameras.length === 0) {
-          throw new Error("Aucune caméra détectée sur cet appareil.");
-        }
-
-        // Priorité caméra arrière si possible
         const back =
-          cameras.find((d) => /back|rear|environment/i.test(d.label)) ??
-          cameras[cameras.length - 1] ??
-          cameras[0];
+          cams.find((d) => /back|rear|environment/i.test(d.label)) ??
+          cams[cams.length - 1] ??
+          cams[0];
 
         const qr = new Html5QrcodeCtor(regionId);
         qrRef.current = qr;
 
+        const onDecoded = (decodedText: string) => {
+          const txt = (decodedText || "").trim();
+          if (!txt) return;
+          if (txt === lastRef.current) return;
+          lastRef.current = txt;
+          onDebug?.(`QR détecté: ${txt.slice(0, 60)}${txt.length > 60 ? "…" : ""}`);
+          onText(txt);
+        };
+
         await qr.start(
-          { deviceId: { exact: back.id } },
-          { fps: 12, qrbox: { width: 260, height: 260 } },
-          (decodedText: string) => {
-            if (cancelled) return;
-
-            const txt = (decodedText || "").trim();
-            if (!txt) return;
-
-            if (txt === lastRef.current) return;
-            lastRef.current = txt;
-
-            onDebug?.(`QR détecté: ${txt.slice(0, 60)}${txt.length > 60 ? "…" : ""}`);
-            onText(txt);
-          },
+          { deviceId: { exact: back.id } } as any,
+          { fps: 12, qrbox: { width: 260, height: 260 } } as any,
+          onDecoded,
           () => {}
         );
 
         onDebug?.("Caméra OK. En attente de QR…");
-      } catch (e) {
-        onDebug?.("Erreur caméra/scanner.");
-        onError(e);
-      } finally {
-        startingRef.current = false;
+        setStarting(false);
+        return;
+      } catch (e2) {
+        // 3) Si iOS bloque sans geste utilisateur, on force un tap
+        const msg = String((e2 as any)?.message || e2 || "");
+        if (/NotAllowedError|Permission|denied|SecurityError/i.test(msg)) {
+          onDebug?.("Appuie sur “Activer la caméra”.");
+          setNeedsTap(true);
+        } else {
+          onDebug?.("Erreur caméra/scanner.");
+        }
+        onError(e2);
+        setStarting(false);
       }
     }
+  };
 
-    start();
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      lastRef.current = "";
+      onDebug?.("Initialisation caméra…");
+
+      // Tentative auto
+      await startScanner();
+
+      if (cancelled) return;
+    })();
 
     return () => {
       cancelled = true;
       lastRef.current = "";
-      const inst = qrRef.current;
-      qrRef.current = null;
-
-      if (inst) {
-        inst.stop().catch(() => {});
-        try {
-          inst.clear();
-        } catch {}
-      }
+      safeStop().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regionId]);
 
   return (
-    <div
-      id={regionId}
-      style={{
-        width: "100%",
-        minHeight: 260,
-      }}
-    />
+    <div style={{ width: "100%" }}>
+      <div id={regionId} style={{ width: "100%", minHeight: 260 }} />
+
+      {needsTap && (
+        <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
+          <button
+            type="button"
+            onClick={() => startScanner()}
+            style={{
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "none",
+              background: "#0A8F44",
+              color: "white",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            Activer la caméra
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -262,7 +334,6 @@ export default function ScanPageClient() {
   const [scannerKey, setScannerKey] = useState(1);
 
   const [debugMsg, setDebugMsg] = useState<string>("");
-
   const [lastMerchantToken, setLastMerchantToken] = useState<string>("");
 
   useEffect(() => {
@@ -283,7 +354,6 @@ export default function ScanPageClient() {
     setScannerKey((k) => k + 1);
   }, [mode, scanToken, scanFlag]);
 
-  // Normalise URL ancien mode=redeem
   useEffect(() => {
     const raw = (modeParam || "").toLowerCase().trim();
     if (raw === "redeem") {
@@ -294,7 +364,6 @@ export default function ScanPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Si quelqu'un arrive avec ?m= ou ?code=, on nettoie l'URL
   useEffect(() => {
     const m = (searchParams.get("m") || "").trim();
     const c = (searchParams.get("code") || "").trim();
@@ -308,11 +377,9 @@ export default function ScanPageClient() {
 
   const pushToModeWithToken = (token: string) => {
     const safe = encodeURIComponent(token);
-
     try {
       localStorage.setItem("pp_last_merchant_token", token);
     } catch {}
-
     router.replace(`/scan?mode=${encodeURIComponent(mode)}&t=${safe}`);
   };
 
@@ -346,7 +413,6 @@ export default function ScanPageClient() {
 
   const handleScanError = (err: unknown) => {
     console.error(err);
-
     const msg = String((err as any)?.message || err || "");
     if (/NotAllowedError|Permission|denied/i.test(msg)) {
       setError("Accès caméra refusé. Autorise la caméra dans Safari/Chrome puis recharge la page.");
@@ -356,16 +422,14 @@ export default function ScanPageClient() {
       setError("Aucune caméra détectée sur cet appareil.");
       return;
     }
-
-    setError("Erreur du scanner QR. Vérifie l’autorisation caméra et réessaie.");
+    // On n’affiche pas en rouge si on gère via bouton “Activer la caméra”
+    setError(null);
   };
 
-  // Si on a un token => ScanInner gère scan/coupon
   if (scanToken) {
     return <ScanInner />;
   }
 
-  // Mode coupon sans commerçant : écran start
   if (mode === "coupon" && !scanFlag) {
     return (
       <CouponStart
@@ -381,7 +445,6 @@ export default function ScanPageClient() {
     );
   }
 
-  // Sinon : écran caméra
   return (
     <main style={{ minHeight: "100vh", background: "transparent", padding: "16px 0 28px" }}>
       <div className="container" style={{ maxWidth: 560 }}>
