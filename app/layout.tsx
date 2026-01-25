@@ -16,6 +16,16 @@ export const metadata = {
   description: "Cashback solidaire pour les clients et commerçants.",
 };
 
+// ✅ IMPORTANT : viewport géré proprement par Next (App Router)
+// => évite le rendu “zoomé” sur iPhone/Safari après login
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={inter.variable}>
