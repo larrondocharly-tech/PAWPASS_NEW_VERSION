@@ -147,6 +147,12 @@ function LoginPageInner() {
           <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>
             6 caractères minimum. Tu pourras le modifier plus tard.
           </p>
+          <p style={{ margin: "6px 0 16px", fontSize: 14 }}>
+  <a href="/forgot-password" style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}>
+    Mot de passe oublié ?
+  </a>
+</p>
+
 
           {errorMsg && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>}
 

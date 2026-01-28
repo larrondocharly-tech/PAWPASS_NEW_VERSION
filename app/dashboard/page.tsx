@@ -240,8 +240,11 @@ export default function DashboardPage() {
     };
   }, [supabase, router]);
 
-  const donationGoal = 10;
-  const goalPct = clamp01(totalDonation / donationGoal);
+  // ✅ NEW: seuil minimum pour utiliser la cagnotte
+  const MIN_REDEEM = 5;
+  const unlockPct = clamp01(availableBalance / MIN_REDEEM);
+  const remainingToUnlock = Math.max(0, MIN_REDEEM - availableBalance);
+  const isUnlocked = availableBalance >= MIN_REDEEM;
 
   const emptyStateTip =
     txCount === 0
@@ -378,10 +381,12 @@ export default function DashboardPage() {
                     <button
                       onClick={() => router.push("/scan?mode=redeem&scan=1")}
                       className="ppBtn ppBtnGreen"
-                      disabled={availableBalance <= 0}
+                      disabled={!isUnlocked}
                       title={
-                        availableBalance <= 0
-                          ? "Vous n'avez pas encore de crédits."
+                        !isUnlocked
+                          ? `Minimum ${formatEuro(MIN_REDEEM)} requis. Il vous reste ${formatEuro(
+                              remainingToUnlock
+                            )} à cumuler.`
                           : "Utiliser votre cashback"
                       }
                     >
@@ -389,22 +394,33 @@ export default function DashboardPage() {
                     </button>
                   </div>
 
+                  {/* ✅ REPLACEMENT: seuil 5€ */}
                   <div className="ppGoal">
                     <div className="ppGoalTop">
                       <span className="ppSmall">
-                        Objectif dons :{" "}
-                        <b style={{ color: ui.text }}>{formatEuro(donationGoal)}</b>
+                        Déblocage cagnotte :{" "}
+                        <b style={{ color: ui.text }}>{formatEuro(MIN_REDEEM)}</b> minimum
                       </span>
-                      <span className="ppSmall">{Math.round(goalPct * 100)}%</span>
+                      <span className="ppSmall">{Math.round(unlockPct * 100)}%</span>
                     </div>
+
                     <div className="ppBar">
-                      <div className="ppBarFill" style={{ width: `${Math.round(goalPct * 100)}%` }} />
+                      <div
+                        className="ppBarFill"
+                        style={{ width: `${Math.round(unlockPct * 100)}%` }}
+                      />
                     </div>
-                    <div className="ppTiny">
-                      {goalPct >= 1
-                        ? "Objectif atteint. Continuez, chaque scan aide une SPA."
-                        : "Chaque scan fait avancer la cagnotte et aide une SPA locale."}
-                    </div>
+
+                   <div className="ppTiny">
+  {isUnlocked ? (
+    <>Cagnotte débloquée. Vous pouvez utiliser vos crédits dès maintenant.</>
+  ) : (
+    <>
+      Il vous reste <b>{formatEuro(remainingToUnlock)}</b> à cumuler pour débloquer votre cagnotte.
+    </>
+  )}
+</div>
+
                   </div>
                 </div>
               </div>
