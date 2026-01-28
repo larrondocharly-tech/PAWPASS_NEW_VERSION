@@ -16,8 +16,6 @@ export const metadata = {
   description: "Cashback solidaire pour les clients et commerçants.",
 };
 
-// ✅ IMPORTANT : viewport géré proprement par Next (App Router)
-// => évite le rendu “zoomé” sur iPhone/Safari après login
 export const viewport = {
   width: "device-width",
   initialScale: 1,
@@ -30,6 +28,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={inter.variable}>
       <body style={{ margin: 0 }}>
+        {/* ✅ HEADER EN DEHORS des wrappers (important pour que position:fixed tienne au scroll) */}
+        <ClientHeader />
+
         {/* Fond global + overlay global */}
         <div className="client-dashboard-bg">
           <div className="client-dashboard-overlay">
@@ -40,9 +41,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 flexDirection: "column",
               }}
             >
-              {/* Header */}
-              <ClientHeader />
-
               {/* Espace respirable sous le header (centrage visuel) */}
               <div className="dashboard-hero-spacer" />
 

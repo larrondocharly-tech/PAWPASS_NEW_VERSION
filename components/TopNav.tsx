@@ -46,114 +46,124 @@ export default function TopNav() {
         style={{
           position: "sticky",
           top: 0,
-          zIndex: 50,
-          backgroundColor: "#FFFFFF",
-          borderBottom: "1px solid #E5E7EB",
+          left: 0,
+          right: 0,
+          zIndex: 1000,
+          // Important: ne pas mettre le fond ici car ton globals.css force header transparent
         }}
       >
-        <nav
+        {/* Wrapper "bar" (non ciblé par header { background: transparent !important; }) */}
+        <div
+          className="topnav-bar"
           style={{
-            maxWidth: 960,
-            margin: "0 auto",
-            padding: "8px 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-            position: "relative",
+            width: "100%",
           }}
         >
-          <Link
-            href="/dashboard"
+          <nav
             style={{
-              fontWeight: 700,
-              fontSize: 20,
-              textDecoration: "none",
-              color: "#111827",
+              maxWidth: 960,
+              margin: "0 auto",
+              padding: "10px 16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              position: "relative",
             }}
           >
-            PawPass
-          </Link>
+            <Link
+              href="/dashboard"
+              style={{
+                fontWeight: 700,
+                fontSize: 20,
+                textDecoration: "none",
+                color: "#0e3a4a",
+                whiteSpace: "nowrap",
+              }}
+            >
+              PawPass
+            </Link>
 
-          {/* Un seul rendu selon viewport */}
-          {isDesktop ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14 }}>
-              {navItems.map((item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
+            {/* Un seul rendu selon viewport */}
+            {isDesktop ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14 }}>
+                {navItems.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      textDecoration: "none",
+                      border: isActive(item.href) ? "1px solid #0e3a4a" : "1px solid transparent",
+                      backgroundColor: isActive(item.href) ? "#0e3a4a" : "transparent",
+                      color: isActive(item.href) ? "#FFFFFF" : "#0e3a4a",
+                      fontWeight: isActive(item.href) ? 700 : 600,
+                      transition: "background-color 0.15s ease, color 0.15s ease",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setPanelOpen(true)}
                   style={{
-                    padding: "6px 10px",
+                    padding: "6px 14px",
                     borderRadius: 999,
-                    textDecoration: "none",
-                    border: isActive(item.href) ? "1px solid #111827" : "1px solid transparent",
-                    backgroundColor: isActive(item.href) ? "#111827" : "transparent",
-                    color: isActive(item.href) ? "#FFFFFF" : "#374151",
-                    fontWeight: isActive(item.href) ? 600 : 400,
-                    transition: "background-color 0.15s ease, color 0.15s ease",
+                    border: "1px solid rgba(14, 58, 74, 0.20)",
+                    backgroundColor: "#ffffff",
+                    color: "#0e3a4a",
+                    cursor: "pointer",
+                    fontSize: 14,
+                    fontWeight: 800,
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {item.label}
+                  Mon compte
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Link
+                  href="/dashboard"
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(14, 58, 74, 0.18)",
+                    backgroundColor: isActive("/dashboard") ? "#0e3a4a" : "rgba(255,255,255,0.90)",
+                    color: isActive("/dashboard") ? "#FFFFFF" : "#0e3a4a",
+                    fontWeight: 800,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Accueil
                 </Link>
-              ))}
 
-              <button
-                type="button"
-                onClick={() => setPanelOpen(true)}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 999,
-                  border: "1px solid #111827",
-                  backgroundColor: pathname?.startsWith("/dashboard") ? "#111827" : "#F9FAFB",
-                  color: pathname?.startsWith("/dashboard") ? "#FFFFFF" : "#111827",
-                  cursor: "pointer",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Mon compte
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Link
-                href="/dashboard"
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(15, 23, 42, 0.08)",
-                  backgroundColor: isActive("/dashboard") ? "#111827" : "#FFFFFF",
-                  color: isActive("/dashboard") ? "#FFFFFF" : "#111827",
-                  fontWeight: 600,
-                  textDecoration: "none",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Accueil
-              </Link>
-
-              <button
-                type="button"
-                onClick={() => setPanelOpen(true)}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(15, 23, 42, 0.08)",
-                  backgroundColor: "#FFFFFF",
-                  color: "#111827",
-                  cursor: "pointer",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Menu
-              </button>
-            </div>
-          )}
-        </nav>
+                <button
+                  type="button"
+                  onClick={() => setPanelOpen(true)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(14, 58, 74, 0.18)",
+                    backgroundColor: "rgba(255,255,255,0.90)",
+                    color: "#0e3a4a",
+                    cursor: "pointer",
+                    fontSize: 14,
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Menu
+                </button>
+              </div>
+            )}
+          </nav>
+        </div>
       </header>
 
       {/* PANEL LATERAL */}
@@ -162,7 +172,7 @@ export default function TopNav() {
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 60,
+            zIndex: 2000,
             display: "flex",
             justifyContent: "flex-end",
             backgroundColor: "rgba(15,23,42,0.35)",
@@ -207,43 +217,65 @@ export default function TopNav() {
 
             <div style={{ padding: "12px 16px", overflowY: "auto", flex: 1 }}>
               <Link href="/dashboard" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>🏠</span><span>Tableau de bord</span>
+                <span>🏠</span>
+                <span>Tableau de bord</span>
               </Link>
 
               <Link href="/scan" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>📷</span><span>Scanner</span>
+                <span>📷</span>
+                <span>Scanner</span>
               </Link>
 
               <Link href="/merchant" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>📱</span><span>Mon QR Code</span>
+                <span>📱</span>
+                <span>Mon QR Code</span>
               </Link>
 
-              <Link href="/merchant/transactions" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>📊</span><span>Transactions à valider</span>
+              <Link
+                href="/merchant/transactions"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>📊</span>
+                <span>Transactions à valider</span>
               </Link>
 
               <Link href="/commerces" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>🛍️</span><span>Commerçants partenaires</span>
+                <span>🛍️</span>
+                <span>Commerçants partenaires</span>
               </Link>
 
               <Link href="/parrainage" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>🤝</span><span>Parrainer un ami</span>
+                <span>🤝</span>
+                <span>Parrainer un ami</span>
               </Link>
 
-              <Link href="/comment-ca-marche" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>❓</span><span>Comment ça marche ?</span>
+              <Link
+                href="/comment-ca-marche"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>❓</span>
+                <span>Comment ça marche ?</span>
               </Link>
 
               <Link href="/faq" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>📚</span><span>FAQ</span>
+                <span>📚</span>
+                <span>FAQ</span>
               </Link>
 
               <Link href="/contact" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>✉️</span><span>Contact</span>
+                <span>✉️</span>
+                <span>Contact</span>
               </Link>
 
-              <Link href="/mentions-legales" onClick={() => setPanelOpen(false)} style={rowStyle}>
-                <span>📄</span><span>Mentions légales</span>
+              <Link
+                href="/mentions-legales"
+                onClick={() => setPanelOpen(false)}
+                style={rowStyle}
+              >
+                <span>📄</span>
+                <span>Mentions légales</span>
               </Link>
             </div>
 
@@ -258,7 +290,7 @@ export default function TopNav() {
                   border: "none",
                   backgroundColor: "#FEE2E2",
                   color: "#B91C1C",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: "pointer",
                 }}
               >

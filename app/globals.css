@@ -30,6 +30,7 @@ html {
   font-size: 16px;
   width: 100%;
   overflow-x: hidden; /* IMPORTANT: évite la bande blanche à droite sur mobile */
+  scroll-padding-top: 84px; /* utile si tu as des ancres */
 }
 
 body {
@@ -43,6 +44,11 @@ body {
 
 main {
   min-height: 100vh;
+}
+
+/* Wrapper contenu (ajouté dans layout.tsx) */
+.app-content {
+  width: 100%;
 }
 
 /* Sécurité anti-débordements (canvas/html2canvas/qr/svg/images) */
@@ -273,6 +279,16 @@ p { margin: 0 0 0.5rem; }
     margin: 0 auto;
     display: block;
   }
+
+  /* Un peu moins de padding global sur mobile, sans casser tes pages */
+  .client-dashboard-overlay {
+    padding: 18px 14px;
+  }
+
+  /* Spacer moins agressif sur mobile (meilleur responsive) */
+  .dashboard-hero-spacer {
+    height: 84px;
+  }
 }
 
 /* ===========================
@@ -291,6 +307,7 @@ p { margin: 0 0 0.5rem; }
   padding: 32px 20px;
   background: rgba(249, 249, 244, 0);
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* ===========================
@@ -316,6 +333,7 @@ p { margin: 0 0 0.5rem; }
   background: rgba(95, 211, 179, 0.85);
   color: #0e3a4a;
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   box-shadow: 0 10px 24px rgba(95, 211, 179, 0.35);
 }
 
@@ -327,6 +345,7 @@ p { margin: 0 0 0.5rem; }
   background: rgba(255, 255, 255, 0.75);
   color: #0e3a4a;
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(95, 211, 179, 0.45);
 }
 
@@ -335,43 +354,27 @@ p { margin: 0 0 0.5rem; }
 }
 
 /* ===========================
-   HEADER – INVISIBLE (ne touche pas aux boutons)
+   TOP NAV BAR (sticky visible)
+   Utilisé par components/TopNav.tsx via <div className="topnav-bar">
 =========================== */
+.topnav-bar {
+  /* barre visible au scroll */
+  background: rgba(249, 249, 244, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 
-/* Si ton composant utilise <header> */
-header {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  border-bottom: 1px solid rgba(14, 58, 74, 0.10);
+  box-shadow: 0 10px 24px rgba(14, 58, 74, 0.08);
 }
 
-/* Si ton composant utilise <nav> au lieu de <header> */
-nav {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+/* Evite que le header paraisse collé au bord sur très grands écrans */
+.topnav-bar nav {
+  width: 100%;
 }
-
-/* Très souvent il y a un wrapper interne (div) qui a le fond blanc */
-/* Très souvent il y a un wrapper interne (div) qui a le fond blanc
-   => on le rend transparent, MAIS on exclut les dropdowns */
-header > div:not([data-dropdown]),
-nav > div:not([data-dropdown]) {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
 
 /* ===========================
-   MENU DÉROULANT – OPAQUE / GLASS
+   MENU / DROPDOWN – OPAQUE / GLASS
 =========================== */
-
-/* Cas le plus fréquent : menu dans un div absolute/fixed */
 header .menu,
 header .dropdown,
 header .menu-panel,
@@ -387,7 +390,6 @@ nav .menu-panel {
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-/* Liens du menu */
 header .menu a,
 header .dropdown a,
 nav .menu a,
@@ -396,7 +398,6 @@ nav .dropdown a {
   color: #0e3a4a;
 }
 
-/* Hover menu */
 header .menu a:hover,
 header .dropdown a:hover,
 nav .menu a:hover,
@@ -426,4 +427,10 @@ nav .dropdown a:hover {
     background: rgba(95, 211, 179, 0.12);
     border-radius: 10px;
   }
+}
+/* Sticky safety (ne change rien visuellement, aide iOS/Safari/Chrome) */
+.pp-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
