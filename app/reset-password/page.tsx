@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabaseClient";
 
@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 export default function ResetPasswordPage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [ready, setReady] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -21,41 +22,51 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 1) IMPORTANT :
-  // Quand on arrive via le lien email, Supabase met une session "temporaire" via le code dans l'URL.
-  // On vérifie qu'on a bien une session avant d'autoriser le changement de mot de passe.
+  // ✅ Supporte les deux formats:
+  // - /reset-password?code=... (PKCE) → on échange le code contre une session
+  // - /reset-password#access_token=... (implicit) → supabase récupère la session via getSession()
   useEffect(() => {
     let cancelled = false;
 
     const init = async () => {
       setSessionError(null);
+      setReady(false);
 
-      // Si le code est dans l'URL, Supabase va l'échanger contre une session.
-      // getSession() suffit généralement après redirection.
-      const { data, error } = await supabase.auth.getSession();
+      try {
+        // 1) Si on a un ?code=..., on l’échange contre une session
+        const code = searchParams.get("code");
+        if (code) {
+          const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchErr) {
+            console.error("exchangeCodeForSession error:", exchErr.message);
+            if (cancelled) return;
+            setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
+            return;
+          }
+        }
 
-      if (cancelled) return;
+        // 2) Vérifie qu’on a bien une session "recovery"
+        const { data, error } = await supabase.auth.getSession();
+        if (cancelled) return;
 
-      if (error) {
-        setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
-        setReady(false);
-        return;
+        if (error || !data.session) {
+          setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
+          return;
+        }
+
+        setReady(true);
+      } catch (e) {
+        console.error("reset-password init error:", e);
+        if (!cancelled) setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
       }
-
-      if (!data.session) {
-        setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
-        setReady(false);
-        return;
-      }
-
-      setReady(true);
     };
 
     init();
+
     return () => {
       cancelled = true;
     };
-  }, [supabase]);
+  }, [supabase, searchParams]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,10 +92,9 @@ export default function ResetPasswordPage() {
 
       setDone(true);
 
-      // Optionnel : on peut déconnecter pour forcer une reconnexion propre
+      // Optionnel : on déconnecte pour forcer une reconnexion propre
       await supabase.auth.signOut();
 
-      // et renvoyer vers login
       setTimeout(() => router.push("/login"), 700);
     } finally {
       setLoading(false);
@@ -115,11 +125,9 @@ export default function ResetPasswordPage() {
           Nouveau mot de passe
         </h1>
 
-        {!ready && (
+        {!ready && !done && (
           <>
-            <p style={{ color: "#64748b", marginBottom: 16 }}>
-              Vérification du lien…
-            </p>
+            <p style={{ color: "#64748b", marginBottom: 16 }}>Vérification du lien…</p>
 
             {sessionError && (
               <div
@@ -138,7 +146,10 @@ export default function ResetPasswordPage() {
             )}
 
             <p style={{ marginTop: 16, fontSize: 14 }}>
-              <Link href="/forgot-password" style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}>
+              <Link
+                href="/forgot-password"
+                style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}
+              >
                 Refaire « mot de passe oublié »
               </Link>
             </p>
@@ -159,6 +170,7 @@ export default function ResetPasswordPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
+                autoComplete="new-password"
                 style={{
                   width: "100%",
                   padding: 12,
@@ -175,6 +187,7 @@ export default function ResetPasswordPage() {
                 onChange={(e) => setPassword2(e.target.value)}
                 required
                 minLength={6}
+                autoComplete="new-password"
                 style={{
                   width: "100%",
                   padding: 12,
