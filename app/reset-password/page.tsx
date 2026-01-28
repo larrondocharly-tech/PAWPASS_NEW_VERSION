@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-export default function ResetPasswordPage() {
+function ResetPasswordInner() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -22,9 +22,9 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // ✅ Supporte les deux formats:
-  // - /reset-password?code=... (PKCE) → on échange le code contre une session
-  // - /reset-password#access_token=... (implicit) → supabase récupère la session via getSession()
+  // ✅ Supporte:
+  // - /reset-password?code=... (PKCE) -> exchangeCodeForSession
+  // - /reset-password#access_token=... (implicit) -> getSession récupère la session
   useEffect(() => {
     let cancelled = false;
 
@@ -33,19 +33,21 @@ export default function ResetPasswordPage() {
       setReady(false);
 
       try {
-        // 1) Si on a un ?code=..., on l’échange contre une session
         const code = searchParams.get("code");
+
+        // Si Supabase renvoie un "code" (PKCE), on l'échange contre une session.
         if (code) {
           const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
           if (exchErr) {
             console.error("exchangeCodeForSession error:", exchErr.message);
-            if (cancelled) return;
-            setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
+            if (!cancelled) {
+              setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
+            }
             return;
           }
         }
 
-        // 2) Vérifie qu’on a bien une session "recovery"
+        // Vérifie qu'on a bien une session (recovery)
         const { data, error } = await supabase.auth.getSession();
         if (cancelled) return;
 
@@ -92,7 +94,7 @@ export default function ResetPasswordPage() {
 
       setDone(true);
 
-      // Optionnel : on déconnecte pour forcer une reconnexion propre
+      // Optionnel: déconnecte pour repartir propre
       await supabase.auth.signOut();
 
       setTimeout(() => router.push("/login"), 700);
@@ -244,5 +246,13 @@ export default function ResetPasswordPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 16 }}>Chargement...</div>}>
+      <ResetPasswordInner />
+    </Suspense>
   );
 }
