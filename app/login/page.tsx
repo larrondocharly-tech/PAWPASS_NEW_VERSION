@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
@@ -13,8 +13,10 @@ function LoginPageInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // ✅ par défaut: rester connecté
+  // ✅ remember me
   const [rememberMe, setRememberMe] = useState(true);
+
+  const supabase = useMemo(() => createClient({ remember: rememberMe }), [rememberMe]);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -23,9 +25,6 @@ function LoginPageInner() {
     e.preventDefault();
     setErrorMsg("");
     setLoading(true);
-
-    // ✅ on crée le client avec le bon mode de persistance
-    const supabase = createClient({ remember: rememberMe });
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -44,7 +43,6 @@ function LoginPageInner() {
     const appMeta = (user?.app_metadata ?? {}) as any;
 
     let role: string | undefined = userMeta.role || appMeta.role;
-
     if (!role && appMeta.is_admin) role = "admin";
     if (!role && user?.email === "admin@admin.com") role = "admin";
     if (role !== "merchant" && role !== "admin") role = "user";
@@ -53,20 +51,20 @@ function LoginPageInner() {
     const hasSeenTutorial = Boolean(userMeta?.has_seen_tutorial);
 
     if (role === "merchant") {
-      router.push("/merchant");
+      router.replace("/merchant");
       return;
     }
     if (role === "admin") {
-      router.push("/admin");
+      router.replace("/admin");
       return;
     }
 
     if (!hasSeenTutorial) {
-      router.push(`/tutorial?next=${encodeURIComponent(redirectTo || "/dashboard")}`);
+      router.replace(`/tutorial?next=${encodeURIComponent(redirectTo || "/dashboard")}`);
       return;
     }
 
-    router.push(redirectTo || "/dashboard");
+    router.replace(redirectTo || "/dashboard");
   };
 
   return (
@@ -92,7 +90,6 @@ function LoginPageInner() {
         <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8, color: "#0f172a" }}>
           Connexion
         </h1>
-
         <p style={{ color: "#64748b", marginBottom: 24 }}>
           Retrouvez votre cagnotte PawPass et vos dons aux refuges.
         </p>
@@ -126,31 +123,27 @@ function LoginPageInner() {
               padding: 12,
               borderRadius: 8,
               border: "1px solid #cbd5e1",
-              marginBottom: 10,
+              marginBottom: 8,
             }}
           />
 
-          {/* ✅ Rester connecté */}
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 14,
-              fontSize: 14,
-              color: "#0f172a",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <input
+              id="rememberMe"
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
             />
-            <span>Rester connecté</span>
-          </label>
+            <label htmlFor="rememberMe" style={{ fontSize: 14, color: "#0f172a" }}>
+              Rester connecté
+            </label>
+          </div>
 
           <p style={{ margin: "6px 0 16px", fontSize: 14 }}>
-            <a href="/forgot-password" style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}>
+            <a
+              href="/forgot-password"
+              style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}
+            >
               Mot de passe oublié ?
             </a>
           </p>
