@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import React, { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
@@ -9,10 +9,13 @@ export const dynamic = "force-dynamic";
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // ✅ par défaut: rester connecté
+  const [rememberMe, setRememberMe] = useState(true);
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -20,6 +23,9 @@ function LoginPageInner() {
     e.preventDefault();
     setErrorMsg("");
     setLoading(true);
+
+    // ✅ on crée le client avec le bon mode de persistance
+    const supabase = createClient({ remember: rememberMe });
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -39,22 +45,13 @@ function LoginPageInner() {
 
     let role: string | undefined = userMeta.role || appMeta.role;
 
-    if (!role && appMeta.is_admin) {
-      role = "admin";
-    }
-
-    if (!role && user?.email === "admin@admin.com") {
-      role = "admin";
-    }
-
-    if (role !== "merchant" && role !== "admin") {
-      role = "user";
-    }
+    if (!role && appMeta.is_admin) role = "admin";
+    if (!role && user?.email === "admin@admin.com") role = "admin";
+    if (role !== "merchant" && role !== "admin") role = "user";
 
     const redirectTo = searchParams.get("redirectTo");
     const hasSeenTutorial = Boolean(userMeta?.has_seen_tutorial);
 
-    // Merchants/admins : flux actuel
     if (role === "merchant") {
       router.push("/merchant");
       return;
@@ -64,18 +61,12 @@ function LoginPageInner() {
       return;
     }
 
-    // Users : si pas vu le tuto → tuto (une seule fois)
     if (!hasSeenTutorial) {
       router.push(`/tutorial?next=${encodeURIComponent(redirectTo || "/dashboard")}`);
       return;
     }
 
-    // Sinon comportement normal
-    if (redirectTo) {
-      router.push(redirectTo);
-    } else {
-      router.push("/dashboard");
-    }
+    router.push(redirectTo || "/dashboard");
   };
 
   return (
@@ -98,16 +89,10 @@ function LoginPageInner() {
           boxShadow: "0 12px 30px rgba(15,23,42,0.15)",
         }}
       >
-        <h1
-          style={{
-            fontSize: 28,
-            fontWeight: 700,
-            marginBottom: 8,
-            color: "#0f172a",
-          }}
-        >
+        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8, color: "#0f172a" }}>
           Connexion
         </h1>
+
         <p style={{ color: "#64748b", marginBottom: 24 }}>
           Retrouvez votre cagnotte PawPass et vos dons aux refuges.
         </p>
@@ -141,18 +126,34 @@ function LoginPageInner() {
               padding: 12,
               borderRadius: 8,
               border: "1px solid #cbd5e1",
-              marginBottom: 8,
+              marginBottom: 10,
             }}
           />
-          <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>
-            6 caractères minimum. Tu pourras le modifier plus tard.
-          </p>
-          <p style={{ margin: "6px 0 16px", fontSize: 14 }}>
-  <a href="/forgot-password" style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}>
-    Mot de passe oublié ?
-  </a>
-</p>
 
+          {/* ✅ Rester connecté */}
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 14,
+              fontSize: 14,
+              color: "#0f172a",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
+            <span>Rester connecté</span>
+          </label>
+
+          <p style={{ margin: "6px 0 16px", fontSize: 14 }}>
+            <a href="/forgot-password" style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}>
+              Mot de passe oublié ?
+            </a>
+          </p>
 
           {errorMsg && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>}
 
@@ -178,14 +179,7 @@ function LoginPageInner() {
 
         <p style={{ marginTop: 12, fontSize: 14 }}>
           Pas encore de compte ?{" "}
-          <a
-            href="/register"
-            style={{
-              color: "#059669",
-              fontWeight: 600,
-              textDecoration: "none",
-            }}
-          >
+          <a href="/register" style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}>
             Créer un compte
           </a>
         </p>
