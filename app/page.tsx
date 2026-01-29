@@ -1,9 +1,70 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabaseClient";
 
 export default function HomePage() {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          if (!cancelled) setChecking(false);
+          return;
+        }
+
+        const session = data.session;
+
+        // Si déjà connecté -> dashboard
+        if (session?.user) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        if (!cancelled) setChecking(false);
+      } catch {
+        if (!cancelled) setChecking(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, supabase]);
+
+  // Pendant la vérif session -> évite le flash de la home
+  if (checking) {
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 16 }}>
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 420,
+            background: "rgba(255,255,255,0.9)",
+            borderRadius: 18,
+            padding: 18,
+            boxShadow: "0 12px 30px rgba(15,23,42,0.10)",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ margin: 0, color: "#64748b", fontWeight: 600 }}>Chargement...</p>
+          <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 13 }}>
+            Vérification de votre session PawPass
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main>
       {/* ===========================
@@ -96,13 +157,13 @@ export default function HomePage() {
                 padding: "14px 0",
                 borderRadius: "18px",
                 fontSize: "1.15rem",
-                background: "#ff8a42", // on garde l'orange
+                background: "#ff8a42",
                 color: "white",
                 marginBottom: "14px",
                 textAlign: "center",
                 fontWeight: 700,
-                boxShadow: "0 10px 22px rgba(255,138,66,0.45)", // on garde l'ombre orange
-                opacity: 0.92, // petit effet opaque sans casser ton orange
+                boxShadow: "0 10px 22px rgba(255,138,66,0.45)",
+                opacity: 0.92,
               }}
             >
               Créer mon compte
