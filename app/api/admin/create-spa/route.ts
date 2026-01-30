@@ -100,7 +100,7 @@ export async function POST(req: Request) {
 
     // Redirect URL pour choix MDP
     const baseUrl = getBaseUrl(req);
-    const redirectTo = `${baseUrl}/reset-password`;
+const redirectTo = `${baseUrl}/auth/callback?next=/reset-password`;
 
     // 1) Invite user (envoie email "set password")
     // NOTE: selon versions, certains utilisent "redirectTo", d’autres "emailRedirectTo"
