@@ -7,6 +7,12 @@ import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
+function getRoleFromUser(user: any): string | null {
+  // Supabase peut stocker dans user.user_metadata
+  const role = user?.user_metadata?.role ?? user?.app_metadata?.role ?? null;
+  return typeof role === "string" ? role : null;
+}
+
 function ResetPasswordInner() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -35,7 +41,6 @@ function ResetPasswordInner() {
       try {
         const code = searchParams.get("code");
 
-        // Si Supabase renvoie un "code" (PKCE), on l'échange contre une session.
         if (code) {
           const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
           if (exchErr) {
@@ -47,7 +52,6 @@ function ResetPasswordInner() {
           }
         }
 
-        // Vérifie qu'on a bien une session (recovery)
         const { data, error } = await supabase.auth.getSession();
         if (cancelled) return;
 
@@ -85,19 +89,44 @@ function ResetPasswordInner() {
 
     setLoading(true);
     try {
+      // 1) update password
       const { error } = await supabase.auth.updateUser({ password });
-
       if (error) {
         setErrorMsg(error.message || "Impossible de modifier le mot de passe.");
         return;
       }
 
+      // 2) récupère l'utilisateur pour savoir où rediriger
+      const { data: uData, error: uErr } = await supabase.auth.getUser();
+      if (uErr || !uData?.user) {
+        // Si on n'arrive pas à lire le user, on fallback login
+        setDone(true);
+        setTimeout(() => router.push("/login"), 700);
+        return;
+      }
+
+      const role = getRoleFromUser(uData.user);
+
       setDone(true);
 
-      // Optionnel: déconnecte pour repartir propre
-      await supabase.auth.signOut();
+      // ✅ IMPORTANT:
+      // Pour une SPA invitée, c'est plus logique de la laisser connectée
+      // Donc PAS de signOut ici.
+      // Si tu veux forcer une reconnexion, décommente les 2 lignes:
+      // await supabase.auth.signOut();
+      // router.push("/login");
 
-      setTimeout(() => router.push("/login"), 700);
+      // 3) redirect selon role
+      if (role === "spa") {
+        setTimeout(() => router.push("/spa"), 700);
+      } else if (role === "merchant") {
+        setTimeout(() => router.push("/merchant"), 700);
+      } else if (role === "admin") {
+        setTimeout(() => router.push("/admin"), 700);
+      } else {
+        // utilisateur standard
+        setTimeout(() => router.push("/login"), 700);
+      }
     } finally {
       setLoading(false);
     }
@@ -241,7 +270,7 @@ function ResetPasswordInner() {
               lineHeight: 1.4,
             }}
           >
-            Mot de passe modifié ✅ Redirection vers la connexion…
+            Mot de passe modifié ✅ Redirection…
           </div>
         )}
       </div>
