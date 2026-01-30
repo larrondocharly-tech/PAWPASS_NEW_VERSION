@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +13,11 @@ const supabase = createClient(
 
 export default function AuthCallbackPage() {
   const router = useRouter();
+  const sp = useSearchParams();
 
   useEffect(() => {
     const run = async () => {
-      // Supabase lit automatiquement le token depuis l’URL (#access_token)
+      // IMPORTANT: force la lecture du token dans l’URL
       const { data, error } = await supabase.auth.getSession();
 
       if (error || !data.session) {
@@ -24,19 +25,18 @@ export default function AuthCallbackPage() {
         return;
       }
 
-      const role = data.session.user.user_metadata?.role;
-
-      if (role === "spa") {
-        router.replace("/spa");
-      } else if (role === "merchant") {
-        router.replace("/merchant");
-      } else {
-        router.replace("/dashboard");
+      const next = sp.get("next");
+      if (next) {
+        router.replace(next);
+        return;
       }
+
+      const role = data.session.user.user_metadata?.role;
+      router.replace(role === "spa" ? "/spa" : "/dashboard");
     };
 
     run();
-  }, [router]);
+  }, [router, sp]);
 
   return <p style={{ padding: 24 }}>Connexion en cours…</p>;
 }
