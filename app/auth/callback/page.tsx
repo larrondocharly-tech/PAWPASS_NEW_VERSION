@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
@@ -14,29 +14,36 @@ const supabase = createClient(
 export default function AuthCallbackPage() {
   const router = useRouter();
   const sp = useSearchParams();
+  const [msg, setMsg] = useState("Connexion en cours…");
 
   useEffect(() => {
     const run = async () => {
-      // IMPORTANT: force la lecture du token dans l’URL
-      const { data, error } = await supabase.auth.getSession();
+      try {
+        // récupère la session à partir du hash (#access_token / refresh_token)
+        const { data, error } = await supabase.auth.getSession();
 
-      if (error || !data.session) {
+        if (error || !data.session) {
+          setMsg("Lien invalide ou expiré. Redirection vers connexion…");
+          router.replace("/login");
+          return;
+        }
+
+        const next = sp.get("next");
+        if (next) {
+          router.replace(next);
+          return;
+        }
+
+        const role = data.session.user.user_metadata?.role;
+        router.replace(role === "spa" ? "/spa" : "/dashboard");
+      } catch (e: any) {
+        setMsg("Erreur callback. Redirection…");
         router.replace("/login");
-        return;
       }
-
-      const next = sp.get("next");
-      if (next) {
-        router.replace(next);
-        return;
-      }
-
-      const role = data.session.user.user_metadata?.role;
-      router.replace(role === "spa" ? "/spa" : "/dashboard");
     };
 
     run();
   }, [router, sp]);
 
-  return <p style={{ padding: 24 }}>Connexion en cours…</p>;
+  return <div style={{ padding: 24 }}>{msg}</div>;
 }
