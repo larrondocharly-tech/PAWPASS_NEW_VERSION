@@ -1,49 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabaseClient";
 
 export default function CallbackClient() {
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const sp = useSearchParams();
-  const [msg, setMsg] = useState("Connexion en cours…");
+  const supabase = createClient();
 
   useEffect(() => {
-    const run = async () => {
-      try {
-        // IMPORTANT: sur les liens d'invite, les tokens sont dans le hash (#...)
-        // Supabase les lit tout seul côté navigateur.
-        const { data, error } = await supabase.auth.getSession();
+    const handleAuth = async () => {
+      // Supabase lit automatiquement access_token & refresh_token depuis l'URL
+      const { data, error } = await supabase.auth.getSession();
 
-        if (error || !data.session) {
-          setMsg("Lien invalide ou expiré. Redirection vers connexion…");
-          router.replace("/login");
-          return;
-        }
+      if (error) {
+        console.error("Auth callback error:", error);
+        router.replace("/login");
+        return;
+      }
 
-        // Optionnel: si tu passes ?next=/spa dans redirectTo
-        const next = sp.get("next");
-        if (next) {
-          router.replace(next);
-          return;
-        }
-
-        const role = data.session.user.user_metadata?.role;
-        router.replace(role === "spa" ? "/spa" : "/dashboard");
-      } catch {
-        setMsg("Erreur callback. Redirection…");
+      if (data.session) {
+        router.replace("/dashboard");
+      } else {
         router.replace("/login");
       }
     };
 
-    run();
-  }, [router, sp]);
+    handleAuth();
+  }, [router, supabase, searchParams]);
 
-  return <div style={{ padding: 24 }}>{msg}</div>;
+  return <div style={{ padding: 24 }}>Finalisation de la connexion…</div>;
 }
