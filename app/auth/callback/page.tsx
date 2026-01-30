@@ -1,54 +1,42 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabaseClient";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const supabase = useMemo(() => createClient(), []);
-  const [status, setStatus] = useState("Connexion en cours…");
 
   useEffect(() => {
-    (async () => {
-      try {
-        const hash = window.location.hash || "";
-        const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    const run = async () => {
+      // Supabase lit automatiquement le token depuis l’URL (#access_token)
+      const { data, error } = await supabase.auth.getSession();
 
-        const access_token = params.get("access_token");
-        const refresh_token = params.get("refresh_token");
-
-        const next = searchParams.get("next") || "/reset-password";
-
-        if (!access_token || !refresh_token) {
-          setStatus("Lien invalide (tokens manquants).");
-          router.replace("/login");
-          return;
-        }
-
-        const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-        if (error) {
-          setStatus("Erreur session: " + error.message);
-          router.replace("/login");
-          return;
-        }
-
-        setStatus("OK. Redirection…");
-        router.replace(next);
-      } catch (e: any) {
-        setStatus("Erreur: " + (e?.message || "unknown"));
+      if (error || !data.session) {
         router.replace("/login");
+        return;
       }
-    })();
-  }, [router, searchParams, supabase]);
 
-  return (
-    <div style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
-      <h1>Validation…</h1>
-      <p>{status}</p>
-    </div>
-  );
+      const role = data.session.user.user_metadata?.role;
+
+      if (role === "spa") {
+        router.replace("/spa");
+      } else if (role === "merchant") {
+        router.replace("/merchant");
+      } else {
+        router.replace("/dashboard");
+      }
+    };
+
+    run();
+  }, [router]);
+
+  return <p style={{ padding: 24 }}>Connexion en cours…</p>;
 }
