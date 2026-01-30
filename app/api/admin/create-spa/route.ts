@@ -1,28 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs"; // important pour route handler + service role
-
-function normalizeBaseUrl(url: string) {
-  return url.trim().replace(/\/+$/, "");
-}
-
 function getBaseUrl(req: Request) {
-  const envUrl =
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    process.env.NEXT_PUBLIC_SITE_URL?.trim();
-
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (envUrl) return envUrl.replace(/\/+$/, "");
 
   const origin = req.headers.get("origin") || "http://localhost:3000";
   return origin.replace(/\/+$/, "");
 }
 
-
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-
     const name = String(body?.name ?? "").trim();
     const email = String(body?.email ?? "").trim().toLowerCase();
     const ibanRaw = body?.iban ?? null;
@@ -46,14 +35,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // Bearer token (admin logged-in côté client)
+    // Auth token from client
     const authHeader = req.headers.get("authorization") || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!token) {
       return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
     }
 
-    // Client "user" pour RLS + vérifier admin
+    // User client (RLS) to check current user + admin status
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
@@ -63,6 +52,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    // Check admin via app_admins
     const { data: adminRow, error: adminErr } = await userClient
       .from("app_admins")
       .select("user_id")
@@ -72,50 +62,40 @@ export async function POST(req: Request) {
     if (adminErr) return NextResponse.json({ error: adminErr.message }, { status: 400 });
     if (!adminRow) return NextResponse.json({ error: "Forbidden (not admin)" }, { status: 403 });
 
-    // Service role (auth admin + DB write sans RLS)
+    // Service role for auth admin + DB inserts
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // (Optionnel mais conseillé) : éviter de recréer 50 fois la même SPA
-    const { data: existingSpa, error: existErr } = await admin
-      .from("spas")
-      .select("id,email,auth_user_id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (existErr) {
-      return NextResponse.json({ error: existErr.message }, { status: 400 });
-    }
-    if (existingSpa?.id) {
-      return NextResponse.json(
-        { error: "Cette SPA existe déjà (email déjà utilisé). Supprime-la ou change l’email." },
-        { status: 409 }
-      );
-    }
-
-    // Redirect URL pour choix MDP
+    // URL où la SPA choisira son mot de passe
     const baseUrl = getBaseUrl(req);
-const redirectTo = `${baseUrl}/auth/callback?next=/reset-password`;
+    const redirectTo = `${baseUrl}/reset-password`;
 
-    // 1) Invite user (envoie email "set password")
-    // NOTE: selon versions, certains utilisent "redirectTo", d’autres "emailRedirectTo"
+    // 1) Invite user => envoie email "set password"
     const { data: invited, error: iErr } = await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo,
-      // fallback compat
-      // @ts-expect-error - compat supabase versions
-      emailRedirectTo: redirectTo,
       data: { role: "spa", name },
     });
 
     if (iErr || !invited?.user) {
       return NextResponse.json(
-        { error: iErr?.message || "inviteUserByEmail failed", redirectTo },
+        { error: iErr?.message || "inviteUserByEmail failed" },
         { status: 400 }
       );
     }
 
     const spaUserId = invited.user.id;
 
-    // 2) Insert (ou upsert) dans spas
+    // ✅ IMPORTANT : créer le profile SPA (sinon callback ne sait pas router)
+    const { error: pErr } = await admin.from("profiles").upsert({
+      id: spaUserId,
+      role: "spa",
+    });
+
+    if (pErr) {
+      await admin.auth.admin.deleteUser(spaUserId);
+      return NextResponse.json({ error: pErr.message }, { status: 400 });
+    }
+
+    // 2) Insert into spas table
     const { data: spaRow, error: sErr } = await admin
       .from("spas")
       .insert({
@@ -128,20 +108,17 @@ const redirectTo = `${baseUrl}/auth/callback?next=/reset-password`;
       .single();
 
     if (sErr) {
-      // rollback auth user pour éviter un user orphelin
-      try {
-        await admin.auth.admin.deleteUser(spaUserId);
-      } catch {
-        // ignore
-      }
+      // rollback auth user + profile
+      await admin.from("profiles").delete().eq("id", spaUserId);
+      await admin.auth.admin.deleteUser(spaUserId);
       return NextResponse.json({ error: sErr.message }, { status: 400 });
     }
 
     return NextResponse.json({
       ok: true,
+      spa: spaRow,
       invited: true,
       redirectTo,
-      spa: spaRow,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
