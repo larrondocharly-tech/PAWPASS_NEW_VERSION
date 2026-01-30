@@ -8,22 +8,16 @@ function normalizeBaseUrl(url: string) {
 }
 
 function getBaseUrl(req: Request) {
-  // 1) Priorité à NEXT_PUBLIC_SITE_URL (recommandé en prod)
-  const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (envUrl) return normalizeBaseUrl(envUrl);
+  const envUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim();
 
-  // 2) Si pas d'env, essaie les headers proxy (Vercel / reverse proxy)
-  const xfProto = req.headers.get("x-forwarded-proto");
-  const xfHost = req.headers.get("x-forwarded-host");
-  if (xfProto && xfHost) return normalizeBaseUrl(`${xfProto}://${xfHost}`);
+  if (envUrl) return envUrl.replace(/\/+$/, "");
 
-  // 3) Sinon host
-  const host = req.headers.get("host");
-  if (host) return normalizeBaseUrl(`https://${host}`);
-
-  // 4) Fallback local
-  return "http://localhost:3000";
+  const origin = req.headers.get("origin") || "http://localhost:3000";
+  return origin.replace(/\/+$/, "");
 }
+
 
 export async function POST(req: Request) {
   try {
