@@ -1,13 +1,29 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-function getBaseUrl(req: Request) {
-  const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (envUrl) return envUrl.replace(/\/+$/, "");
+function normalizeBaseUrl(url: string) {
+  return url.trim().replace(/\/+$/, "");
+}
 
-  // fallback (dev)
+/**
+ * IMPORTANT:
+ * - En prod on veut TOUJOURS pawpass.fr (pas l'origin de la requête)
+ * - En dev on accepte localhost
+ */
+function getPublicSiteUrl(req: Request) {
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (envUrl) return normalizeBaseUrl(envUrl);
+
+  // Si tu déploies sur Vercel et que NEXT_PUBLIC_SITE_URL n'est pas set :
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) {
+    const full = vercel.startsWith("http") ? vercel : `https://${vercel}`;
+    return normalizeBaseUrl(full);
+  }
+
+  // Fallback : origin (dev)
   const origin = req.headers.get("origin") || "http://localhost:3000";
-  return origin.replace(/\/+$/, "");
+  return normalizeBaseUrl(origin);
 }
 
 export async function POST(req: Request) {
@@ -45,6 +61,7 @@ export async function POST(req: Request) {
 
     // User client (RLS) to check current user + admin status
     const userClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false },
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
 
@@ -64,13 +81,16 @@ export async function POST(req: Request) {
     if (!adminRow) return NextResponse.json({ error: "Forbidden (not admin)" }, { status: 403 });
 
     // Service role for auth admin + DB inserts
-    const admin = createClient(supabaseUrl, serviceKey);
+    const admin = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
 
-    // ✅ IMPORTANT: forcer l'URL prod si dispo
-    const baseUrl = getBaseUrl(req);
+    // ✅ URL publique de ton site
+    const siteUrl = getPublicSiteUrl(req);
 
-    // ✅ INVITE: rediriger vers /auth/callback (et seulement ensuite tu gères le next)
-    const redirectTo = `${baseUrl}/auth/callback?next=/reset-password`;
+    // ✅ CRUCIAL : le clic du mail DOIT aller sur /auth/callback
+    // et ensuite TON callback redirige vers /reset-password via ?next=
+    const redirectTo = `${siteUrl}/auth/callback?next=/reset-password`;
 
     // 1) Invite user => envoie email "set password"
     const { data: invited, error: iErr } = await admin.auth.admin.inviteUserByEmail(email, {

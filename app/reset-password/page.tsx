@@ -22,7 +22,7 @@ function parseHashTokens(hash: string) {
   return { access_token, refresh_token };
 }
 
-async function waitForSession(supabase: any, tries = 10, delayMs = 150) {
+async function waitForSession(supabase: any, tries = 20, delayMs = 200) {
   for (let i = 0; i < tries; i++) {
     const { data, error } = await supabase.auth.getSession();
     if (!error && data?.session) return data.session;
@@ -54,20 +54,9 @@ function ResetPasswordInner() {
       setReady(false);
 
       try {
-        // 1) PKCE code (si présent)
-        const code = searchParams.get("code");
-        if (code) {
-          const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchErr) {
-            console.error("exchangeCodeForSession error:", exchErr.message);
-            if (!cancelled) {
-              setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
-            }
-            return;
-          }
-        }
+        const href = window.location.href;
 
-        // 2) Hash tokens (#access_token=...&refresh_token=...) : INVITE / MAGIC / VERIFY
+        // ✅ 0) Cas HASH (#access_token=...&refresh_token=...) : invite / magic link / verify
         const tokens = parseHashTokens(window.location.hash);
         if (tokens) {
           const { error: sessErr } = await supabase.auth.setSession(tokens);
@@ -79,15 +68,35 @@ function ResetPasswordInner() {
             return;
           }
 
-          // Nettoie l’URL (optionnel mais évite de garder le token dans l’URL)
+          // Nettoie l’URL (évite de laisser les tokens)
           try {
             const cleanUrl = window.location.pathname + window.location.search;
             window.history.replaceState({}, "", cleanUrl);
           } catch {}
         }
 
-        // 3) Attendre la session (storage/async)
-        const session = await waitForSession(supabase, 10, 150);
+        // ✅ 1) PKCE code (?code=...) : IMPORTANT -> on passe l'URL complète (plus robuste)
+        const code = searchParams.get("code");
+        if (code) {
+          const { error: exchErr } = await supabase.auth.exchangeCodeForSession(href);
+          if (exchErr) {
+            console.error("exchangeCodeForSession error:", exchErr.message);
+            if (!cancelled) {
+              setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
+            }
+            return;
+          }
+
+          // Nettoie le code dans l’URL (optionnel)
+          try {
+            const u = new URL(window.location.href);
+            u.searchParams.delete("code");
+            window.history.replaceState({}, "", u.pathname + (u.search ? `?${u.searchParams.toString()}` : ""));
+          } catch {}
+        }
+
+        // ✅ 2) Attendre la session (storage/async)
+        const session = await waitForSession(supabase, 20, 200);
         if (cancelled) return;
 
         if (!session) {
@@ -124,6 +133,13 @@ function ResetPasswordInner() {
 
     setLoading(true);
     try {
+      // ✅ S’assure d’avoir une session juste avant l’update (évite no_session aléatoire)
+      const session = await waitForSession(supabase, 10, 150);
+      if (!session) {
+        setErrorMsg("Session introuvable. Merci de rouvrir le lien depuis l’email.");
+        return;
+      }
+
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
         setErrorMsg(error.message || "Impossible de modifier le mot de passe.");
@@ -138,7 +154,6 @@ function ResetPasswordInner() {
       }
 
       const role = getRoleFromUser(uData.user);
-
       setDone(true);
 
       if (role === "spa") {
