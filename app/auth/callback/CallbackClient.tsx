@@ -15,111 +15,119 @@ function safeRoleRedirect(role?: string | null) {
   return "/dashboard";
 }
 
+function parseNextFromLocation(): string | null {
+  try {
+    const u = new URL(window.location.href);
+    const next = (u.searchParams.get("next") || "").trim();
+    if (!next) return null;
+    return next.startsWith("/") ? next : `/${next}`;
+  } catch {
+    return null;
+  }
+}
+
+function parseHashTokens(): { access_token: string; refresh_token: string } | null {
+  const hash = window.location.hash || "";
+  if (!hash.startsWith("#")) return null;
+
+  const params = new URLSearchParams(hash.slice(1));
+  const access_token = params.get("access_token");
+  const refresh_token = params.get("refresh_token");
+
+  if (!access_token || !refresh_token) return null;
+  return { access_token, refresh_token };
+}
+
+async function waitForSession(tries = 12, delayMs = 150) {
+  for (let i = 0; i < tries; i++) {
+    const { data, error } = await supabase.auth.getSession();
+    if (!error && data?.session) return data.session;
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return null;
+}
+
 export default function CallbackClient() {
   const router = useRouter();
 
   useEffect(() => {
+    let cancelled = false;
+
+    const go = (path: string) => {
+      if (!cancelled) router.replace(path);
+    };
+
     const run = async () => {
       try {
         const href = window.location.href;
         console.log("CALLBACK CLIENT RUNNING", href);
 
-        // ✅ 1) CAS INVITE / RECOVERY: paramètres en query (?code=... ou ?token=...&type=invite ...)
-        const search = new URLSearchParams(window.location.search);
-        const type = (search.get("type") || "").toLowerCase();
+        const next = parseNextFromLocation();
 
-        // Supabase peut envoyer:
-        // - ?type=invite&token=...
-        // - ?type=recovery&token=...
-        // - ?code=... (selon config / flow)
-        const hasInviteOrRecovery = type === "invite" || type === "recovery";
-        const hasCode = !!search.get("code");
-        const hasToken = !!search.get("token");
-
-        if (hasInviteOrRecovery || hasCode || hasToken) {
-          // 🔥 Le plus robuste: exchangeCodeForSession sur l'URL complète
-          const { data, error } = await supabase.auth.exchangeCodeForSession(href);
-          if (error) {
-            console.error("exchangeCodeForSession error:", error);
-
-            // Fallback: si jamais c'est un vieux flow token/type sans code
-            // on tente au moins de récupérer une session existante
-            const sess = await supabase.auth.getSession();
-            if (!sess.data.session) {
-              router.replace("/login?err=auth_callback");
-              return;
-            }
-          }
-
-          // Maintenant on a (normalement) une session
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-
-          if (!user) {
-            router.replace("/login?err=no_user");
+        // 1) Cas HASH (#access_token=...&refresh_token=...)
+        // => on crée la session immédiatement
+        const tokens = parseHashTokens();
+        if (tokens) {
+          const { error: setErr } = await supabase.auth.setSession(tokens);
+          if (setErr) {
+            console.error("setSession error:", setErr);
+            go("/login?err=set_session");
             return;
           }
 
-          const role = (user.user_metadata as any)?.role as string | undefined;
-          router.replace(safeRoleRedirect(role));
+          // Optionnel: nettoyer le hash pour éviter de garder les tokens dans l'URL
+          try {
+            const cleanUrl = window.location.pathname + window.location.search;
+            window.history.replaceState({}, "", cleanUrl);
+          } catch {}
+        }
+
+        // 2) Cas PKCE / verify (Supabase peut renvoyer ?code=... ou autres)
+        // exchangeCodeForSession accepte l'URL complète, et n'explose pas si pas de code
+        // (on ignore juste l'erreur si aucune donnée exploitable)
+        const { error: exchErr } = await supabase.auth.exchangeCodeForSession(href);
+        if (exchErr) {
+          // Important: parfois il n'y a rien à échanger, donc on ne hard-fail pas ici
+          console.warn("exchangeCodeForSession warning:", exchErr.message);
+        }
+
+        // 3) Attendre la session (évite les retours /login trop tôt)
+        const session = await waitForSession();
+        if (!session) {
+          go("/login?err=no_session");
           return;
         }
 
-        // ✅ 2) CAS MAGIC LINK / OAUTH HASH: #access_token=...&refresh_token=...
-        const hash = window.location.hash || "";
-        if (hash.startsWith("#")) {
-          const params = new URLSearchParams(hash.slice(1));
-          const access_token = params.get("access_token");
-          const refresh_token = params.get("refresh_token");
-
-          if (access_token && refresh_token) {
-            const { error } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-
-            if (error) {
-              console.error("setSession error:", error);
-              router.replace("/login?err=set_session");
-              return;
-            }
-
-            const {
-              data: { user },
-            } = await supabase.auth.getUser();
-
-            if (!user) {
-              router.replace("/login?err=no_user");
-              return;
-            }
-
-            const role = (user.user_metadata as any)?.role as string | undefined;
-            router.replace(safeRoleRedirect(role));
-            return;
-          }
-        }
-
-        // ✅ 3) Sinon: si une session existe déjà, on redirige quand même
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          const role = (user?.user_metadata as any)?.role as string | undefined;
-          router.replace(safeRoleRedirect(role));
+        // ✅ PRIORITÉ ABSOLUE: next
+        if (next) {
+          go(next);
           return;
         }
 
-        // ❌ Rien à faire → login
-        router.replace("/login");
+        // 4) Sinon redirect par rôle
+        const {
+          data: { user },
+          error: userErr,
+        } = await supabase.auth.getUser();
+
+        if (userErr || !user) {
+          go("/login?err=no_user");
+          return;
+        }
+
+        const role = (user.user_metadata as any)?.role as string | undefined;
+        go(safeRoleRedirect(role));
       } catch (e) {
         console.error("Callback fatal error:", e);
-        router.replace("/login?err=fatal");
+        go("/login?err=fatal");
       }
     };
 
     run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   return <div style={{ padding: 24 }}>Finalisation de la connexion…</div>;
