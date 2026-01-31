@@ -68,10 +68,7 @@ const requireAdmin = async () => {
   return { supabase, userId: user.id };
 };
 
-const fetchSpas = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>
-) => {
-  // On sélectionne tout ce dont on a besoin pour debug + affichage
+const fetchSpas = async (supabase: ReturnType<typeof createSupabaseServerClient>) => {
   const { data, error } = await supabase
     .from("spas")
     .select("id,name,city,email,iban,auth_user_id,created_at")
@@ -84,23 +81,40 @@ const fetchSpas = async (
   return { data: (data ?? []) as SpaRow[], error: null as string | null };
 };
 
+function normalizeBaseUrl(url: string) {
+  return url.replace(/\/+$/, "");
+}
+
+function getSiteUrl() {
+  // 1) URL canonique (à mettre dans Vercel): https://pawpass.fr
+  const envSite = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (envSite) return normalizeBaseUrl(envSite);
+
+  // 2) Vercel URL (sans scheme) => https://xxx.vercel.app
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) {
+    const withScheme = vercel.startsWith("http") ? vercel : `https://${vercel}`;
+    return normalizeBaseUrl(withScheme);
+  }
+
+  // 3) fallback local
+  return "http://localhost:3000";
+}
+
 // ---------------------------
-// ✅ Server Action : créer une SPA + envoyer email d’invitation
+// Server Action : créer une SPA + envoyer email d’invitation
 // ---------------------------
 async function createSpaAction(formData: FormData) {
   "use server";
 
-  const { supabase } = await requireAdmin(); // protège l’action côté serveur
+  await requireAdmin(); // protège l’action côté serveur
 
   const name = String(formData.get("name") ?? "").trim();
   const city = String(formData.get("city") ?? "").trim();
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
 
   const ibanRaw = formData.get("iban");
-  const iban =
-    typeof ibanRaw === "string" && ibanRaw.trim() ? ibanRaw.trim() : null;
+  const iban = typeof ibanRaw === "string" && ibanRaw.trim() ? ibanRaw.trim() : null;
 
   if (!name || !city || !email) {
     redirect("/admin/spas?err=missing_fields");
@@ -110,9 +124,7 @@ async function createSpaAction(formData: FormData) {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceKey) {
-    console.error(
-      "Env manquantes: NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY"
-    );
+    console.error("Env manquantes: NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
     redirect("/admin/spas?err=missing_env");
   }
 
@@ -121,26 +133,16 @@ async function createSpaAction(formData: FormData) {
     auth: { persistSession: false },
   });
 
-  // URL où la SPA va choisir son mot de passe (ta page /reset-password)
-  // IMPORTANT : ajoute cette URL dans Supabase > Auth > URL Configuration > Redirect URLs
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.VERCEL_URL?.startsWith("http")
-      ? process.env.VERCEL_URL
-      : process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000";
+  const siteUrl = getSiteUrl();
 
-  const redirectTo = `${siteUrl}/reset-password`;
+  // ✅ LE POINT CLÉ: on passe par /auth/callback (pas /reset-password direct)
+  const redirectTo = `${siteUrl}/auth/callback?next=/reset-password`;
 
-  // 1) Invite Auth user (envoie l’email d’invitation / set password)
-  const { data: invited, error: iErr } = await admin.auth.admin.inviteUserByEmail(
-    email,
-    {
-      redirectTo,
-      data: { role: "spa", name }, // metadata optionnel
-    }
-  );
+  // 1) Invite Auth user
+  const { data: invited, error: iErr } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+    data: { role: "spa", name },
+  });
 
   if (iErr || !invited?.user) {
     console.error("inviteUserByEmail error:", iErr?.message);
@@ -149,7 +151,19 @@ async function createSpaAction(formData: FormData) {
 
   const spaUserId = invited.user.id;
 
-  // 2) Insert spas row (liée à auth_user_id)
+  // ✅ créer le profile avec le rôle (utile pour les redirects & guards)
+  const { error: pErr } = await admin.from("profiles").upsert({
+    id: spaUserId,
+    role: "spa",
+  });
+
+  if (pErr) {
+    console.error("profiles upsert error:", pErr.message);
+    await admin.auth.admin.deleteUser(spaUserId);
+    redirect(`/admin/spas?err=${encodeURIComponent(pErr.message)}`);
+  }
+
+  // 2) Insert spas row
   const { error: sErr } = await admin.from("spas").insert({
     auth_user_id: spaUserId,
     name,
@@ -160,7 +174,8 @@ async function createSpaAction(formData: FormData) {
 
   if (sErr) {
     console.error("Insert spa error:", sErr.message);
-    // rollback auth user pour éviter un user orphelin
+    // rollback
+    await admin.from("profiles").delete().eq("id", spaUserId);
     await admin.auth.admin.deleteUser(spaUserId);
     redirect(`/admin/spas?err=${encodeURIComponent(sErr.message)}`);
   }
@@ -182,7 +197,6 @@ export default async function AdminSpasPage({
 
   return (
     <div className="container">
-      {/* barre d’onglets admin */}
       <nav
         style={{
           marginBottom: 24,
@@ -279,9 +293,7 @@ export default async function AdminSpasPage({
 
       <div className="card" style={{ marginBottom: 24 }}>
         <h2>Gestion des SPA</h2>
-        <p className="helper">
-          Ajoutez, mettez à jour ou supprimez les SPA partenaires.
-        </p>
+        <p className="helper">Ajoutez, mettez à jour ou supprimez les SPA partenaires.</p>
 
         {ok === "spa_invited" && (
           <p
@@ -295,7 +307,7 @@ export default async function AdminSpasPage({
               color: "#0f172a",
             }}
           >
-            ✅ SPA créée. Email d’invitation envoyé (elle peut choisir son mot de passe).
+            ✅ SPA créée. Email d’invitation envoyé.
           </p>
         )}
 
@@ -309,7 +321,6 @@ export default async function AdminSpasPage({
       <div className="card" style={{ marginBottom: 24 }}>
         <h3>Ajouter une SPA</h3>
 
-        {/* ✅ On remplace l’ancien addSpaAction : maintenant ça crée Auth + envoie email */}
         <form action={createSpaAction}>
           <label className="label" htmlFor="spaName">
             Nom
@@ -335,12 +346,7 @@ export default async function AdminSpasPage({
 
           <label className="label" htmlFor="spaIban">
             IBAN (optionnel)
-            <input
-              id="spaIban"
-              className="input"
-              name="iban"
-              placeholder="FR76 ..."
-            />
+            <input id="spaIban" className="input" name="iban" placeholder="FR76 ..." />
           </label>
 
           <button className="button" type="submit" style={{ marginTop: 12 }}>
@@ -348,8 +354,8 @@ export default async function AdminSpasPage({
           </button>
 
           <p className="helper" style={{ marginTop: 10 }}>
-            La SPA recevra un email pour choisir un mot de passe, puis pourra se connecter
-            et accéder à <b>/spa</b>.
+            La SPA recevra un email pour choisir un mot de passe, puis pourra se connecter et accéder
+            à <b>/spa</b>.
           </p>
         </form>
       </div>
