@@ -5,6 +5,7 @@ function getBaseUrl(req: Request) {
   const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (envUrl) return envUrl.replace(/\/+$/, "");
 
+  // fallback (dev)
   const origin = req.headers.get("origin") || "http://localhost:3000";
   return origin.replace(/\/+$/, "");
 }
@@ -65,9 +66,11 @@ export async function POST(req: Request) {
     // Service role for auth admin + DB inserts
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // URL où la SPA choisira son mot de passe
+    // ✅ IMPORTANT: forcer l'URL prod si dispo
     const baseUrl = getBaseUrl(req);
-    const redirectTo = `${baseUrl}/reset-password`;
+
+    // ✅ INVITE: rediriger vers /auth/callback (et seulement ensuite tu gères le next)
+    const redirectTo = `${baseUrl}/auth/callback?next=/reset-password`;
 
     // 1) Invite user => envoie email "set password"
     const { data: invited, error: iErr } = await admin.auth.admin.inviteUserByEmail(email, {
