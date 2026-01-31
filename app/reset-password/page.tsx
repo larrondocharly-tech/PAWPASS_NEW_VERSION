@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabaseClient";
@@ -8,9 +8,27 @@ import { createClient } from "@/lib/supabaseClient";
 export const dynamic = "force-dynamic";
 
 function getRoleFromUser(user: any): string | null {
-  // Supabase peut stocker dans user.user_metadata
   const role = user?.user_metadata?.role ?? user?.app_metadata?.role ?? null;
   return typeof role === "string" ? role : null;
+}
+
+function parseHashTokens(hash: string) {
+  const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
+  if (!h) return null;
+  const p = new URLSearchParams(h);
+  const access_token = p.get("access_token");
+  const refresh_token = p.get("refresh_token");
+  if (!access_token || !refresh_token) return null;
+  return { access_token, refresh_token };
+}
+
+async function waitForSession(supabase: any, tries = 10, delayMs = 150) {
+  for (let i = 0; i < tries; i++) {
+    const { data, error } = await supabase.auth.getSession();
+    if (!error && data?.session) return data.session;
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return null;
 }
 
 function ResetPasswordInner() {
@@ -28,9 +46,6 @@ function ResetPasswordInner() {
   const [done, setDone] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // ✅ Supporte:
-  // - /reset-password?code=... (PKCE) -> exchangeCodeForSession
-  // - /reset-password#access_token=... (implicit) -> getSession récupère la session
   useEffect(() => {
     let cancelled = false;
 
@@ -39,8 +54,8 @@ function ResetPasswordInner() {
       setReady(false);
 
       try {
+        // 1) PKCE code (si présent)
         const code = searchParams.get("code");
-
         if (code) {
           const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
           if (exchErr) {
@@ -52,10 +67,30 @@ function ResetPasswordInner() {
           }
         }
 
-        const { data, error } = await supabase.auth.getSession();
+        // 2) Hash tokens (#access_token=...&refresh_token=...) : INVITE / MAGIC / VERIFY
+        const tokens = parseHashTokens(window.location.hash);
+        if (tokens) {
+          const { error: sessErr } = await supabase.auth.setSession(tokens);
+          if (sessErr) {
+            console.error("setSession error:", sessErr.message);
+            if (!cancelled) {
+              setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
+            }
+            return;
+          }
+
+          // Nettoie l’URL (optionnel mais évite de garder le token dans l’URL)
+          try {
+            const cleanUrl = window.location.pathname + window.location.search;
+            window.history.replaceState({}, "", cleanUrl);
+          } catch {}
+        }
+
+        // 3) Attendre la session (storage/async)
+        const session = await waitForSession(supabase, 10, 150);
         if (cancelled) return;
 
-        if (error || !data.session) {
+        if (!session) {
           setSessionError("Lien invalide ou expiré. Refaites « mot de passe oublié ».");
           return;
         }
@@ -89,17 +124,14 @@ function ResetPasswordInner() {
 
     setLoading(true);
     try {
-      // 1) update password
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
         setErrorMsg(error.message || "Impossible de modifier le mot de passe.");
         return;
       }
 
-      // 2) récupère l'utilisateur pour savoir où rediriger
       const { data: uData, error: uErr } = await supabase.auth.getUser();
       if (uErr || !uData?.user) {
-        // Si on n'arrive pas à lire le user, on fallback login
         setDone(true);
         setTimeout(() => router.push("/login"), 700);
         return;
@@ -109,14 +141,6 @@ function ResetPasswordInner() {
 
       setDone(true);
 
-      // ✅ IMPORTANT:
-      // Pour une SPA invitée, c'est plus logique de la laisser connectée
-      // Donc PAS de signOut ici.
-      // Si tu veux forcer une reconnexion, décommente les 2 lignes:
-      // await supabase.auth.signOut();
-      // router.push("/login");
-
-      // 3) redirect selon role
       if (role === "spa") {
         setTimeout(() => router.push("/spa"), 700);
       } else if (role === "merchant") {
@@ -124,7 +148,6 @@ function ResetPasswordInner() {
       } else if (role === "admin") {
         setTimeout(() => router.push("/admin"), 700);
       } else {
-        // utilisateur standard
         setTimeout(() => router.push("/login"), 700);
       }
     } finally {
