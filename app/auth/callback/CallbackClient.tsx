@@ -6,7 +6,15 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true, // important
+      flowType: "pkce", // ok même si pas utilisé
+    },
+  }
 );
 
 function safeRoleRedirect(role?: string | null) {
@@ -15,12 +23,12 @@ function safeRoleRedirect(role?: string | null) {
   return "/dashboard";
 }
 
-function parseNextFromLocation(): string | null {
+function getNext(): string | null {
   try {
     const u = new URL(window.location.href);
-    const next = (u.searchParams.get("next") || "").trim();
-    if (!next) return null;
-    return next.startsWith("/") ? next : `/${next}`;
+    const n = (u.searchParams.get("next") || "").trim();
+    if (!n) return null;
+    return n.startsWith("/") ? n : `/${n}`;
   } catch {
     return null;
   }
@@ -30,15 +38,15 @@ function parseHashTokens(): { access_token: string; refresh_token: string } | nu
   const hash = window.location.hash || "";
   if (!hash.startsWith("#")) return null;
 
-  const params = new URLSearchParams(hash.slice(1));
-  const access_token = params.get("access_token");
-  const refresh_token = params.get("refresh_token");
-
+  const p = new URLSearchParams(hash.slice(1));
+  const access_token = p.get("access_token");
+  const refresh_token = p.get("refresh_token");
   if (!access_token || !refresh_token) return null;
+
   return { access_token, refresh_token };
 }
 
-async function waitForSession(tries = 12, delayMs = 150) {
+async function waitForSession(tries = 15, delayMs = 200) {
   for (let i = 0; i < tries; i++) {
     const { data, error } = await supabase.auth.getSession();
     if (!error && data?.session) return data.session;
@@ -62,60 +70,57 @@ export default function CallbackClient() {
         const href = window.location.href;
         console.log("CALLBACK CLIENT RUNNING", href);
 
-        const next = parseNextFromLocation();
+        const next = getNext();
 
-        // 1) Cas HASH (#access_token=...&refresh_token=...)
-        // => on crée la session immédiatement
+        // 1) INVITE/MAGIC: tokens dans le hash
         const tokens = parseHashTokens();
         if (tokens) {
-          const { error: setErr } = await supabase.auth.setSession(tokens);
-          if (setErr) {
-            console.error("setSession error:", setErr);
+          const { error } = await supabase.auth.setSession(tokens);
+          if (error) {
+            console.error("setSession error:", error);
             go("/login?err=set_session");
             return;
           }
 
-          // Optionnel: nettoyer le hash pour éviter de garder les tokens dans l'URL
+          // Nettoie l’URL (évite de garder les tokens)
           try {
-            const cleanUrl = window.location.pathname + window.location.search;
-            window.history.replaceState({}, "", cleanUrl);
+            const clean = window.location.pathname + window.location.search;
+            window.history.replaceState({}, "", clean);
           } catch {}
         }
 
-        // 2) Cas PKCE / verify (Supabase peut renvoyer ?code=... ou autres)
-        // exchangeCodeForSession accepte l'URL complète, et n'explose pas si pas de code
-        // (on ignore juste l'erreur si aucune donnée exploitable)
-        const { error: exchErr } = await supabase.auth.exchangeCodeForSession(href);
-        if (exchErr) {
-          // Important: parfois il n'y a rien à échanger, donc on ne hard-fail pas ici
-          console.warn("exchangeCodeForSession warning:", exchErr.message);
+        // 2) PKCE: code dans la query
+        const u = new URL(window.location.href);
+        const code = u.searchParams.get("code");
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.warn("exchangeCodeForSession warning:", error.message);
+            // on ne hard-fail pas : parfois la session est déjà mise via detectSessionInUrl
+          }
         }
 
-        // 3) Attendre la session (évite les retours /login trop tôt)
+        // 3) Attendre la session
         const session = await waitForSession();
         if (!session) {
           go("/login?err=no_session");
           return;
         }
 
-        // ✅ PRIORITÉ ABSOLUE: next
+        // ✅ priorité absolue à next
         if (next) {
           go(next);
           return;
         }
 
         // 4) Sinon redirect par rôle
-        const {
-          data: { user },
-          error: userErr,
-        } = await supabase.auth.getUser();
-
-        if (userErr || !user) {
+        const { data: uData, error: uErr } = await supabase.auth.getUser();
+        if (uErr || !uData?.user) {
           go("/login?err=no_user");
           return;
         }
 
-        const role = (user.user_metadata as any)?.role as string | undefined;
+        const role = (uData.user.user_metadata as any)?.role as string | undefined;
         go(safeRoleRedirect(role));
       } catch (e) {
         console.error("Callback fatal error:", e);
