@@ -40,7 +40,6 @@ export default function AdminMerchantApplicationsPage() {
       setIsLoading(true);
       setError(null);
 
-      // 1) Vérifier la session
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -50,7 +49,6 @@ export default function AdminMerchantApplicationsPage() {
         return;
       }
 
-      // 2) Vérifier le rôle admin
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
@@ -68,7 +66,6 @@ export default function AdminMerchantApplicationsPage() {
         return;
       }
 
-      // 3) Charger les demandes en attente
       const { data, error: fetchError } = await supabase
         .from("merchant_applications")
         .select(
@@ -94,24 +91,121 @@ export default function AdminMerchantApplicationsPage() {
     setError(null);
     setActionId(application.id);
 
-    // 0) Vérifier si l'utilisateur a déjà un merchant_id
-    const {
-      data: existingProfile,
-      error: existingProfileError,
-    } = await supabase
-      .from("profiles")
-      .select("role, merchant_id, merchant_code")
-      .eq("id", application.user_id)
-      .maybeSingle();
+    try {
+      // 0) Lire le profil du demandeur
+      const { data: existingProfile, error: existingProfileError } =
+        await supabase
+          .from("profiles")
+          .select("role, merchant_id, merchant_code")
+          .eq("id", application.user_id)
+          .maybeSingle();
 
-    if (existingProfileError) {
-      setError(existingProfileError.message);
-      setActionId(null);
-      return;
-    }
+      if (existingProfileError) throw new Error(existingProfileError.message);
 
-    // S'il est déjà relié à un commerçant → on ne recrée rien
-    if (existingProfile && existingProfile.merchant_id) {
+      // Si le profil est déjà relié à un merchant -> on valide juste la demande
+      if (existingProfile?.merchant_id) {
+        const { error: applicationUpdateError } = await supabase
+          .from("merchant_applications")
+          .update({
+            status: "approved",
+            reviewed_at: new Date().toISOString(),
+          })
+          .eq("id", application.id);
+
+        if (applicationUpdateError) throw new Error(applicationUpdateError.message);
+
+        setApplications((prev) => prev.filter((item) => item.id !== application.id));
+        setActionId(null);
+        return;
+      }
+
+      // 1) Trouver le merchant EXISTANT par user_id (c’est ça qui empêche les doublons)
+      const { data: existingMerchant, error: existingMerchantError } =
+        await supabase
+          .from("merchants")
+          .select("id, qr_token, is_active")
+          .eq("user_id", application.user_id)
+          .maybeSingle();
+
+      if (existingMerchantError) throw new Error(existingMerchantError.message);
+
+      let merchantId: string | null = existingMerchant?.id ?? null;
+      let finalQrToken: string | null = existingMerchant?.qr_token ?? null;
+
+      // 2) Si le merchant existe => UPDATE (activation + compléter champs si besoin)
+      if (merchantId) {
+        const { error: updateMerchantError } = await supabase
+          .from("merchants")
+          .update({
+            // on active seulement
+            is_active: true,
+            // optionnel: mettre à jour les infos depuis la demande si tu veux
+            name: application.business_name,
+            city: application.city,
+            address: application.address,
+          })
+          .eq("id", merchantId);
+
+        if (updateMerchantError) throw new Error(updateMerchantError.message);
+
+        // si pas de qr_token (rare), on en génère 1 et on le pose
+        if (!finalQrToken) {
+          const generated = buildMerchantToken(application.user_id);
+          const { data: updated, error: qrUpdateError } = await supabase
+            .from("merchants")
+            .update({ qr_token: generated })
+            .eq("id", merchantId)
+            .select("qr_token")
+            .single();
+
+          if (qrUpdateError) throw new Error(qrUpdateError.message);
+          finalQrToken = updated?.qr_token ?? generated;
+        }
+      } else {
+        // 3) Si le merchant N’EXISTE PAS (cas rare) => création UNIQUE par user_id
+        const qrToken = buildMerchantToken(application.user_id);
+
+        const { data: created, error: createMerchantError } = await supabase
+          .from("merchants")
+          .insert({
+            user_id: application.user_id, // <-- IMPORTANT: lien unique
+            name: application.business_name,
+            city: application.city,
+            address: application.address,
+            qr_token: qrToken,
+            is_active: true,
+          })
+          .select("id, qr_token")
+          .single();
+
+        if (createMerchantError || !created) {
+          throw new Error(
+            createMerchantError?.message ??
+              "Impossible de créer le commerçant à partir de cette demande."
+          );
+        }
+
+        merchantId = created.id;
+        finalQrToken = created.qr_token ?? qrToken;
+      }
+
+      if (!merchantId || !finalQrToken) {
+        throw new Error("MerchantId / QR token manquant après approbation.");
+      }
+
+      // 4) Mise à jour du profil utilisateur -> rôle merchant
+      const { error: profileUpdateError } = await supabase
+        .from("profiles")
+        .update({
+          role: "merchant",
+          merchant_id: merchantId,
+          merchant_code: finalQrToken,
+        })
+        .eq("id", application.user_id);
+
+      if (profileUpdateError) throw new Error(profileUpdateError.message);
+
+      // 5) Marquer la demande comme approuvée
       const { error: applicationUpdateError } = await supabase
         .from("merchant_applications")
         .update({
@@ -120,86 +214,15 @@ export default function AdminMerchantApplicationsPage() {
         })
         .eq("id", application.id);
 
-      if (applicationUpdateError) {
-        setError(applicationUpdateError.message);
-        setActionId(null);
-        return;
-      }
+      if (applicationUpdateError) throw new Error(applicationUpdateError.message);
 
-      setApplications((prev) =>
-        prev.filter((item) => item.id !== application.id)
-      );
+      // 6) Retirer la demande de la liste
+      setApplications((prev) => prev.filter((item) => item.id !== application.id));
       setActionId(null);
-      return;
-    }
-
-    // 1) Générer un QR token
-    const qrToken = buildMerchantToken(application.user_id);
-
-    // 2) Création simple du commerçant (plus de ON CONFLICT, plus de contrainte unique)
-    const {
-      data: merchant,
-      error: merchantError,
-    } = await supabase
-      .from("merchants")
-      .insert({
-        name: application.business_name,
-        city: application.city,
-        address: application.address,
-        qr_token: qrToken,
-        is_active: true,
-      })
-      .select("id, qr_token")
-      .single();
-
-    if (merchantError || !merchant) {
-      setError(
-        merchantError?.message ??
-          "Impossible de créer le commerçant à partir de cette demande."
-      );
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur inconnue lors de l’approbation.");
       setActionId(null);
-      return;
     }
-
-    const merchantId = merchant.id;
-    const finalQrToken = merchant.qr_token || qrToken;
-
-    // 3) Mise à jour du profil utilisateur -> rôle merchant
-    const { error: profileUpdateError } = await supabase
-      .from("profiles")
-      .update({
-        role: "merchant",
-        merchant_id: merchantId,
-        merchant_code: finalQrToken,
-      })
-      .eq("id", application.user_id);
-
-    if (profileUpdateError) {
-      setError(profileUpdateError.message);
-      setActionId(null);
-      return;
-    }
-
-    // 4) Marquer la demande comme approuvée
-    const { error: applicationUpdateError } = await supabase
-      .from("merchant_applications")
-      .update({
-        status: "approved",
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq("id", application.id);
-
-    if (applicationUpdateError) {
-      setError(applicationUpdateError.message);
-      setActionId(null);
-      return;
-    }
-
-    // 5) Retirer la demande de la liste
-    setApplications((prev) =>
-      prev.filter((item) => item.id !== application.id)
-    );
-    setActionId(null);
   };
 
   const handleReject = async (application: MerchantApplication) => {
@@ -220,9 +243,7 @@ export default function AdminMerchantApplicationsPage() {
       return;
     }
 
-    setApplications((prev) =>
-      prev.filter((item) => item.id !== application.id)
-    );
+    setApplications((prev) => prev.filter((item) => item.id !== application.id));
     setActionId(null);
   };
 
@@ -262,10 +283,7 @@ export default function AdminMerchantApplicationsPage() {
               </p>
 
               {application.address && (
-                <p
-                  className="helper"
-                  style={{ marginTop: 4, fontSize: "0.9rem" }}
-                >
+                <p className="helper" style={{ marginTop: 4, fontSize: "0.9rem" }}>
                   {application.address}
                 </p>
               )}
@@ -282,23 +300,14 @@ export default function AdminMerchantApplicationsPage() {
                 </p>
               )}
 
-              {application.message && (
-                <p style={{ marginTop: 8 }}>{application.message}</p>
-              )}
+              {application.message && <p style={{ marginTop: 8 }}>{application.message}</p>}
 
               <p className="helper" style={{ marginTop: 8 }}>
                 Demande créée le{" "}
                 {new Date(application.created_at).toLocaleString("fr-FR")}
               </p>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  flexWrap: "wrap",
-                  marginTop: 12,
-                }}
-              >
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
                 <button
                   className="button"
                   type="button"
