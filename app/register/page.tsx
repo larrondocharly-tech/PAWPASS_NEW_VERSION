@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
+type Category = { id: string; slug: string; label: string };
+
 export default function RegisterPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,14 +26,66 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [siret, setSiret] = useState("");
 
+  // Catégories (merchant)
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategorySlugs, setSelectedCategorySlugs] = useState<string[]>([]);
+  const [catError, setCatError] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
+
+  // Charger catégories (une seule fois)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCatError(null);
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id,slug,label")
+        .order("label", { ascending: true });
+
+      if (cancelled) return;
+
+      if (error) {
+        setCatError(error.message);
+        setCategories([]);
+        return;
+      }
+
+      setCategories((data as Category[]) ?? []);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
+
+  // Si on décoche "Je suis commerçant", on reset les catégories sélectionnées
+  useEffect(() => {
+    if (!isMerchant) setSelectedCategorySlugs([]);
+  }, [isMerchant]);
+
+  function toggleCategory(slug: string) {
+    setSelectedCategorySlugs((prev) => {
+      const set = new Set(prev);
+      if (set.has(slug)) set.delete(slug);
+      else set.add(slug);
+      return Array.from(set);
+    });
+  }
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
     setInfoMsg("");
+
+    // Petit garde-fou UX (optionnel mais utile)
+    if (isMerchant && selectedCategorySlugs.length === 0) {
+      setErrorMsg("Merci de sélectionner au moins une catégorie pour votre commerce.");
+      return;
+    }
+
     setLoading(true);
 
     const role = isMerchant ? "merchant" : "user";
@@ -66,28 +120,11 @@ export default function RegisterPage() {
 
     const newUser = data.user;
 
-    // ✅ CAS IMPORTANT: si la confirmation email est activée, data.session peut être null
-    // Donc l'utilisateur n'est pas connecté -> on ne doit PAS l'envoyer sur /tutorial directement
+    // ⚠️ Si confirmation email activée -> pas de session
     if (!data.session) {
-      setLoading(false);
-
-      setInfoMsg(
-        "Compte créé. Vérifiez vos emails pour confirmer votre adresse, puis connectez-vous."
-      );
-
-      // Tu peux rediriger automatiquement vers /login après 1s (optionnel)
-      setTimeout(() => {
-        router.push("/login");
-      }, 900);
-
-      return;
-    }
-
-    // 2) Si commerçant : créer aussi une demande dans merchant_applications
-    if (isMerchant && newUser?.id) {
-      const { error: appError } = await supabase
-        .from("merchant_applications")
-        .insert({
+      // On enregistre quand même la demande commerçant si besoin (pending)
+      if (isMerchant && newUser?.id) {
+        const { error: appError } = await supabase.from("merchant_applications").insert({
           user_id: newUser.id,
           business_name: shopName,
           city: city,
@@ -98,7 +135,46 @@ export default function RegisterPage() {
           siret: siret,
           message: null,
           status: "pending",
+          category_slugs: selectedCategorySlugs,
         });
+
+        if (appError) {
+          console.error(appError);
+          setLoading(false);
+          setErrorMsg(
+            "Votre compte a été créé, mais la demande commerçant n'a pas pu être enregistrée. Merci de contacter PawPass."
+          );
+          return;
+        }
+      }
+
+      setLoading(false);
+      setInfoMsg(
+        "Compte créé. Vérifiez vos emails pour confirmer votre adresse, puis connectez-vous."
+      );
+
+      setTimeout(() => {
+        router.push("/login");
+      }, 900);
+
+      return;
+    }
+
+    // Si session OK : enregistrer la demande commerçant
+    if (isMerchant && newUser?.id) {
+      const { error: appError } = await supabase.from("merchant_applications").insert({
+        user_id: newUser.id,
+        business_name: shopName,
+        city: city,
+        address: address,
+        phone: phone,
+        postal_code: postalCode,
+        responsible_name: responsibleName,
+        siret: siret,
+        message: null,
+        status: "pending",
+        category_slugs: selectedCategorySlugs,
+      });
 
       if (appError) {
         console.error(appError);
@@ -154,8 +230,7 @@ export default function RegisterPage() {
           Créer un compte
         </h1>
         <p style={{ color: "#64748b", marginBottom: 24 }}>
-          Gagnez du cashback chez les commerçants partenaires et soutenez les
-          refuges locaux.
+          Gagnez du cashback chez les commerçants partenaires et soutenez les refuges locaux.
         </p>
 
         <form onSubmit={handleRegister}>
@@ -222,16 +297,9 @@ export default function RegisterPage() {
                 backgroundColor: "#f8fafc",
               }}
             >
-              <p
-                style={{
-                  fontSize: 13,
-                  color: "#6b7280",
-                  marginBottom: 12,
-                }}
-              >
-                Ces informations permettent à l&apos;équipe PawPass de vérifier
-                votre commerce. Votre compte commerçant sera d&apos;abord placé
-                en attente de validation par un administrateur.
+              <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 12 }}>
+                Ces informations permettent à l&apos;équipe PawPass de vérifier votre commerce.
+                Votre compte commerçant sera d&apos;abord placé en attente de validation par un administrateur.
               </p>
 
               <label style={{ fontWeight: 600 }}>Nom du commerce</label>
@@ -250,9 +318,7 @@ export default function RegisterPage() {
                 }}
               />
 
-              <label style={{ fontWeight: 600 }}>
-                Nom et prénom du responsable
-              </label>
+              <label style={{ fontWeight: 600 }}>Nom et prénom du responsable</label>
               <input
                 type="text"
                 value={responsibleName}
@@ -344,24 +410,72 @@ export default function RegisterPage() {
                   padding: 10,
                   borderRadius: 8,
                   border: "1px solid #cbd5e1",
-                  marginBottom: 4,
+                  marginBottom: 10,
                 }}
               />
 
-              <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
-                Ces données ne sont utilisées que pour la vérification de votre
-                commerce et la lutte contre la fraude.
+              {/* CATEGORIES */}
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontWeight: 700, marginBottom: 8, color: "#0f172a" }}>
+                  Catégories du commerce
+                </div>
+
+                {catError && (
+                  <div
+                    style={{
+                      marginBottom: 10,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "#ffe5e5",
+                      color: "#b00000",
+                      fontSize: 13,
+                    }}
+                  >
+                    Impossible de charger les catégories : {catError}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {categories.map((cat) => {
+                    const active = selectedCategorySlugs.includes(cat.slug);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => toggleCategory(cat.slug)}
+                        aria-pressed={active}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 999,
+                          border: "1px solid #cbd5e1",
+                          backgroundColor: active ? "#059669" : "white",
+                          color: active ? "white" : "#0f172a",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          fontSize: 13,
+                        }}
+                        title={`Choisir : ${cat.label}`}
+                      >
+                        {cat.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p style={{ fontSize: 12, color: "#6b7280", marginTop: 8 }}>
+                  Sélectionne au moins 1 catégorie. Tu pourras les modifier plus tard après validation.
+                </p>
+              </div>
+
+              <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 14 }}>
+                Ces données ne sont utilisées que pour la vérification de votre commerce et la lutte contre la fraude.
               </p>
             </div>
           )}
 
-          {errorMsg && (
-            <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>
-          )}
+          {errorMsg && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>}
 
-          {infoMsg && (
-            <p style={{ color: "#065f46", marginBottom: 12 }}>{infoMsg}</p>
-          )}
+          {infoMsg && <p style={{ color: "#065f46", marginBottom: 12 }}>{infoMsg}</p>}
 
           <button
             type="submit"
@@ -385,10 +499,7 @@ export default function RegisterPage() {
 
         <p style={{ marginTop: 12, fontSize: 14 }}>
           Déjà un compte ?{" "}
-          <a
-            href="/login"
-            style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}
-          >
+          <a href="/login" style={{ color: "#059669", fontWeight: 600, textDecoration: "none" }}>
             Se connecter
           </a>
         </p>
