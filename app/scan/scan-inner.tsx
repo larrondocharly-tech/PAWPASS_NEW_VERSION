@@ -72,6 +72,7 @@ export default function ScanInner() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showThankYou, setShowThankYou] = useState(false);
+const lastThankYouKeyRef = useRef<string>("");
 
   // -----------------------------
   // COUPON FLOW (nouveau)
@@ -266,7 +267,6 @@ export default function ScanInner() {
   useEffect(() => {
     setError(null);
     setErrorMsg(null);
-    setShowThankYou(false);
 
     // reset coupon flow when merchant changes or mode changes
     setCouponStep("choose_discount");
@@ -308,7 +308,7 @@ export default function ScanInner() {
     };
 
     loadMerchant();
-  }, [scanToken, supabase, isCoupon, favoriteSpaId]);
+  }, [scanToken, supabase, isCoupon]);
 
   // Timer management
   const stopTimer = () => {

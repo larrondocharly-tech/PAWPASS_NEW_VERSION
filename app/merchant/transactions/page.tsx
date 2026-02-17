@@ -16,7 +16,7 @@ interface MerchantProfile {
 interface MerchantTransaction {
   id: string;
   amount: number;
-  cashback_amount: number | null;
+  cashback_to_user: number | null;
   donation_amount: number | null;
   created_at: string;
   receipt_image_url: string | null;
@@ -34,15 +34,29 @@ export default function MerchantTransactionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // URL du ticket affiché dans la modale
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null);
+
+  const loadTransactions = async (merchantId: string, threshold: number) => {
+    const { data, error: transactionError } = await supabase
+      .from("transactions")
+      .select(
+        "id, amount, cashback_to_user, donation_amount, created_at, receipt_image_url, status"
+      )
+      .eq("merchant_id", merchantId)
+      .gte("amount", threshold)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+
+    if (transactionError) throw transactionError;
+
+    setTransactions((data ?? []) as MerchantTransaction[]);
+  };
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       setError(null);
 
-      // 1) Utilisateur connecté
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -52,7 +66,6 @@ export default function MerchantTransactionsPage() {
         return;
       }
 
-      // 2) Profil commerçant
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("id, role, merchant_id")
@@ -76,7 +89,6 @@ export default function MerchantTransactionsPage() {
 
       setProfile(profileData);
 
-      // 3) Charger le seuil de ticket depuis la table merchants
       let threshold = 50;
       const { data: merchant, error: merchantError } = await supabase
         .from("merchants")
@@ -92,31 +104,18 @@ export default function MerchantTransactionsPage() {
 
       setReceiptThreshold(threshold);
 
-      // 4) Transactions de CE commerçant, uniquement :
-      // - montant >= threshold
-      // - statut "pending" (en attente)
-      const { data: transactionData, error: transactionError } = await supabase
-        .from("transactions")
-        .select(
-          "id, amount, cashback_amount, donation_amount, created_at, receipt_image_url, status"
-        )
-        .eq("merchant_id", profileData.merchant_id)
-        .gte("amount", threshold)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
-
-      if (transactionError) {
-        setError(transactionError.message);
+      try {
+        await loadTransactions(profileData.merchant_id, threshold);
+      } catch (e: any) {
+        setError(e?.message ?? "Erreur chargement transactions");
+      } finally {
         setLoading(false);
-        return;
       }
-
-      setTransactions((transactionData ?? []) as MerchantTransaction[]);
-      setLoading(false);
     };
 
     void loadData();
-  }, [router, supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
   const formatDateTime = (iso: string) => {
     if (!iso) return "";
@@ -131,13 +130,12 @@ export default function MerchantTransactionsPage() {
     });
   };
 
-  // Voir le ticket (via URL signée du bucket "receipts") → modale
   const handleViewReceipt = async (tx: MerchantTransaction) => {
     if (!tx.receipt_image_url) return;
 
     const { data, error } = await supabase.storage
       .from("receipts")
-      .createSignedUrl(tx.receipt_image_url, 60 * 60); // 1h
+      .createSignedUrl(tx.receipt_image_url, 60 * 60);
 
     if (error || !data?.signedUrl) {
       console.error("Erreur URL ticket:", error);
@@ -145,32 +143,58 @@ export default function MerchantTransactionsPage() {
       return;
     }
 
-    // On affiche l'image dans une modale sur la même page
     setReceiptModalUrl(data.signedUrl);
   };
 
-  // Validation / refus par le commerçant
-  const handleUpdateStatus = async (
-    txId: string,
-    newStatus: "approved" | "rejected"
-  ) => {
+  // ✅ VALIDER côté commerçant : pending -> approved (PAS validated, PAS de crédit wallet)
+  const handleConfirm = async (txId: string) => {
     try {
       setActionLoadingId(txId);
       setError(null);
 
       const { error } = await supabase.rpc("merchant_set_transaction_status", {
         p_tx_id: txId,
-        p_new_status: newStatus,
+        p_new_status: "approved",
       });
 
       if (error) {
-        console.error("Erreur mise à jour statut marchand (RPC):", error);
+        console.error(
+          "Erreur validation commerçant (RPC merchant_set_transaction_status):",
+          error
+        );
         setError(error.message);
         return;
       }
 
-      // On retire la transaction de la liste après traitement
       setTransactions((prev) => prev.filter((tx) => tx.id !== txId));
+      router.refresh();
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // ❌ REFUSER côté commerçant : pending -> rejected
+  const handleReject = async (txId: string) => {
+    try {
+      setActionLoadingId(txId);
+      setError(null);
+
+      const { error } = await supabase.rpc("merchant_set_transaction_status", {
+        p_tx_id: txId,
+        p_new_status: "rejected",
+      });
+
+      if (error) {
+        console.error(
+          "Erreur refus (RPC merchant_set_transaction_status):",
+          error
+        );
+        setError(error.message);
+        return;
+      }
+
+      setTransactions((prev) => prev.filter((tx) => tx.id !== txId));
+      router.refresh();
     } finally {
       setActionLoadingId(null);
     }
@@ -183,9 +207,9 @@ export default function MerchantTransactionsPage() {
 
         {profile && (
           <p className="helper" style={{ marginTop: 4 }}>
-            Seules les transactions de {receiptThreshold} € et plus
-            apparaissent ici. Vous devez les valider ou les refuser après
-            vérification du ticket de caisse.
+            Seules les transactions de {receiptThreshold} € et plus apparaissent
+            ici. Vous devez les valider ou les refuser après vérification du
+            ticket de caisse.
           </p>
         )}
 
@@ -218,7 +242,7 @@ export default function MerchantTransactionsPage() {
                     <tr key={tx.id}>
                       <td>{formatDateTime(tx.created_at)}</td>
                       <td>{formatCurrency(tx.amount)}</td>
-                      <td>{formatCurrency(tx.cashback_amount ?? 0)}</td>
+                      <td>{formatCurrency(tx.cashback_to_user ?? 0)}</td>
                       <td>{formatCurrency(tx.donation_amount ?? 0)}</td>
                       <td>
                         {tx.receipt_image_url ? (
@@ -250,9 +274,7 @@ export default function MerchantTransactionsPage() {
                         >
                           <button
                             type="button"
-                            onClick={() =>
-                              handleUpdateStatus(tx.id, "approved")
-                            }
+                            onClick={() => handleConfirm(tx.id)}
                             disabled={isLoadingRow}
                             style={{
                               padding: "4px 8px",
@@ -267,11 +289,10 @@ export default function MerchantTransactionsPage() {
                           >
                             {isLoadingRow ? "Validation…" : "Valider"}
                           </button>
+
                           <button
                             type="button"
-                            onClick={() =>
-                              handleUpdateStatus(tx.id, "rejected")
-                            }
+                            onClick={() => handleReject(tx.id)}
                             disabled={isLoadingRow}
                             style={{
                               padding: "4px 8px",
@@ -297,7 +318,6 @@ export default function MerchantTransactionsPage() {
         )}
       </div>
 
-      {/* MODALE D'AFFICHAGE DU TICKET POUR LE COMMERÇANT */}
       {receiptModalUrl && (
         <div
           style={{
@@ -311,7 +331,6 @@ export default function MerchantTransactionsPage() {
             padding: "16px",
           }}
         >
-          {/* Bouton X pour fermer */}
           <button
             type="button"
             onClick={() => setReceiptModalUrl(null)}

@@ -20,6 +20,7 @@ export function ClientHeader() {
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [isMerchant, setIsMerchant] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSpa, setIsSpa] = useState(false); // ✅ NEW
 
   const [hoveredHref, setHoveredHref] = useState<string | null>(null);
 
@@ -28,7 +29,7 @@ export function ClientHeader() {
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const menuBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // ✅ NEW: mesure automatique de la hauteur du header pour le spacer
+  // ✅ mesure automatique de la hauteur du header pour le spacer
   const headerRef = useRef<HTMLElement | null>(null);
   const [headerH, setHeaderH] = useState<number>(0);
 
@@ -37,18 +38,15 @@ export function ClientHeader() {
     if (!el) return;
 
     const measure = () => {
-      // offsetHeight est stable et ne déclenche pas de layout infini
       const h = el.offsetHeight || 0;
       setHeaderH(h);
     };
 
     measure();
 
-    // ResizeObserver pour suivre les variations (font, responsive, etc.)
     const ro = new ResizeObserver(() => measure());
     ro.observe(el);
 
-    // Sécurité: resize window
     window.addEventListener("resize", measure);
 
     return () => {
@@ -64,6 +62,7 @@ export function ClientHeader() {
       if (!isMounted) return;
       setIsMerchant(false);
       setIsAdmin(false);
+      setIsSpa(false);
     };
 
     const loadProfile = async () => {
@@ -96,6 +95,11 @@ export function ClientHeader() {
         }
 
         const role = profile.role?.toLowerCase() || null;
+
+        // ✅ NEW : détection SPA
+        setIsSpa(role === "spa");
+
+        // inchangé
         setIsMerchant(role === "merchant" || profile.merchant_id !== null);
         setIsAdmin(role === "admin");
       } finally {
@@ -117,7 +121,9 @@ export function ClientHeader() {
 
   const isMerchantArea = currentPath.startsWith("/merchant");
   const isAdminArea = currentPath.startsWith("/admin");
+  const isSpaArea = currentPath.startsWith("/spa"); // ✅ NEW
 
+  // ✅ NEW: inclure /spa pour afficher le header/menu sur l’espace SPA
   const isClientArea =
     currentPath.startsWith("/dashboard") ||
     currentPath.startsWith("/scan") ||
@@ -130,17 +136,17 @@ export function ClientHeader() {
     currentPath.startsWith("/mentions-legales") ||
     currentPath.startsWith("/cgu") ||
     isMerchantArea ||
-    isAdminArea;
+    isAdminArea ||
+    isSpaArea;
 
   const isLogin = currentPath === "/login";
   const isRegister = currentPath === "/register";
   const isHome = currentPath === "/";
   const isAuthPage = isLogin || isRegister;
 
-  const logoHref =
-    isAuthPage || isHome ? "/" : isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
-
-  const homeHref = isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
+  // ✅ NEW : logo/home pour SPA
+  const logoHref = isAuthPage || isHome ? "/" : isSpa ? "/spa" : isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
+  const homeHref = isSpa ? "/spa" : isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
 
   const isActive = (href: string) => currentPath === href;
 
@@ -216,14 +222,12 @@ export function ClientHeader() {
         ref={headerRef}
         className="pp-header"
         style={{
-          // ✅ FIX stable
           position: "fixed",
           top: 0,
           left: 0,
           right: 0,
           zIndex: 1000,
 
-          // ✅ barre légère opaque (tu as dit que ça te va)
           background: "rgba(255, 255, 255, 0.72)",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
@@ -260,6 +264,7 @@ export function ClientHeader() {
 
           {isClientArea && (
             <nav style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+              {/* ✅ SPA: bouton "Accueil" devient "Tableau SPA" */}
               <Link
                 href={homeHref}
                 style={{
@@ -276,7 +281,7 @@ export function ClientHeader() {
                   WebkitBackdropFilter: "blur(8px)",
                 }}
               >
-                Accueil
+                {isSpa ? "Tableau SPA" : "Accueil"}
               </Link>
 
               <button
@@ -326,174 +331,221 @@ export function ClientHeader() {
                     display: "flex",
                     flexDirection: "column",
                     gap: "4px",
-                    zIndex: 2000, // ✅ au-dessus du header
+                    zIndex: 2000,
                   }}
                 >
-                  <Link
-                    href="/scan"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/scan")}
-                    style={menuItemStyle(hoveredHref === "/scan")}
-                  >
-                    <span>📷</span>
-                    <span>Scanner (achat)</span>
-                  </Link>
-
-                  <Link
-                    href="/scan?mode=coupon"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/scan?mode=coupon")}
-                    style={menuItemStyle(hoveredHref === "/scan?mode=coupon")}
-                  >
-                    <span>🎟️</span>
-                    <span>Utiliser mes crédits</span>
-                  </Link>
-
-                  {isMerchant && (
-                    <Link
-                      href="/merchant/transactions"
-                      onClick={() => setMenuOpen(false)}
-                      {...itemHandlers("/merchant/transactions")}
-                      style={menuItemStyle(hoveredHref === "/merchant/transactions")}
-                    >
-                      <span>📊</span>
-                      <span>Transactions</span>
-                    </Link>
-                  )}
-
-                  {isMerchant && (
-                    <Link
-                      href="/dashboard"
-                      onClick={() => setMenuOpen(false)}
-                      {...itemHandlers("/dashboard")}
-                      style={menuItemStyle(hoveredHref === "/dashboard")}
-                    >
-                      <span>👤</span>
-                      <span>Mon tableau de bord (client)</span>
-                    </Link>
-                  )}
-
-                  {isMerchant && (
+                  {/* ✅ SPA MENU MINIMAL */}
+                  {isSpa ? (
                     <>
                       <Link
-                        href="/merchant"
+                        href="/spa"
                         onClick={() => setMenuOpen(false)}
-                        {...itemHandlers("/merchant")}
-                        style={menuItemStyle(hoveredHref === "/merchant")}
+                        {...itemHandlers("/spa")}
+                        style={menuItemStyle(hoveredHref === "/spa")}
                       >
-                        <span>📌</span>
-                        <span>Mon QR code commerçant</span>
+                        <span>📊</span>
+                        <span>Tableau SPA</span>
+                      </Link>
+
+                      <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", margin: "6px 0 4px" }} />
+
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "10px",
+                          fontSize: "14px",
+                          textAlign: "left",
+                          border: "none",
+                          background: "transparent",
+                          color: "#b91c1c",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span>🚪</span>
+                        <span>Se déconnecter</span>
+                      </button>
+
+                      {logoutError && (
+                        <div style={{ marginTop: "4px", fontSize: "11px", color: "#b91c1c" }}>
+                          {logoutError}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* ✅ MENU EXISTANT (inchangé) */}
+                      <Link
+                        href="/scan"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/scan")}
+                        style={menuItemStyle(hoveredHref === "/scan")}
+                      >
+                        <span>📷</span>
+                        <span>Scanner (achat)</span>
                       </Link>
 
                       <Link
-                        href="/merchant/settings"
+                        href="/scan?mode=coupon"
                         onClick={() => setMenuOpen(false)}
-                        {...itemHandlers("/merchant/settings")}
-                        style={menuItemStyle(hoveredHref === "/merchant/settings")}
+                        {...itemHandlers("/scan?mode=coupon")}
+                        style={menuItemStyle(hoveredHref === "/scan?mode=coupon")}
                       >
-                        <span>⚙️</span>
-                        <span>Paramètres commerçant</span>
+                        <span>🎟️</span>
+                        <span>Utiliser mes crédits</span>
                       </Link>
+
+                      {isMerchant && (
+                        <Link
+                          href="/merchant/transactions"
+                          onClick={() => setMenuOpen(false)}
+                          {...itemHandlers("/merchant/transactions")}
+                          style={menuItemStyle(hoveredHref === "/merchant/transactions")}
+                        >
+                          <span>📊</span>
+                          <span>Transactions</span>
+                        </Link>
+                      )}
+
+                      {isMerchant && (
+                        <Link
+                          href="/dashboard"
+                          onClick={() => setMenuOpen(false)}
+                          {...itemHandlers("/dashboard")}
+                          style={menuItemStyle(hoveredHref === "/dashboard")}
+                        >
+                          <span>👤</span>
+                          <span>Mon tableau de bord (client)</span>
+                        </Link>
+                      )}
+
+                      {isMerchant && (
+                        <>
+                          <Link
+                            href="/merchant"
+                            onClick={() => setMenuOpen(false)}
+                            {...itemHandlers("/merchant")}
+                            style={menuItemStyle(hoveredHref === "/merchant")}
+                          >
+                            <span>📌</span>
+                            <span>Mon QR code commerçant</span>
+                          </Link>
+
+                          <Link
+                            href="/merchant/settings"
+                            onClick={() => setMenuOpen(false)}
+                            {...itemHandlers("/merchant/settings")}
+                            style={menuItemStyle(hoveredHref === "/merchant/settings")}
+                          >
+                            <span>⚙️</span>
+                            <span>Paramètres commerçant</span>
+                          </Link>
+                        </>
+                      )}
+
+                      <Link
+                        href="/commerces"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/commerces")}
+                        style={menuItemStyle(hoveredHref === "/commerces")}
+                      >
+                        <span>🏪</span>
+                        <span>Commerçants partenaires</span>
+                      </Link>
+
+                      <Link
+                        href="/parrainage"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/parrainage")}
+                        style={menuItemStyle(hoveredHref === "/parrainage")}
+                      >
+                        <span>🤝</span>
+                        <span>Parrainer un ami</span>
+                      </Link>
+
+                      <Link
+                        href="/comment-ca-marche"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/comment-ca-marche")}
+                        style={menuItemStyle(hoveredHref === "/comment-ca-marche")}
+                      >
+                        <span>📖</span>
+                        <span>Comment ça marche ?</span>
+                      </Link>
+
+                      <Link
+                        href="/faq"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/faq")}
+                        style={menuItemStyle(hoveredHref === "/faq")}
+                      >
+                        <span>❓</span>
+                        <span>FAQ</span>
+                      </Link>
+
+                      <Link
+                        href="/contact"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/contact")}
+                        style={menuItemStyle(hoveredHref === "/contact")}
+                      >
+                        <span>✉️</span>
+                        <span>Contact</span>
+                      </Link>
+
+                      <Link
+                        href="/mentions-legales"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/mentions-legales")}
+                        style={menuItemStyle(hoveredHref === "/mentions-legales")}
+                      >
+                        <span>📄</span>
+                        <span>Mentions légales</span>
+                      </Link>
+
+                      <Link
+                        href="/cgu"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/cgu")}
+                        style={menuItemStyle(hoveredHref === "/cgu")}
+                      >
+                        <span>📜</span>
+                        <span>CGU</span>
+                      </Link>
+
+                      <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", margin: "6px 0 4px" }} />
+
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: "10px",
+                          fontSize: "14px",
+                          textAlign: "left",
+                          border: "none",
+                          background: "transparent",
+                          color: "#b91c1c",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span>🚪</span>
+                        <span>Se déconnecter</span>
+                      </button>
+
+                      {logoutError && (
+                        <div style={{ marginTop: "4px", fontSize: "11px", color: "#b91c1c" }}>
+                          {logoutError}
+                        </div>
+                      )}
                     </>
-                  )}
-
-                  <Link
-                    href="/commerces"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/commerces")}
-                    style={menuItemStyle(hoveredHref === "/commerces")}
-                  >
-                    <span>🏪</span>
-                    <span>Commerçants partenaires</span>
-                  </Link>
-
-                  <Link
-                    href="/parrainage"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/parrainage")}
-                    style={menuItemStyle(hoveredHref === "/parrainage")}
-                  >
-                    <span>🤝</span>
-                    <span>Parrainer un ami</span>
-                  </Link>
-
-                  <Link
-                    href="/comment-ca-marche"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/comment-ca-marche")}
-                    style={menuItemStyle(hoveredHref === "/comment-ca-marche")}
-                  >
-                    <span>📖</span>
-                    <span>Comment ça marche ?</span>
-                  </Link>
-
-                  <Link
-                    href="/faq"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/faq")}
-                    style={menuItemStyle(hoveredHref === "/faq")}
-                  >
-                    <span>❓</span>
-                    <span>FAQ</span>
-                  </Link>
-
-                  <Link
-                    href="/contact"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/contact")}
-                    style={menuItemStyle(hoveredHref === "/contact")}
-                  >
-                    <span>✉️</span>
-                    <span>Contact</span>
-                  </Link>
-
-                  <Link
-                    href="/mentions-legales"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/mentions-legales")}
-                    style={menuItemStyle(hoveredHref === "/mentions-legales")}
-                  >
-                    <span>📄</span>
-                    <span>Mentions légales</span>
-                  </Link>
-
-                  <Link
-                    href="/cgu"
-                    onClick={() => setMenuOpen(false)}
-                    {...itemHandlers("/cgu")}
-                    style={menuItemStyle(hoveredHref === "/cgu")}
-                  >
-                    <span>📜</span>
-                    <span>CGU</span>
-                  </Link>
-
-                  <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", margin: "6px 0 4px" }} />
-
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: "10px",
-                      fontSize: "14px",
-                      textAlign: "left",
-                      border: "none",
-                      background: "transparent",
-                      color: "#b91c1c",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <span>🚪</span>
-                    <span>Se déconnecter</span>
-                  </button>
-
-                  {logoutError && (
-                    <div style={{ marginTop: "4px", fontSize: "11px", color: "#b91c1c" }}>
-                      {logoutError}
-                    </div>
                   )}
                 </div>
               )}

@@ -144,23 +144,7 @@ export default function DashboardPage() {
         router.replace("/login");
         return;
       }
-
-      const { data: profileData, error: pErr } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!cancelled) {
-        const role = normalizeRole(profileData?.role);
-        const target = roleRedirect(role);
-
-        // admin/merchant/spa -> pas de dashboard
-        if (target) {
-          router.replace(target);
-          return;
-        }
-
+            if (!cancelled) {
         setCheckingRole(false);
       }
     };

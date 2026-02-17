@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
@@ -29,19 +28,7 @@ function monthLabel(isoDate: string) {
   return d.toLocaleDateString("fr-FR", { year: "numeric", month: "long" });
 }
 
-const menuBtnStyle = (danger?: boolean): React.CSSProperties => ({
-  width: "100%",
-  textAlign: "left",
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: `1px solid ${danger ? "rgba(239,68,68,0.25)" : "rgba(15,23,42,0.12)"}`,
-  background: danger ? "rgba(239,68,68,0.10)" : "rgba(255,255,255,0.75)",
-  cursor: "pointer",
-  fontSize: 14,
-  boxShadow: "0 10px 18px rgba(15, 23, 42, 0.08)",
-});
-
-const infoBoxStyle = (kind: "blue" | "red" | "green"): React.CSSProperties => {
+const infoBoxStyle = (kind: "blue" | "red"): React.CSSProperties => {
   const map = {
     blue: {
       border: "1px solid rgba(59,130,246,0.25)",
@@ -53,11 +40,6 @@ const infoBoxStyle = (kind: "blue" | "red" | "green"): React.CSSProperties => {
       background: "rgba(239,68,68,0.08)",
       color: "rgba(127,29,29,0.95)",
     },
-    green: {
-      border: "1px solid rgba(34,197,94,0.25)",
-      background: "rgba(34,197,94,0.08)",
-      color: "rgba(20,83,45,0.95)",
-    },
   }[kind];
 
   return {
@@ -68,33 +50,12 @@ const infoBoxStyle = (kind: "blue" | "red" | "green"): React.CSSProperties => {
   };
 };
 
-export default function SpaDashboard() {
+export default function SpaDashboardPage() {
   const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
 
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
-  // menu
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      setMenuOpen(false);
-      router.replace("/login");
-    }
-  };
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,20 +66,23 @@ export default function SpaDashboard() {
 
       try {
         // 1) user connecté
-        const { data: uData } = await supabase.auth.getUser();
-        const user = uData?.user;
+        const { data: uData, error: uErr } = await supabase.auth.getUser();
+        if (uErr) throw uErr;
 
+        const user = uData?.user;
         if (!user) {
           if (!cancelled) setErr("Vous devez être connecté.");
           return;
         }
 
         // 2) vérifier role sur profiles (source de vérité)
-        const { data: pRow } = await supabase
+        const { data: pRow, error: pErr } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", user.id)
           .maybeSingle();
+
+        if (pErr) throw pErr;
 
         const role = (pRow?.role || "").toString().toLowerCase().trim();
         if (role && role !== "spa") {
@@ -133,7 +97,9 @@ export default function SpaDashboard() {
           .eq("auth_user_id", user.id)
           .maybeSingle();
 
-        if (spaErr || !spaRow?.id) {
+        if (spaErr) throw spaErr;
+
+        if (!spaRow?.id) {
           if (!cancelled) {
             setErr(
               "Compte SPA non trouvé. Vérifie la table 'spas' : auth_user_id doit être égal à l’UUID du compte SPA."
@@ -144,27 +110,23 @@ export default function SpaDashboard() {
 
         const spaId = String(spaRow.id);
 
-        // 4) lire la vue mensuelle (colonne month_start)
+        // 4) lire la vue mensuelle
         const { data, error } = await supabase
           .from("v_spa_monthly_summary")
           .select("spa_id, month_start, gross_amount, fee_amount, net_amount, tx_count")
           .eq("spa_id", spaId)
           .order("month_start", { ascending: false });
 
-        if (error) {
-          if (!cancelled) setErr(error.message);
-          return;
-        }
+        if (error) throw error;
 
-        const mapped: Row[] =
-          (data || []).map((r: any) => ({
-            spa_id: String(r.spa_id),
-            month_start: String(r.month_start),
-            gross_amount: r.gross_amount,
-            fee_amount: r.fee_amount,
-            net_amount: r.net_amount,
-            tx_count: r.tx_count,
-          })) ?? [];
+        const mapped: Row[] = (data || []).map((r: any) => ({
+          spa_id: String(r.spa_id),
+          month_start: String(r.month_start),
+          gross_amount: r.gross_amount ?? null,
+          fee_amount: r.fee_amount ?? null,
+          net_amount: r.net_amount ?? null,
+          tx_count: r.tx_count ?? null,
+        }));
 
         if (!cancelled) setRows(mapped);
       } catch (e: any) {
@@ -209,98 +171,10 @@ export default function SpaDashboard() {
   );
 
   return (
-    <main style={{ padding: 16 }}>
+    <div style={{ padding: 16 }}>
       <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-        {/* Top bar + menu */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 14,
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.02em" }}>Espace SPA</h1>
+        <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-0.02em" }}>Espace SPA</h1>
 
-          <div style={{ position: "relative" }}>
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label="Menu"
-              style={{
-                height: 44,
-                width: 44,
-                borderRadius: 999,
-                border: "1px solid rgba(15,23,42,0.12)",
-                background: "rgba(255,255,255,0.9)",
-                fontSize: 18,
-                cursor: "pointer",
-                boxShadow: "0 10px 22px rgba(15, 23, 42, 0.10)",
-              }}
-            >
-              ☰
-            </button>
-
-            {menuOpen && (
-              <>
-                {/* overlay click-out */}
-                <div
-                  onClick={() => setMenuOpen(false)}
-                  style={{
-                    position: "fixed",
-                    inset: 0,
-                    background: "transparent",
-                  }}
-                />
-
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: 52,
-                    width: 260,
-                    padding: 10,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.92)",
-                    border: "1px solid rgba(15,23,42,0.12)",
-                    boxShadow: "0 18px 50px rgba(15, 23, 42, 0.12)",
-                    backdropFilter: "blur(10px)",
-                    zIndex: 10,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      router.push("/spa");
-                    }}
-                    style={menuBtnStyle(false)}
-                  >
-                    📊 Tableau SPA
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      router.push("/");
-                    }}
-                    style={menuBtnStyle(false)}
-                  >
-                    🏠 Accueil
-                  </button>
-
-                  <button onClick={logout} style={menuBtnStyle(true)}>
-                    🚪 Déconnexion
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Body */}
         {loading && <div style={infoBoxStyle("blue")}>Chargement…</div>}
 
         {!loading && err && (
@@ -311,7 +185,6 @@ export default function SpaDashboard() {
 
         {!loading && !err && (
           <>
-            {/* KPIs */}
             <div
               style={{
                 display: "grid",
@@ -324,7 +197,6 @@ export default function SpaDashboard() {
               {card(`Mois précédent (${last ? monthLabel(last.month_start) : "—"})`, last)}
             </div>
 
-            {/* Table historique */}
             <div
               style={{
                 marginTop: 14,
@@ -344,9 +216,7 @@ export default function SpaDashboard() {
 
               {rows.length === 0 ? (
                 <div style={{ padding: 14 }}>
-                  <div style={infoBoxStyle("blue")}>
-                    Aucun mois trouvé pour le moment (pas de transactions).
-                  </div>
+                  <div style={infoBoxStyle("blue")}>Aucun mois trouvé pour le moment.</div>
                 </div>
               ) : (
                 <div style={{ overflowX: "auto" }}>
@@ -398,6 +268,6 @@ export default function SpaDashboard() {
           </>
         )}
       </div>
-    </main>
+    </div>
   );
 }
