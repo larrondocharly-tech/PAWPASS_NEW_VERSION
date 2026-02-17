@@ -59,6 +59,11 @@ export default function ScanInner() {
   const [selectedSpaId, setSelectedSpaId] = useState("");
   const [donationPercent, setDonationPercent] = useState<DonationPercent>(50);
 
+  // ✅ NEW: SPA favorite
+  const [favoriteSpaId, setFavoriteSpaId] = useState<string | null>(null);
+  // ✅ NEW: checkbox pour enregistrer le favori
+  const [setAsFavorite, setSetAsFavorite] = useState<boolean>(true);
+
   // Ticket
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
@@ -183,10 +188,65 @@ export default function ScanInner() {
     setWalletLoadError("Impossible de récupérer le solde (wallets/profiles : colonne non trouvée ou non accessible).");
   };
 
+  // ✅ Load favorite SPA from profiles
+  const loadFavoriteSpa = async () => {
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth?.user) {
+        setFavoriteSpaId(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("favorite_spa_id")
+        .eq("id", auth.user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("loadFavoriteSpa error:", error.message);
+        setFavoriteSpaId(null);
+        return;
+      }
+
+      const fav = (data as any)?.favorite_spa_id as string | null | undefined;
+      setFavoriteSpaId(fav ?? null);
+    } catch (e) {
+      console.warn("loadFavoriteSpa fatal:", e);
+      setFavoriteSpaId(null);
+    }
+  };
+
+  // ✅ Save favorite SPA (non-bloquant)
+  const saveFavoriteSpaNonBlocking = async (spaId: string) => {
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth?.user) return;
+
+      const { error } = await supabase.from("profiles").update({ favorite_spa_id: spaId }).eq("id", auth.user.id);
+      if (error) {
+        console.warn("saveFavoriteSpa error:", error.message);
+        return;
+      }
+      setFavoriteSpaId(spaId);
+    } catch (e) {
+      console.warn("saveFavoriteSpa fatal:", e);
+    }
+  };
+
   useEffect(() => {
     loadWalletBalance();
+    loadFavoriteSpa();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
+
+  // ✅ Si le favori arrive après, pré-sélectionner si rien choisi
+  useEffect(() => {
+    if (!selectedSpaId && favoriteSpaId) {
+      setSelectedSpaId(favoriteSpaId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favoriteSpaId]);
 
   // Load SPAs
   useEffect(() => {
@@ -216,9 +276,12 @@ export default function ScanInner() {
     setRemainingSec(0);
     setDiscountEur(0);
     setPurchaseTotal("");
-    setSelectedSpaId("");
+
+    // ✅ IMPORTANT: on reset sur la SPA favorite (pas vide)
+    setSelectedSpaId(favoriteSpaId ?? "");
     setDonationPercent(50);
     setReceiptFile(null);
+    setSetAsFavorite(true);
 
     if (!scanToken) {
       setMerchant(null);
@@ -245,7 +308,7 @@ export default function ScanInner() {
     };
 
     loadMerchant();
-  }, [scanToken, supabase, isCoupon]);
+  }, [scanToken, supabase, isCoupon, favoriteSpaId]);
 
   // Timer management
   const stopTimer = () => {
@@ -304,8 +367,21 @@ export default function ScanInner() {
     return data.path;
   };
 
+  // ✅ Helper: mark latest tx as scan + dedup_key (non-bloquant)
+  const markScanDedupNonBlocking = async (merchantId: string, amountValue: number) => {
+    try {
+      await supabase.rpc("mark_last_transaction_scan", {
+        p_merchant_id: merchantId,
+        p_amount: amountValue,
+        p_happened_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn("mark_last_transaction_scan failed (non bloquant)", e);
+    }
+  };
+
   // -----------------------------
-  // ACHAT MODE (inchangé)
+  // ACHAT MODE (inchangé + favorite)
   // -----------------------------
   const handleSubmitNormal = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -359,6 +435,16 @@ export default function ScanInner() {
 
       setError(`Erreur lors de l'enregistrement : ${rpcError.message}`);
       return;
+    }
+
+    // ✅ NEW: tag tx as scan + dedup_key (prevents double with future bank sync)
+    if (merchant?.id) {
+      await markScanDedupNonBlocking(String(merchant.id), amountNumber);
+    }
+
+    // ✅ NEW: save favorite (non bloquant)
+    if (setAsFavorite && selectedSpaId) {
+      await saveFavoriteSpaNonBlocking(selectedSpaId);
     }
 
     setShowThankYou(true);
@@ -426,7 +512,6 @@ export default function ScanInner() {
 
   const merchantRefuseCoupon = () => {
     // On n’annule pas côté DB faute de RPC dédiée; on revient à l’étape 1.
-    // Si tu as un RPC "cancel_redeem_coupon", dis-moi son nom et je l’appelle ici.
     setError(null);
     setErrorMsg(null);
     setCouponId(null);
@@ -529,7 +614,18 @@ export default function ScanInner() {
       return;
     }
 
+    // ✅ NEW: tag tx as scan + dedup_key (prevents double with future bank sync)
+    if (merchant?.id) {
+      await markScanDedupNonBlocking(String(merchant.id), total);
+    }
+
     await loadWalletBalance();
+
+    // ✅ NEW: save favorite (non bloquant)
+    if (setAsFavorite && selectedSpaId) {
+      await saveFavoriteSpaNonBlocking(selectedSpaId);
+    }
+
     setShowThankYou(true);
   };
 
@@ -794,7 +890,15 @@ export default function ScanInner() {
                           padding: 14,
                         }}
                       >
-                        <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "#065f46" }}>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 900,
+                            letterSpacing: "0.08em",
+                            textTransform: "uppercase",
+                            color: "#065f46",
+                          }}
+                        >
                           À montrer au commerçant
                         </div>
 
@@ -981,6 +1085,11 @@ export default function ScanInner() {
                             </option>
                           ))}
                         </select>
+
+                        <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, color: "#0f172a", fontWeight: 800, marginTop: 8 }}>
+                          <input type="checkbox" checked={setAsFavorite} onChange={(e) => setSetAsFavorite(e.target.checked)} />
+                          Définir comme SPA favorite (pour les prochains scans)
+                        </label>
                       </div>
 
                       <div>
@@ -1113,6 +1222,11 @@ export default function ScanInner() {
                         </option>
                       ))}
                     </select>
+
+                    <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, color: "#0f172a", fontWeight: 800, marginTop: 8 }}>
+                      <input type="checkbox" checked={setAsFavorite} onChange={(e) => setSetAsFavorite(e.target.checked)} />
+                      Définir comme SPA favorite (pour les prochains scans)
+                    </label>
                   </div>
 
                   <div>

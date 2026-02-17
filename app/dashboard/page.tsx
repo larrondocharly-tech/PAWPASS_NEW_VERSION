@@ -34,9 +34,27 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+type Role = "spa" | "merchant" | "admin" | "user" | null;
+
+function normalizeRole(raw: any): Role {
+  const r = (raw || "").toString().trim().toLowerCase();
+  if (r === "spa" || r === "merchant" || r === "admin" || r === "user") return r;
+  return null;
+}
+
+function roleRedirect(role: Role) {
+  if (role === "spa") return "/spa";
+  if (role === "merchant") return "/merchant";
+  if (role === "admin") return "/admin";
+  return null;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+
+  // ✅ guard
+  const [checkingRole, setCheckingRole] = useState(true);
 
   const [availableBalance, setAvailableBalance] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -107,7 +125,57 @@ export default function DashboardPage() {
     }
   };
 
+  // ✅ 1) Guard: si role != "user" => redirect
   useEffect(() => {
+    let cancelled = false;
+
+    const check = async () => {
+      setCheckingRole(true);
+
+      const { data: s } = await supabase.auth.getSession();
+      if (!s?.session) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: uData } = await supabase.auth.getUser();
+      const user = uData?.user;
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: profileData, error: pErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!cancelled) {
+        const role = normalizeRole(profileData?.role);
+        const target = roleRedirect(role);
+
+        // admin/merchant/spa -> pas de dashboard
+        if (target) {
+          router.replace(target);
+          return;
+        }
+
+        setCheckingRole(false);
+      }
+    };
+
+    check();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, router]);
+
+  // ✅ 2) Charge les datas du dashboard (uniquement pour les clients)
+  useEffect(() => {
+    if (checkingRole) return;
+
     let cancelled = false;
 
     const loadData = async () => {
@@ -129,7 +197,7 @@ export default function DashboardPage() {
         return;
       }
 
-      // role
+      // role (admin button uniquement) — normalement ici role != admin
       const { data: profileData } = await supabase
         .from("profiles")
         .select("role")
@@ -137,8 +205,7 @@ export default function DashboardPage() {
         .maybeSingle();
 
       if (!cancelled) {
-        if ((profileData?.role || "").toLowerCase() === "admin") setIsAdmin(true);
-        else setIsAdmin(false);
+        setIsAdmin((profileData?.role || "").toLowerCase() === "admin");
       }
 
       // SOLDE wallets.balance
@@ -176,15 +243,8 @@ export default function DashboardPage() {
             (tx) => tx.status === "approved" || tx.status === "validated"
           );
 
-          const totalCb = approved.reduce(
-            (sum, tx) => sum + toNum(tx.cashback_to_user),
-            0
-          );
-
-          const totalDon = approved.reduce(
-            (sum, tx) => sum + toNum(tx.donation_amount),
-            0
-          );
+          const totalCb = approved.reduce((sum, tx) => sum + toNum(tx.cashback_to_user), 0);
+          const totalDon = approved.reduce((sum, tx) => sum + toNum(tx.donation_amount), 0);
 
           setTotalCashback(totalCb);
           setTotalDonation(totalDon);
@@ -238,7 +298,16 @@ export default function DashboardPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [supabase, router]);
+  }, [supabase, router, checkingRole]);
+
+  // pendant le guard : on affiche rien de client
+  if (checkingRole) {
+    return (
+      <main>
+        <div style={{ padding: 24 }}>Vérification du compte…</div>
+      </main>
+    );
+  }
 
   // ✅ NEW: seuil minimum pour utiliser la cagnotte
   const MIN_REDEEM = 5;
@@ -394,7 +463,6 @@ export default function DashboardPage() {
                     </button>
                   </div>
 
-                  {/* ✅ REPLACEMENT: seuil 5€ */}
                   <div className="ppGoal">
                     <div className="ppGoalTop">
                       <span className="ppSmall">
@@ -405,22 +473,19 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="ppBar">
-                      <div
-                        className="ppBarFill"
-                        style={{ width: `${Math.round(unlockPct * 100)}%` }}
-                      />
+                      <div className="ppBarFill" style={{ width: `${Math.round(unlockPct * 100)}%` }} />
                     </div>
 
-                   <div className="ppTiny">
-  {isUnlocked ? (
-    <>Cagnotte débloquée. Vous pouvez utiliser vos crédits dès maintenant.</>
-  ) : (
-    <>
-      Il vous reste <b>{formatEuro(remainingToUnlock)}</b> à cumuler pour débloquer votre cagnotte.
-    </>
-  )}
-</div>
-
+                    <div className="ppTiny">
+                      {isUnlocked ? (
+                        <>Cagnotte débloquée. Vous pouvez utiliser vos crédits dès maintenant.</>
+                      ) : (
+                        <>
+                          Il vous reste <b>{formatEuro(remainingToUnlock)}</b> à cumuler pour débloquer
+                          votre cagnotte.
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -454,15 +519,12 @@ export default function DashboardPage() {
                     <div className="ppEmptyBox">Aucune transaction pour le moment.</div>
                   ) : (
                     <>
-                      {/* Desktop table */}
                       <div className="ppTxDesktop">
                         {recentTx.map((tx) => (
                           <div className="ppTxRow" key={tx.id}>
                             <div className="ppTxMerchant">
                               <b>{tx.merchant_name || "Commerçant"}</b>
-                              <span className="ppTxMeta">
-                                • Achat {formatEuro(tx.purchase_amount)}
-                              </span>
+                              <span className="ppTxMeta">• Achat {formatEuro(tx.purchase_amount)}</span>
                             </div>
                             <div className="ppTxDate">{formatDate(tx.created_at)}</div>
                             <div className="ppTxCb">{formatEuro(tx.cashback_to_user)}</div>
@@ -471,14 +533,11 @@ export default function DashboardPage() {
                         ))}
                       </div>
 
-                      {/* Mobile list */}
                       <div className="ppTxMobile">
                         {recentTx.map((tx) => (
                           <div className="ppTxCard" key={tx.id}>
                             <div className="ppTxCardTop">
-                              <div className="ppTxCardMerchant">
-                                {tx.merchant_name || "Commerçant"}
-                              </div>
+                              <div className="ppTxCardMerchant">{tx.merchant_name || "Commerçant"}</div>
                               <div className="ppTxCardDate">
                                 {formatDate(tx.created_at)} • {formatTime(tx.created_at)}
                               </div>
@@ -490,12 +549,8 @@ export default function DashboardPage() {
                             </div>
 
                             <div className="ppTxCardBottom">
-                              <div className="ppTag ppTagBlue">
-                                Cashback {formatEuro(tx.cashback_to_user)}
-                              </div>
-                              <div className="ppTag ppTagGreen">
-                                Don {formatEuro(tx.donation_amount)}
-                              </div>
+                              <div className="ppTag ppTagBlue">Cashback {formatEuro(tx.cashback_to_user)}</div>
+                              <div className="ppTag ppTagGreen">Don {formatEuro(tx.donation_amount)}</div>
                             </div>
                           </div>
                         ))}
@@ -510,40 +565,36 @@ export default function DashboardPage() {
 
         {/* CSS responsive minimal (dans CE fichier uniquement) */}
         <style jsx global>{`
+          /* (Ton CSS inchangé) */
           .ppWrap {
             max-width: ${ui.maxW}px;
             margin: 0 auto;
             padding: 18px 14px 48px;
           }
-
           .ppHeader {
             display: flex;
             flex-direction: column;
             gap: 12px;
             margin-bottom: 14px;
           }
-
           .ppHeaderTop {
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
             gap: 12px;
           }
-
           .ppTitle {
             margin: 0;
             font-size: 28px;
             letter-spacing: -0.02em;
             color: ${ui.text};
           }
-
           .ppSubtitle {
             margin: 6px 0 0 0;
             color: ${ui.subtext};
             line-height: 1.35;
             font-size: 14px;
           }
-
           .ppBanner {
             padding: 12px;
             display: flex;
@@ -551,44 +602,37 @@ export default function DashboardPage() {
             justify-content: space-between;
             gap: 12px;
           }
-
           .ppBannerTitle {
             font-weight: 900;
             color: ${ui.text};
             font-size: 13px;
           }
-
           .ppBannerText {
             margin-top: 2px;
             color: ${ui.subtext};
             font-size: 13px;
             line-height: 1.35;
           }
-
           .ppCards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 16px;
           }
-
           .ppSectionNarrow {
             margin-top: 18px;
             max-width: 920px;
             margin-left: auto;
             margin-right: auto;
           }
-
           .ppCard {
             position: relative;
             overflow: hidden;
           }
-
           .ppCardInner {
             padding: 14px;
             position: relative;
             z-index: 2;
           }
-
           .ppCardGlow {
             position: absolute;
             inset: -1px;
@@ -631,13 +675,6 @@ export default function DashboardPage() {
                 rgba(255, 255, 255, 0) 62%
               );
           }
-          .ppCardGlowBlue {
-            background: radial-gradient(
-              560px 240px at 20% 0%,
-              rgba(37, 99, 235, 0.16) 0%,
-              rgba(255, 255, 255, 0) 62%
-            );
-          }
 
           .ppPill {
             display: inline-flex;
@@ -653,46 +690,39 @@ export default function DashboardPage() {
             text-transform: uppercase;
             margin-bottom: 10px;
           }
-
           .ppPillGreen {
             background: rgba(22, 163, 74, 0.12);
             color: ${ui.green};
           }
-
           .ppH2 {
             margin: 0;
             font-size: 18px;
             color: ${ui.text};
             line-height: 1.2;
           }
-
           .ppP {
             margin: 10px 0 0 0;
             color: ${ui.subtext};
             line-height: 1.5;
             font-size: 14px;
           }
-
           .ppSmall {
             color: ${ui.subtext2};
             font-size: 13px;
             line-height: 1.35;
           }
-
           .ppTiny {
             color: ${ui.subtext2};
             font-size: 12px;
             line-height: 1.35;
             margin-top: 8px;
           }
-
           .ppRow {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
             margin-top: 12px;
           }
-
           .ppBtn {
             border: none;
             border-radius: 999px;
@@ -702,20 +732,17 @@ export default function DashboardPage() {
             cursor: pointer;
             white-space: nowrap;
           }
-
           .ppBtnPrimary {
             background: ${ui.brand};
             color: white;
             box-shadow: 0 16px 34px rgba(255, 122, 60, 0.3);
           }
-
           .ppBtnSecondary {
             background: ${ui.surfaceStrong};
             border: ${ui.border};
             color: ${ui.text};
             box-shadow: 0 10px 22px rgba(15, 23, 42, 0.1);
           }
-
           .ppBtnGreen {
             background: #16a34a;
             color: white;
@@ -723,20 +750,17 @@ export default function DashboardPage() {
             border-radius: 14px;
             box-shadow: 0 18px 34px rgba(22, 163, 74, 0.28);
           }
-
           .ppBtnGreen:disabled {
             opacity: 0.5;
             cursor: not-allowed;
             box-shadow: none;
           }
-
           .ppWalletTop {
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
             gap: 10px;
           }
-
           .ppWalletMid {
             margin-top: 10px;
             display: flex;
@@ -744,7 +768,6 @@ export default function DashboardPage() {
             justify-content: space-between;
             gap: 12px;
           }
-
           .ppBig {
             font-size: 40px;
             font-weight: 950;
@@ -752,18 +775,15 @@ export default function DashboardPage() {
             letter-spacing: -0.03em;
             line-height: 1;
           }
-
           .ppGoal {
             margin-top: 12px;
           }
-
           .ppGoalTop {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
           }
-
           .ppBar {
             height: 10px;
             border-radius: 999px;
@@ -771,7 +791,6 @@ export default function DashboardPage() {
             overflow: hidden;
             margin-top: 8px;
           }
-
           .ppBarFill {
             height: 100%;
             border-radius: 999px;
@@ -782,7 +801,6 @@ export default function DashboardPage() {
             );
             transition: width 260ms ease;
           }
-
           .ppContributionBox {
             margin-top: 12px;
             border-radius: 16px;
@@ -817,7 +835,6 @@ export default function DashboardPage() {
             gap: 10px;
             margin-bottom: 10px;
           }
-
           .ppLink {
             font-size: 13px;
             font-weight: 800;
@@ -825,7 +842,6 @@ export default function DashboardPage() {
             text-decoration: underline;
             white-space: nowrap;
           }
-
           .ppErrorBox {
             border-radius: 14px;
             padding: 12px;
@@ -835,7 +851,6 @@ export default function DashboardPage() {
             font-size: 13px;
             margin-bottom: 10px;
           }
-
           .ppEmptyBox {
             border-radius: 14px;
             padding: 14px;
@@ -845,7 +860,6 @@ export default function DashboardPage() {
             font-size: 13px;
           }
 
-          /* Transactions desktop */
           .ppTxDesktop {
             display: block;
           }
@@ -884,7 +898,6 @@ export default function DashboardPage() {
             color: ${ui.green};
           }
 
-          /* Transactions mobile */
           .ppTxMobile {
             display: none;
           }
@@ -954,38 +967,30 @@ export default function DashboardPage() {
             .ppWrap {
               padding: 14px 12px 44px;
             }
-
             .ppHeaderTop {
               flex-direction: column;
               align-items: stretch;
             }
-
             .ppTitle {
               font-size: 24px;
             }
-
             .ppBanner {
               flex-direction: column;
               align-items: stretch;
             }
-
             .ppBtnPrimary {
               width: 100%;
             }
-
             .ppBig {
               font-size: 34px;
             }
-
             .ppWalletMid {
               flex-direction: column;
               align-items: stretch;
             }
-
             .ppBtnGreen {
               width: 100%;
             }
-
             .ppTxDesktop {
               display: none;
             }

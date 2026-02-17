@@ -136,7 +136,7 @@ async function createSpaAction(formData: FormData) {
   const siteUrl = getSiteUrl();
 
   // ✅ LE POINT CLÉ: on passe par /auth/callback (pas /reset-password direct)
-  const redirectTo = `${siteUrl}/auth/callback?next=/reset-password`;
+const redirectTo = `${siteUrl}/reset-password`;
 
   // 1) Invite Auth user
   const { data: invited, error: iErr } = await admin.auth.admin.inviteUserByEmail(email, {
