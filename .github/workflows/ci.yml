@@ -29,7 +29,7 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit || true
 
-      - - name: Build
+      - name: Build
         run: "NEXT_PUBLIC_SUPABASE_URL=dummy NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy npm run build"
 
 
