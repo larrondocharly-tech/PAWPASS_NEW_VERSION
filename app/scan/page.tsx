@@ -1,7 +1,18 @@
 import ScanPageClientWrapper from "./ScanPageClientWrapper";
 
-export const dynamic = "force-dynamic";
-
-export default function Page() {
-  return <ScanPageClientWrapper />;
+export default function Page({
+  searchParams,
+}: {
+  searchParams?: {
+    mode?: string;
+    t?: string;
+  };
+}) {
+  return (
+    <ScanPageClientWrapper
+      mode={searchParams?.mode ?? "scan"}
+      token={searchParams?.t ?? ""}
+      scanFlag={true}
+    />
+  );
 }
