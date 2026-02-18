@@ -1,7 +1,7 @@
-import ScanPageClient from "./ScanPageClient";
+import ScanPageClientWrapper from "./ScanPageClientWrapper";
 
 export const dynamic = "force-dynamic";
 
 export default function Page() {
-  return <ScanPageClient />;
+  return <ScanPageClientWrapper />;
 }

@@ -7,10 +7,12 @@ import BankTestButton from "./bank/BankTestButton";
 
 export const dynamic = "force-dynamic";
 
+type ProfileRow = Pick<Profile, "id" | "role" | "spa_id" | "merchant_code">;
+
 export default function SettingsPage() {
   const supabase = useMemo(() => createClient(), []);
 
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [email, setEmail] = useState<string | null>(null);
 
   const [spas, setSpas] = useState<Spa[]>([]);
@@ -19,56 +21,57 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const loadProfile = async () => {
+    setError(null);
+
+    const { data: auth, error: authErr } = await supabase.auth.getUser();
+    if (authErr) {
+      setError(authErr.message);
+      return;
+    }
+
+    const user = auth?.user;
+    if (!user) {
+      setError("Session expirée.");
+      return;
+    }
+
+    setEmail(user.email ?? null);
+
+    const { data, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, role, spa_id, merchant_code")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      setError(profileError.message);
+      return;
+    }
+
+    setProfile((data as ProfileRow) ?? null);
+    setSpaId((data as any)?.spa_id ?? "");
+  };
+
+  const loadSpas = async () => {
+    const { data, error: spaError } = await supabase
+      .from("spas")
+      .select("id, name, city, region")
+      .order("name");
+
+    if (spaError) {
+      setError(spaError.message);
+      return;
+    }
+
+    setSpas(data ?? []);
+  };
+
   useEffect(() => {
-    const loadProfile = async () => {
-      setError(null);
-
-      const { data: auth, error: authErr } = await supabase.auth.getUser();
-      if (authErr) {
-        setError(authErr.message);
-        return;
-      }
-
-      const user = auth?.user;
-      if (!user) {
-        setError("Session expirée.");
-        return;
-      }
-
-      setEmail(user.email ?? null);
-
-      const { data, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, role, spa_id, merchant_code")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError) {
-        setError(profileError.message);
-        return;
-      }
-
-      setProfile(data ?? null);
-      setSpaId(data?.spa_id ?? "");
-    };
-
-    const loadSpas = async () => {
-      const { data, error: spaError } = await supabase
-        .from("spas")
-        .select("id, name, city, region")
-        .order("name");
-
-      if (spaError) {
-        setError(spaError.message);
-        return;
-      }
-
-      setSpas(data ?? []);
-    };
-
     void loadProfile();
     void loadSpas();
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -88,6 +91,9 @@ export default function SettingsPage() {
     }
 
     setStatus("Profil mis à jour ✅");
+
+    // Recharge pour refléter la DB
+    void loadProfile();
   };
 
   const handleSignOut = async () => {
@@ -111,22 +117,30 @@ export default function SettingsPage() {
       return;
     }
 
-    const rawRole = String(user.user_metadata?.role ?? "").toLowerCase();
-    const normalizedRole = rawRole === "merchant" ? "merchant" : "user";
-
+    // ✅ SÉCURITÉ: on ne dérive JAMAIS le rôle depuis user_metadata/app_metadata.
+    // On crée un profil "user" par défaut. Les promotions (merchant/spa/admin) sont faites via admin/process contrôlé.
     const { data, error: createError } = await supabase
       .from("profiles")
-      .insert({ id: user.id, role: normalizedRole })
+      .insert({ id: user.id, role: "user" })
       .select("id, role, spa_id, merchant_code")
       .single();
 
     if (createError) {
+      // Si le profil existe déjà (cas fréquent), on recharge au lieu d'afficher une erreur bloquante.
+      // Postgres: code 23505 = unique_violation (PK déjà présent)
+      const pgCode = (createError as any)?.code;
+      if (pgCode === "23505") {
+        setStatus("Profil déjà existant ✅");
+        void loadProfile();
+        return;
+      }
+
       setError(createError.message);
       return;
     }
 
-    setProfile(data);
-    setSpaId(data?.spa_id ?? "");
+    setProfile(data as ProfileRow);
+    setSpaId((data as any)?.spa_id ?? "");
     setStatus("Profil créé ✅");
   };
 
@@ -150,7 +164,12 @@ export default function SettingsPage() {
             {profile.role === "merchant" && (
               <label className="label" htmlFor="merchantCode">
                 Code commerçant
-                <input id="merchantCode" className="input" value={profile.merchant_code ?? ""} readOnly />
+                <input
+                  id="merchantCode"
+                  className="input"
+                  value={profile.merchant_code ?? ""}
+                  readOnly
+                />
               </label>
             )}
 

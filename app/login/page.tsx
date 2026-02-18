@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
+type ProfileRole = "user" | "merchant" | "spa" | "admin";
+
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -15,11 +17,27 @@ function LoginPageInner() {
 
   // ✅ remember me
   const [rememberMe, setRememberMe] = useState(true);
-
   const supabase = useMemo(() => createClient({ remember: rememberMe }), [rememberMe]);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const fetchRoleFromProfiles = async (): Promise<ProfileRole> => {
+    // Source de vérité unique: public.profiles.role
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .single();
+
+    if (error) {
+      // Si profile manquant / erreur, on reste conservateur
+      return "user";
+    }
+
+    const role = (data?.role ?? "user") as ProfileRole;
+    if (role === "admin" || role === "merchant" || role === "spa" || role === "user") return role;
+    return "user";
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,27 +49,38 @@ function LoginPageInner() {
       password,
     });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       setErrorMsg(error.message);
       return;
     }
 
+    // Important: après sign-in, s'assurer que le client est prêt à lire les tables (RLS)
+    // (On ne force pas un refresh ici ; Supabase gère les cookies/session.)
+
     const user = data.user;
     const userMeta = (user?.user_metadata ?? {}) as any;
-    const appMeta = (user?.app_metadata ?? {}) as any;
 
-    let role: string | undefined = userMeta.role || appMeta.role;
-    if (!role && appMeta.is_admin) role = "admin";
-    if (!role && user?.email === "admin@admin.com") role = "admin";
-    if (role !== "merchant" && role !== "admin") role = "user";
-
-    const redirectTo = searchParams.get("redirectTo");
+    // Flags UX OK en metadata (non-sécurité)
     const hasSeenTutorial = Boolean(userMeta?.has_seen_tutorial);
 
+    // ✅ Rôle depuis DB
+    const role = await fetchRoleFromProfiles();
+
+    setLoading(false);
+
+    // redirect param (ton middleware utilise "next", mais on garde compat redirectTo si tu l'utilises ailleurs)
+    const nextFromMiddleware = searchParams.get("next");
+    const redirectTo = searchParams.get("redirectTo");
+    const target = nextFromMiddleware || redirectTo || "/dashboard";
+
+    // Routing selon role DB
     if (role === "merchant") {
       router.replace("/merchant");
+      return;
+    }
+    if (role === "spa") {
+      router.replace("/spa");
       return;
     }
     if (role === "admin") {
@@ -59,12 +88,13 @@ function LoginPageInner() {
       return;
     }
 
+    // user standard
     if (!hasSeenTutorial) {
-      router.replace(`/tutorial?next=${encodeURIComponent(redirectTo || "/dashboard")}`);
+      router.replace(`/tutorial?next=${encodeURIComponent(target)}`);
       return;
     }
 
-    router.replace(redirectTo || "/dashboard");
+    router.replace(target);
   };
 
   return (

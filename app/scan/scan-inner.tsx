@@ -11,9 +11,7 @@ interface Spa {
   name: string;
 }
 type DonationPercent = 50 | 100;
-
 type MerchantLite = { id: string; name: string };
-
 type CouponStep = "choose_discount" | "present_to_merchant" | "finalize_purchase";
 
 function format2(n: number) {
@@ -34,64 +32,59 @@ export default function ScanInner() {
   const supabase = useMemo(() => createClient(), []);
 
   const mode = (searchParams.get("mode") || "").trim().toLowerCase();
-  // ✅ compat: mode=redeem => coupon
   const isCoupon = mode === "coupon" || mode === "redeem";
 
   /**
-   * ✅ SCAN-ONLY:
-   * On n'accepte PLUS m= / code=
-   * On accepte uniquement t= ou token=
+   * ✅ COMPAT TOKEN:
+   * - nouveau: t / token
+   * - ancien: m / code
    */
-  const scanTokenRaw = searchParams.get("t") || searchParams.get("token") || null;
+  const scanTokenRaw =
+    searchParams.get("t") ||
+    searchParams.get("token") ||
+    searchParams.get("m") ||
+    searchParams.get("code") ||
+    null;
+
   const scanToken = scanTokenRaw ? scanTokenRaw.trim() : null;
 
   // Merchant
   const [merchant, setMerchant] = useState<any>(null);
   const [loadingMerchant, setLoadingMerchant] = useState(false);
 
-  // Wallet (affichage)
+  // Wallet
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [walletLoadError, setWalletLoadError] = useState<string | null>(null);
 
-  // Achat (scan normal)
+  // Achat
   const [amount, setAmount] = useState("");
   const [spas, setSpas] = useState<Spa[]>([]);
   const [selectedSpaId, setSelectedSpaId] = useState("");
   const [donationPercent, setDonationPercent] = useState<DonationPercent>(50);
 
-  // ✅ NEW: SPA favorite
+  // favorite SPA
   const [favoriteSpaId, setFavoriteSpaId] = useState<string | null>(null);
-  // ✅ NEW: checkbox pour enregistrer le favori
   const [setAsFavorite, setSetAsFavorite] = useState<boolean>(true);
 
   // Ticket
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
 
-  // Erreurs + modal merci
+  // Erreurs + merci
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showThankYou, setShowThankYou] = useState(false);
-const lastThankYouKeyRef = useRef<string>("");
 
-  // -----------------------------
-  // COUPON FLOW (nouveau)
-  // -----------------------------
+  // Coupon flow
   const [couponStep, setCouponStep] = useState<CouponStep>("choose_discount");
-
-  // 1) réduction demandée
   const [discountEur, setDiscountEur] = useState<number>(0);
-
-  // 2) coupon réservé + timer
   const [busyCoupon, setBusyCoupon] = useState(false);
   const [couponId, setCouponId] = useState<string | null>(null);
   const [couponExpiresAtIso, setCouponExpiresAtIso] = useState<string>("");
   const [couponCreatedAt, setCouponCreatedAt] = useState<{ date: string; time: string } | null>(null);
-
-  // 3) finalisation : montant total + reste à payer
   const [purchaseTotal, setPurchaseTotal] = useState<string>("");
 
-  // Compte à rebours
+  // Timer
   const [remainingSec, setRemainingSec] = useState<number>(0);
   const timerRef = useRef<number | null>(null);
 
@@ -103,34 +96,23 @@ const lastThankYouKeyRef = useRef<string>("");
   const getMinReceiptAmount = (): number => {
     if (!merchant) return 20;
     if (typeof merchant.receipt_threshold === "number" && !Number.isNaN(merchant.receipt_threshold)) return merchant.receipt_threshold;
-    if (typeof merchant.min_receipt_amount === "number" && !Number.isNaN(merchant.min_receipt_amount)) return merchant.min_receipt_amount;
     return 20;
   };
 
-  /**
-   * ✅ SCAN-ONLY: URLs construits avec t= (pas m=)
-   */
   const buildUrl = (opts: { mode: "scan" | "coupon"; t?: string | null; scan?: 0 | 1 }) => {
     const params = new URLSearchParams();
     params.set("mode", opts.mode);
-    if (opts.t) params.set("t", opts.t);
+    if (opts.t) params.set("t", opts.t); // ✅ standard: t=
     if (opts.scan === 1) params.set("scan", "1");
     return `/scan?${params.toString()}`;
   };
 
-  const goRescan = () => {
-    window.location.assign(buildUrl({ mode: isCoupon ? "coupon" : "scan", scan: 1 }));
-  };
-  const goAchat = () => {
-    if (!scanToken) return router.replace(buildUrl({ mode: "scan", scan: 1 }));
-    router.replace(buildUrl({ mode: "scan", t: scanToken }));
-  };
-  const goCoupon = () => {
-    if (!scanToken) return router.replace(buildUrl({ mode: "coupon", scan: 1 }));
-    router.replace(buildUrl({ mode: "coupon", t: scanToken }));
-  };
+  const goRescan = () => router.replace(buildUrl({ mode: isCoupon ? "coupon" : "scan", scan: 1 }));
+  const goAchat = () => router.replace(buildUrl({ mode: "scan", t: scanToken || undefined }));
+  const goCoupon = () => router.replace(buildUrl({ mode: "coupon", t: scanToken || undefined }));
 
-  // Wallet load
+  // ---------------- Wallet load ----------------
+
   const loadWalletBalance = async () => {
     setWalletLoadError(null);
 
@@ -143,6 +125,7 @@ const lastThankYouKeyRef = useRef<string>("");
 
     const userId = auth.user.id;
 
+    // wallets.*
     const walletCols = ["balance", "balance_eur", "wallet_balance", "amount"];
     for (const col of walletCols) {
       const { data, error } = await supabase.from("wallets").select(col).eq("user_id", userId).maybeSingle();
@@ -157,13 +140,14 @@ const lastThankYouKeyRef = useRef<string>("");
       const msg = (error?.message || "").toLowerCase();
       if (msg.includes("column") && msg.includes("does not exist")) continue;
 
-      if (msg.includes("permission denied") || msg.includes("violates row-level security") || msg.includes("row level security")) {
+      if (msg.includes("permission") || msg.includes("row level security") || msg.includes("rls")) {
         setWalletBalance(0);
         setWalletLoadError("Impossible de récupérer le solde (RLS/permissions sur wallets).");
         return;
       }
     }
 
+    // profiles.*
     const candidates = ["wallet_balance", "wallet_eur", "wallet", "balance"];
     for (const col of candidates) {
       const { data, error } = await supabase.from("profiles").select(col).eq("id", userId).maybeSingle();
@@ -178,7 +162,7 @@ const lastThankYouKeyRef = useRef<string>("");
       const msg = (error?.message || "").toLowerCase();
       if (msg.includes("column") && msg.includes("does not exist")) continue;
 
-      if (msg.includes("permission denied") || msg.includes("violates row-level security") || msg.includes("row level security")) {
+      if (msg.includes("permission") || msg.includes("row level security") || msg.includes("rls")) {
         setWalletBalance(0);
         setWalletLoadError("Impossible de récupérer le solde (RLS/permissions sur profiles).");
         return;
@@ -189,7 +173,8 @@ const lastThankYouKeyRef = useRef<string>("");
     setWalletLoadError("Impossible de récupérer le solde (wallets/profiles : colonne non trouvée ou non accessible).");
   };
 
-  // ✅ Load favorite SPA from profiles
+  // ---------------- Favorite SPA ----------------
+
   const loadFavoriteSpa = async () => {
     try {
       const { data: auth } = await supabase.auth.getUser();
@@ -198,41 +183,25 @@ const lastThankYouKeyRef = useRef<string>("");
         return;
       }
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("favorite_spa_id")
-        .eq("id", auth.user.id)
-        .maybeSingle();
-
+      const { data, error } = await supabase.from("profiles").select("favorite_spa_id").eq("id", auth.user.id).maybeSingle();
       if (error) {
-        console.warn("loadFavoriteSpa error:", error.message);
         setFavoriteSpaId(null);
         return;
       }
-
-      const fav = (data as any)?.favorite_spa_id as string | null | undefined;
-      setFavoriteSpaId(fav ?? null);
-    } catch (e) {
-      console.warn("loadFavoriteSpa fatal:", e);
+      setFavoriteSpaId(((data as any)?.favorite_spa_id as string | null | undefined) ?? null);
+    } catch {
       setFavoriteSpaId(null);
     }
   };
 
-  // ✅ Save favorite SPA (non-bloquant)
   const saveFavoriteSpaNonBlocking = async (spaId: string) => {
     try {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth?.user) return;
 
       const { error } = await supabase.from("profiles").update({ favorite_spa_id: spaId }).eq("id", auth.user.id);
-      if (error) {
-        console.warn("saveFavoriteSpa error:", error.message);
-        return;
-      }
-      setFavoriteSpaId(spaId);
-    } catch (e) {
-      console.warn("saveFavoriteSpa fatal:", e);
-    }
+      if (!error) setFavoriteSpaId(spaId);
+    } catch {}
   };
 
   useEffect(() => {
@@ -241,20 +210,17 @@ const lastThankYouKeyRef = useRef<string>("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
-  // ✅ Si le favori arrive après, pré-sélectionner si rien choisi
   useEffect(() => {
-    if (!selectedSpaId && favoriteSpaId) {
-      setSelectedSpaId(favoriteSpaId);
-    }
+    if (!selectedSpaId && favoriteSpaId) setSelectedSpaId(favoriteSpaId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [favoriteSpaId]);
 
-  // Load SPAs
+  // ---------------- Load SPAs ----------------
+
   useEffect(() => {
     const load = async () => {
       const { data, error } = await supabase.from("spas").select("id, name").order("name", { ascending: true });
       if (error) {
-        console.error(error);
         setError("Erreur lors du chargement des refuges.");
         return;
       }
@@ -263,12 +229,13 @@ const lastThankYouKeyRef = useRef<string>("");
     load();
   }, [supabase]);
 
-  // Load merchant
+  // ---------------- Load merchant ----------------
+
   useEffect(() => {
     setError(null);
     setErrorMsg(null);
 
-    // reset coupon flow when merchant changes or mode changes
+    // reset flows
     setCouponStep("choose_discount");
     setCouponId(null);
     setCouponExpiresAtIso("");
@@ -277,7 +244,7 @@ const lastThankYouKeyRef = useRef<string>("");
     setDiscountEur(0);
     setPurchaseTotal("");
 
-    // ✅ IMPORTANT: on reset sur la SPA favorite (pas vide)
+    // reset achat
     setSelectedSpaId(favoriteSpaId ?? "");
     setDonationPercent(50);
     setReceiptFile(null);
@@ -288,29 +255,45 @@ const lastThankYouKeyRef = useRef<string>("");
       return;
     }
 
-    const loadMerchant = async () => {
+    const run = async () => {
       setLoadingMerchant(true);
 
-      /**
-       * ✅ Le token (t/token) correspond à merchants.qr_token
-       */
-      const { data, error } = await supabase.from("merchants").select("*").eq("qr_token", scanToken).single();
+      // 1) primary: qr_token
+      let found: any = null;
+      let errMsg: string | null = null;
 
-      if (error) {
-        console.error(error);
+      {
+        const res = await supabase.from("merchants").select("*").eq("qr_token", scanToken).maybeSingle();
+        if (res.error) errMsg = res.error.message;
+        if (res.data) found = res.data;
+      }
+
+      // 2) fallback: merchant_code (si tu avais un ancien système)
+      if (!found) {
+        const res2 = await supabase.from("merchants").select("*").eq("merchant_code", scanToken).maybeSingle();
+        if (!res2.error && res2.data) found = res2.data;
+      }
+
+      if (!found) {
+        const lower = (errMsg || "").toLowerCase();
+        if (lower.includes("permission") || lower.includes("rls") || lower.includes("row level security")) {
+          setError("Commerçant non accessible (RLS/permissions sur table merchants).");
+        } else {
+          setError("Commerçant introuvable (token non reconnu).");
+        }
         setMerchant(null);
-        setError("Commerçant introuvable.");
       } else {
-        setMerchant(data || null);
+        setMerchant(found);
       }
 
       setLoadingMerchant(false);
     };
 
-    loadMerchant();
-  }, [scanToken, supabase, isCoupon]);
+    run();
+  }, [scanToken, supabase, favoriteSpaId]);
 
-  // Timer management
+  // ---------------- Timer ----------------
+
   const stopTimer = () => {
     if (timerRef.current) window.clearInterval(timerRef.current);
     timerRef.current = null;
@@ -318,7 +301,6 @@ const lastThankYouKeyRef = useRef<string>("");
 
   useEffect(() => {
     stopTimer();
-
     if (couponStep !== "present_to_merchant") return;
     if (!couponExpiresAtIso) return;
 
@@ -337,7 +319,8 @@ const lastThankYouKeyRef = useRef<string>("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [couponStep, couponExpiresAtIso]);
 
-  // Upload ticket helper
+  // ---------------- Upload receipt ----------------
+
   const uploadReceiptIfNeeded = async (userId: string, amountNumber: number, minReceiptAmount: number): Promise<string | null> => {
     if (amountNumber > minReceiptAmount && !receiptFile) {
       setErrorMsg(`Ticket de caisse obligatoire pour les achats > ${minReceiptAmount} €`);
@@ -359,7 +342,6 @@ const lastThankYouKeyRef = useRef<string>("");
     setIsUploadingReceipt(false);
 
     if (uploadError || !data) {
-      console.error("Upload ticket error:", uploadError);
       setError("Impossible d'envoyer le ticket. Vérifiez le fichier et réessayez.");
       return null;
     }
@@ -367,22 +349,8 @@ const lastThankYouKeyRef = useRef<string>("");
     return data.path;
   };
 
-  // ✅ Helper: mark latest tx as scan + dedup_key (non-bloquant)
-  const markScanDedupNonBlocking = async (merchantId: string, amountValue: number) => {
-    try {
-      await supabase.rpc("mark_last_transaction_scan", {
-        p_merchant_id: merchantId,
-        p_amount: amountValue,
-        p_happened_at: new Date().toISOString(),
-      });
-    } catch (e) {
-      console.warn("mark_last_transaction_scan failed (non bloquant)", e);
-    }
-  };
+  // ---------------- ACHAT ----------------
 
-  // -----------------------------
-  // ACHAT MODE (inchangé + favorite)
-  // -----------------------------
   const handleSubmitNormal = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -407,64 +375,35 @@ const lastThankYouKeyRef = useRef<string>("");
     if (amountNumber > minReceiptAmount && !receiptPath) return;
 
     const { error: rpcError } = await supabase.rpc("apply_cashback_transaction", {
-      p_merchant_code: scanToken,
+      p_qr_token: scanToken,
       p_amount: amountNumber,
       p_spa_id: selectedSpaId,
-      p_use_wallet: false,
-      p_wallet_spent: 0,
       p_donation_percent: donationPercent,
-      p_receipt_image_url: receiptPath ?? null,
+      p_use_reduction: false,
+      p_reduction_amount: 0,
     });
 
     if (rpcError) {
-      console.error(rpcError);
-      const msg = (rpcError.message || "").toUpperCase();
-
-      if (msg.includes("DOUBLE_SCAN_2H")) {
-        setError(
-          "Vous avez déjà enregistré un achat chez ce commerçant il y a moins de 2 heures. " +
-            "Pour éviter les abus, un seul scan est autorisé toutes les 2 heures pour un même commerçant."
-        );
-        return;
-      }
-
-      if (msg.includes("RECEIPT_REQUIRED")) {
-        setError(`Ticket requis pour les achats de plus de ${minReceiptAmount} €.`);
-        return;
-      }
-
       setError(`Erreur lors de l'enregistrement : ${rpcError.message}`);
       return;
     }
 
-    // ✅ NEW: tag tx as scan + dedup_key (prevents double with future bank sync)
-    if (merchant?.id) {
-      await markScanDedupNonBlocking(String(merchant.id), amountNumber);
-    }
-
-    // ✅ NEW: save favorite (non bloquant)
-    if (setAsFavorite && selectedSpaId) {
-      await saveFavoriteSpaNonBlocking(selectedSpaId);
-    }
+    if (setAsFavorite && selectedSpaId) await saveFavoriteSpaNonBlocking(selectedSpaId);
 
     setShowThankYou(true);
   };
 
-  // -----------------------------
-  // COUPON MODE (nouveau flow)
-  // -----------------------------
+  // ---------------- COUPON ----------------
+
   const canValidateDiscount = useMemo(() => {
     if (!merchant) return false;
-    if (!Number.isFinite(discountEur)) return false;
-    if (discountEur <= 0) return false;
-    // Optionnel : ne pas dépasser le wallet
+    if (!Number.isFinite(discountEur) || discountEur <= 0) return false;
     if (walletLoadError == null && walletBalance > 0 && discountEur > walletBalance) return false;
     return true;
   }, [merchant, discountEur, walletBalance, walletLoadError]);
 
   const createCouponAndStartTimer = async () => {
-    if (!merchant) return;
-    if (!scanToken) return;
+    if (!merchant || !scanToken) return;
 
     setBusyCoupon(true);
     setError(null);
@@ -477,7 +416,6 @@ const lastThankYouKeyRef = useRef<string>("");
         return;
       }
 
-      // 1) crée le coupon (réserve/déduit selon ta logique SQL)
       const { data, error } = await supabase.rpc("create_redeem_coupon", {
         p_merchant_id: (merchant as MerchantLite).id ?? merchant.id,
         p_requested_discount_eur: discountEur,
@@ -489,17 +427,11 @@ const lastThankYouKeyRef = useRef<string>("");
       const id = data as string;
       setCouponId(id);
 
-      // 2) récupère expires_at (timer 5 min côté DB)
-      const { data: c, error: cErr } = await supabase.from("redeem_coupons").select("expires_at").eq("id", id).maybeSingle();
-      if (cErr) throw cErr;
-
+      const { data: c } = await supabase.from("redeem_coupons").select("expires_at").eq("id", id).maybeSingle();
       const expires = c?.expires_at ?? new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
       setCouponExpiresAtIso(expires);
-
-      // Date/heure affichées au commerçant
       setCouponCreatedAt(nowFrDateTime());
-
-      // 3) passe à l'écran “Présenter au commerçant”
       setCouponStep("present_to_merchant");
 
       await loadWalletBalance();
@@ -511,7 +443,6 @@ const lastThankYouKeyRef = useRef<string>("");
   };
 
   const merchantRefuseCoupon = () => {
-    // On n’annule pas côté DB faute de RPC dédiée; on revient à l’étape 1.
     setError(null);
     setErrorMsg(null);
     setCouponId(null);
@@ -535,11 +466,9 @@ const lastThankYouKeyRef = useRef<string>("");
         return;
       }
 
-      // “Accepté” => on confirme côté DB (ton RPC existant)
       const { error } = await supabase.rpc("confirm_redeem_coupon", { p_coupon_id: couponId });
       if (error) throw error;
 
-      // Puis on passe à l’étape finalisation (reste à payer + SPA + 50/100)
       setCouponStep("finalize_purchase");
     } catch (e: any) {
       setError(e?.message || "Erreur validation commerçant");
@@ -582,65 +511,30 @@ const lastThankYouKeyRef = useRef<string>("");
     const receiptPath = await uploadReceiptIfNeeded(auth.user.id, total, minReceiptAmount);
     if (total > minReceiptAmount && !receiptPath) return;
 
-    // ✅ On enregistre l'achat en utilisant le wallet (réduction)
     const { error: rpcError } = await supabase.rpc("apply_cashback_transaction", {
-      p_merchant_code: scanToken,
+      p_qr_token: scanToken,
       p_amount: total,
       p_spa_id: selectedSpaId,
-      p_use_wallet: true,
-      p_wallet_spent: discountEur,
       p_donation_percent: donationPercent,
-      p_receipt_image_url: receiptPath ?? null,
+      p_use_reduction: true,
+      p_reduction_amount: discountEur,
     });
 
     if (rpcError) {
-      console.error(rpcError);
-      const msg = (rpcError.message || "").toUpperCase();
-
-      if (msg.includes("DOUBLE_SCAN_2H")) {
-        setError(
-          "Vous avez déjà enregistré un achat chez ce commerçant il y a moins de 2 heures. " +
-            "Pour éviter les abus, un seul scan est autorisé toutes les 2 heures pour un même commerçant."
-        );
-        return;
-      }
-
-      if (msg.includes("RECEIPT_REQUIRED")) {
-        setError(`Ticket requis pour les achats de plus de ${minReceiptAmount} €.`);
-        return;
-      }
-
       setError(`Erreur lors de l'enregistrement : ${rpcError.message}`);
       return;
     }
 
-    // ✅ NEW: tag tx as scan + dedup_key (prevents double with future bank sync)
-    if (merchant?.id) {
-      await markScanDedupNonBlocking(String(merchant.id), total);
-    }
-
     await loadWalletBalance();
-
-    // ✅ NEW: save favorite (non bloquant)
-    if (setAsFavorite && selectedSpaId) {
-      await saveFavoriteSpaNonBlocking(selectedSpaId);
-    }
+    if (setAsFavorite && selectedSpaId) await saveFavoriteSpaNonBlocking(selectedSpaId);
 
     setShowThankYou(true);
   };
 
   const minReceiptAmountForUI = getMinReceiptAmount();
 
-  // UI helpers
   const Pill = ({ children }: { children: React.ReactNode }) => (
-    <div
-      style={{
-        background: "rgba(2,132,199,0.08)",
-        border: "1px solid rgba(2,132,199,0.18)",
-        borderRadius: 14,
-        padding: 12,
-      }}
-    >
+    <div style={{ background: "rgba(2,132,199,0.08)", border: "1px solid rgba(2,132,199,0.18)", borderRadius: 14, padding: 12 }}>
       {children}
     </div>
   );
@@ -650,6 +544,23 @@ const lastThankYouKeyRef = useRef<string>("");
     const s = sec % 60;
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
+
+  // ✅ si pas de token => on affiche un bouton pour re-scanner (au lieu de rien)
+  if (!scanToken) {
+    return (
+      <main style={{ minHeight: "100vh", padding: 16 }}>
+        <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", color: "#92400E", padding: 12, borderRadius: 12, fontWeight: 900 }}>
+          Aucun token détecté dans l’URL.
+        </div>
+        <button
+          onClick={goRescan}
+          style={{ marginTop: 12, width: "100%", padding: 14, borderRadius: 14, fontWeight: 900, border: "1px solid rgba(0,0,0,0.12)", background: "white" }}
+        >
+          Re-scanner
+        </button>
+      </main>
+    );
+  }
 
   return (
     <main style={{ minHeight: "100vh", background: "transparent", padding: "16px 0 28px" }}>
@@ -667,50 +578,20 @@ const lastThankYouKeyRef = useRef<string>("");
           }}
         >
           <header style={{ marginBottom: 12 }}>
-            <p
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: "#FF7A3C",
-                margin: 0,
-              }}
-            >
+            <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#FF7A3C", margin: 0 }}>
               {isCoupon ? "RÉDUCTION INSTANTANÉE" : "SCAN CONFIRMÉ"}
             </p>
-            <h1 style={{ fontSize: 22, margin: "6px 0 0", color: "#0f172a" }}>
-              {isCoupon ? "Utiliser mes crédits" : "Enregistrer un achat"}
-            </h1>
+            <h1 style={{ fontSize: 22, margin: "6px 0 0", color: "#0f172a" }}>{isCoupon ? "Utiliser mes crédits" : "Enregistrer un achat"}</h1>
           </header>
 
           {(error || errorMsg) && (
-            <div
-              style={{
-                background: "#fee2e2",
-                color: "#b91c1c",
-                padding: 10,
-                borderRadius: 12,
-                fontSize: 13,
-                marginBottom: 12,
-              }}
-            >
+            <div style={{ background: "#fee2e2", color: "#b91c1c", padding: 10, borderRadius: 12, fontSize: 13, marginBottom: 12 }}>
               {error || errorMsg}
             </div>
           )}
 
           {walletLoadError && (
-            <div
-              style={{
-                background: "#fff7ed",
-                color: "#92400E",
-                padding: 10,
-                borderRadius: 12,
-                fontSize: 13,
-                marginBottom: 12,
-                border: "1px solid #fed7aa",
-              }}
-            >
+            <div style={{ background: "#fff7ed", color: "#92400E", padding: 10, borderRadius: 12, fontSize: 13, marginBottom: 12, border: "1px solid #fed7aa" }}>
               {walletLoadError}
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
                 Si tu es bien connecté et que tu vois ça, c’est probablement une policy RLS sur <b>wallets</b> / <b>profiles</b>.
@@ -719,6 +600,34 @@ const lastThankYouKeyRef = useRef<string>("");
           )}
 
           {loadingMerchant && <p style={{ marginTop: 10 }}>Chargement commerçant…</p>}
+
+          {/* ✅ si merchant introuvable => on affiche un bloc + rescan (plus écran vide) */}
+          {scanToken && !loadingMerchant && !merchant && (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ background: "#fee2e2", color: "#b91c1c", padding: 12, borderRadius: 12, fontSize: 13, fontWeight: 800 }}>
+                {error || "Impossible de charger le commerçant."}
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
+                  Token: <b>{scanToken}</b>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={goRescan}
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  background: "#fff",
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                Re-scanner
+              </button>
+            </div>
+          )}
 
           {scanToken && merchant && !loadingMerchant && (
             <>
@@ -736,16 +645,7 @@ const lastThankYouKeyRef = useRef<string>("");
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      color: "#111827",
-                      fontSize: 14,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <div style={{ fontWeight: 800, color: "#111827", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {merchant.name}
                   </div>
                   <div style={{ fontSize: 12, color: "#92400E" }}>QR: {scanToken}</div>
@@ -769,7 +669,6 @@ const lastThankYouKeyRef = useRef<string>("");
                 </button>
               </div>
 
-              {/* Switch Achat / Coupon */}
               <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
                 <button
                   type="button"
@@ -806,20 +705,14 @@ const lastThankYouKeyRef = useRef<string>("");
                 </button>
               </div>
 
-              {/* -------------------------
-                  COUPON MODE (3 étapes)
-                 ------------------------- */}
               {isCoupon ? (
                 <>
-                  {/* ÉTAPE 1 : choix réduction */}
                   {couponStep === "choose_discount" && (
                     <div style={{ display: "grid", gap: 12 }}>
                       <Pill>
                         <div style={{ fontWeight: 900, color: "#0f172a" }}>Solde disponible</div>
                         <div style={{ fontSize: 20, fontWeight: 900 }}>{format2(walletBalance)} €</div>
-                        <div style={{ fontSize: 12, color: "#475569" }}>
-                          Choisis la réduction, puis tu la présentes au commerçant (timer 5 minutes).
-                        </div>
+                        <div style={{ fontSize: 12, color: "#475569" }}>Choisis la réduction, puis tu la présentes au commerçant (timer 5 minutes).</div>
                       </Pill>
 
                       <label style={{ display: "grid", gap: 6 }}>
@@ -830,12 +723,7 @@ const lastThankYouKeyRef = useRef<string>("");
                           value={Number.isFinite(discountEur) ? discountEur : 0}
                           onChange={(e) => setDiscountEur(Number(e.target.value))}
                           placeholder="Ex : 5"
-                          style={{
-                            width: "100%",
-                            padding: "10px 12px",
-                            borderRadius: 12,
-                            border: "1px solid rgba(0,0,0,0.12)",
-                          }}
+                          style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(0,0,0,0.12)" }}
                         />
                         <div style={{ fontSize: 12, color: "#6b7280" }}>
                           Solde : <b>{format2(walletBalance)} €</b>
@@ -863,89 +751,33 @@ const lastThankYouKeyRef = useRef<string>("");
                       <button
                         type="button"
                         onClick={() => router.push("/dashboard")}
-                        style={{
-                          width: "100%",
-                          padding: "10px 14px",
-                          borderRadius: 14,
-                          border: "1px solid rgba(0,0,0,0.12)",
-                          background: "#fff",
-                          color: "#111827",
-                          fontWeight: 900,
-                          cursor: "pointer",
-                        }}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff", color: "#111827", fontWeight: 900 }}
                       >
                         Annuler
                       </button>
                     </div>
                   )}
 
-                  {/* ÉTAPE 2 : présenter au commerçant */}
                   {couponStep === "present_to_merchant" && (
                     <div style={{ display: "grid", gap: 12 }}>
-                      <div
-                        style={{
-                          background: "rgba(16,185,129,0.10)",
-                          border: "1px solid rgba(16,185,129,0.25)",
-                          borderRadius: 16,
-                          padding: 14,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 900,
-                            letterSpacing: "0.08em",
-                            textTransform: "uppercase",
-                            color: "#065f46",
-                          }}
-                        >
-                          À montrer au commerçant
-                        </div>
+                      <div style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 16, padding: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "#065f46" }}>À montrer au commerçant</div>
 
                         <div style={{ marginTop: 8, fontSize: 18, fontWeight: 950, color: "#0f172a" }}>{merchant.name}</div>
 
-                        <div style={{ marginTop: 10, fontSize: 28, fontWeight: 950, color: "#111827" }}>
-                          Réduction : {format2(discountEur)} €
-                        </div>
+                        <div style={{ marginTop: 10, fontSize: 28, fontWeight: 950, color: "#111827" }}>Réduction : {format2(discountEur)} €</div>
 
                         <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                          <div style={{ fontSize: 13, color: "#065f46", fontWeight: 800 }}>
-                            Date : {couponCreatedAt?.date ?? nowFrDateTime().date}
-                          </div>
-                          <div style={{ fontSize: 13, color: "#065f46", fontWeight: 800 }}>
-                            Heure : {couponCreatedAt?.time ?? nowFrDateTime().time}
-                          </div>
+                          <div style={{ fontSize: 13, color: "#065f46", fontWeight: 800 }}>Date : {couponCreatedAt?.date ?? nowFrDateTime().date}</div>
+                          <div style={{ fontSize: 13, color: "#065f46", fontWeight: 800 }}>Heure : {couponCreatedAt?.time ?? nowFrDateTime().time}</div>
                         </div>
 
-                        <div
-                          style={{
-                            marginTop: 12,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 10,
-                            background: "rgba(0,0,0,0.04)",
-                            borderRadius: 12,
-                            padding: "10px 12px",
-                          }}
-                        >
+                        <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "rgba(0,0,0,0.04)", borderRadius: 12, padding: "10px 12px" }}>
                           <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>Valable encore</div>
-                          <div
-                            style={{
-                              fontSize: 18,
-                              fontWeight: 950,
-                              color: remainingSec > 0 ? "#0f172a" : "#b91c1c",
-                            }}
-                          >
-                            {formatRemaining(remainingSec)}
-                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 950, color: remainingSec > 0 ? "#0f172a" : "#b91c1c" }}>{formatRemaining(remainingSec)}</div>
                         </div>
 
-                        {remainingSec <= 0 && (
-                          <div style={{ marginTop: 10, fontSize: 13, fontWeight: 900, color: "#b91c1c" }}>
-                            Coupon expiré. Recommencez.
-                          </div>
-                        )}
+                        {remainingSec <= 0 && <div style={{ marginTop: 10, fontSize: 13, fontWeight: 900, color: "#b91c1c" }}>Coupon expiré. Recommencez.</div>}
                       </div>
 
                       <div style={{ display: "flex", gap: 10 }}>
@@ -953,15 +785,7 @@ const lastThankYouKeyRef = useRef<string>("");
                           type="button"
                           onClick={merchantRefuseCoupon}
                           disabled={busyCoupon}
-                          style={{
-                            flex: 1,
-                            padding: "12px 12px",
-                            borderRadius: 14,
-                            border: "1px solid rgba(0,0,0,0.12)",
-                            background: "#fff",
-                            fontWeight: 900,
-                            cursor: busyCoupon ? "not-allowed" : "pointer",
-                          }}
+                          style={{ flex: 1, padding: "12px 12px", borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff", fontWeight: 900 }}
                         >
                           Refuser
                         </button>
@@ -978,7 +802,6 @@ const lastThankYouKeyRef = useRef<string>("");
                             background: busyCoupon || remainingSec <= 0 ? "#e5e7eb" : "#0A8F44",
                             color: busyCoupon || remainingSec <= 0 ? "#6b7280" : "#fff",
                             fontWeight: 950,
-                            cursor: busyCoupon || remainingSec <= 0 ? "not-allowed" : "pointer",
                           }}
                         >
                           {busyCoupon ? "Validation..." : "Accepter"}
@@ -988,23 +811,13 @@ const lastThankYouKeyRef = useRef<string>("");
                       <button
                         type="button"
                         onClick={() => router.push("/dashboard")}
-                        style={{
-                          width: "100%",
-                          padding: "10px 14px",
-                          borderRadius: 14,
-                          border: "1px solid rgba(0,0,0,0.12)",
-                          background: "#fff",
-                          color: "#111827",
-                          fontWeight: 900,
-                          cursor: "pointer",
-                        }}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff", color: "#111827", fontWeight: 900 }}
                       >
                         Annuler
                       </button>
                     </div>
                   )}
 
-                  {/* ÉTAPE 3 : reste à payer + SPA + 50/100 */}
                   {couponStep === "finalize_purchase" && (
                     <form onSubmit={finalizePurchaseWithCoupon} style={{ display: "grid", gap: 12 }}>
                       <Pill>
@@ -1015,9 +828,7 @@ const lastThankYouKeyRef = useRef<string>("");
                       </Pill>
 
                       <div>
-                        <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
-                          Montant total de l’achat (€)
-                        </label>
+                        <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>Montant total de l’achat (€)</label>
                         <input
                           inputMode="decimal"
                           type="number"
@@ -1025,27 +836,12 @@ const lastThankYouKeyRef = useRef<string>("");
                           placeholder="Ex : 25,00"
                           value={purchaseTotal}
                           onChange={(e) => setPurchaseTotal(e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: 12,
-                            borderRadius: 14,
-                            border: "1px solid rgba(0,0,0,0.12)",
-                            outline: "none",
-                            fontSize: 16,
-                            background: "rgba(255,255,255,0.9)",
-                          }}
+                          style={{ width: "100%", padding: 12, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", outline: "none", fontSize: 16, background: "rgba(255,255,255,0.9)" }}
                         />
                       </div>
 
                       {remainingToPay && (
-                        <div
-                          style={{
-                            background: "rgba(2,132,199,0.08)",
-                            border: "1px solid rgba(2,132,199,0.18)",
-                            borderRadius: 14,
-                            padding: 12,
-                          }}
-                        >
+                        <div style={{ background: "rgba(2,132,199,0.08)", border: "1px solid rgba(2,132,199,0.18)", borderRadius: 14, padding: 12 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#0f172a", fontWeight: 900 }}>
                             <span>Total</span>
                             <span>{format2(remainingToPay.total)} €</span>
@@ -1063,20 +859,11 @@ const lastThankYouKeyRef = useRef<string>("");
                       )}
 
                       <div>
-                        <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
-                          Refuge bénéficiaire
-                        </label>
+                        <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>Refuge bénéficiaire</label>
                         <select
                           value={selectedSpaId}
                           onChange={(e) => setSelectedSpaId(e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: 12,
-                            borderRadius: 14,
-                            border: "1px solid rgba(0,0,0,0.12)",
-                            background: "rgba(255,255,255,0.9)",
-                            fontSize: 15,
-                          }}
+                          style={{ width: "100%", padding: 12, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "rgba(255,255,255,0.9)", fontSize: 15 }}
                         >
                           <option value="">Choisir…</option>
                           {spas.map((spa) => (
@@ -1093,9 +880,7 @@ const lastThankYouKeyRef = useRef<string>("");
                       </div>
 
                       <div>
-                        <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 8, color: "#0f172a" }}>
-                          Pourcentage de don
-                        </label>
+                        <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 8, color: "#0f172a" }}>Pourcentage de don</label>
                         <div style={{ display: "flex", gap: 10 }}>
                           {[50, 100].map((p) => (
                             <button
@@ -1110,7 +895,6 @@ const lastThankYouKeyRef = useRef<string>("");
                                 background: donationPercent === p ? "#0A8F44" : "rgba(255,255,255,0.9)",
                                 color: donationPercent === p ? "white" : "#111827",
                                 fontWeight: 900,
-                                cursor: "pointer",
                               }}
                             >
                               {p}%
@@ -1120,13 +904,9 @@ const lastThankYouKeyRef = useRef<string>("");
                       </div>
 
                       <div>
-                        <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
-                          Ticket de caisse (photo ou PDF)
-                        </label>
+                        <label style={{ display: "block", fontWeight: 900, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>Ticket de caisse (photo ou PDF)</label>
                         <input type="file" accept="image/*,application/pdf" onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)} />
-                        <div style={{ fontSize: 12, color: "#92400E", marginTop: 6 }}>
-                          Obligatoire pour les achats &gt; {minReceiptAmountForUI} €.
-                        </div>
+                        <div style={{ fontSize: 12, color: "#92400E", marginTop: 6 }}>Obligatoire pour les achats &gt; {minReceiptAmountForUI} €.</div>
                       </div>
 
                       <button
@@ -1143,7 +923,6 @@ const lastThankYouKeyRef = useRef<string>("");
                           background: "#0A8F44",
                           color: "white",
                           opacity: isUploadingReceipt ? 0.7 : 1,
-                          cursor: isUploadingReceipt ? "not-allowed" : "pointer",
                         }}
                       >
                         {isUploadingReceipt ? "Envoi du ticket..." : "Valider l’achat"}
@@ -1151,20 +930,8 @@ const lastThankYouKeyRef = useRef<string>("");
 
                       <button
                         type="button"
-                        onClick={() => {
-                          // retour step 2 (ex: si mauvais montant)
-                          setCouponStep("present_to_merchant");
-                        }}
-                        style={{
-                          width: "100%",
-                          padding: "10px 14px",
-                          borderRadius: 14,
-                          border: "1px solid rgba(0,0,0,0.12)",
-                          background: "#fff",
-                          color: "#111827",
-                          fontWeight: 900,
-                          cursor: "pointer",
-                        }}
+                        onClick={() => setCouponStep("present_to_merchant")}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "#fff", color: "#111827", fontWeight: 900 }}
                       >
                         Retour
                       </button>
@@ -1172,14 +939,9 @@ const lastThankYouKeyRef = useRef<string>("");
                   )}
                 </>
               ) : (
-                // -------------------------
-                // ACHAT MODE (scan normal)
-                // -------------------------
                 <form onSubmit={handleSubmitNormal} style={{ display: "grid", gap: 12 }}>
                   <div>
-                    <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
-                      Montant de l’achat (€)
-                    </label>
+                    <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>Montant de l’achat (€)</label>
                     <input
                       inputMode="decimal"
                       type="number"
@@ -1187,33 +949,16 @@ const lastThankYouKeyRef = useRef<string>("");
                       placeholder="Ex : 12,50"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: 12,
-                        borderRadius: 14,
-                        border: "1px solid rgba(0,0,0,0.12)",
-                        outline: "none",
-                        fontSize: 16,
-                        background: "rgba(255,255,255,0.9)",
-                      }}
+                      style={{ width: "100%", padding: 12, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", outline: "none", fontSize: 16, background: "rgba(255,255,255,0.9)" }}
                     />
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
-                      Refuge bénéficiaire
-                    </label>
+                    <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>Refuge bénéficiaire</label>
                     <select
                       value={selectedSpaId}
                       onChange={(e) => setSelectedSpaId(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: 12,
-                        borderRadius: 14,
-                        border: "1px solid rgba(0,0,0,0.12)",
-                        background: "rgba(255,255,255,0.9)",
-                        fontSize: 15,
-                      }}
+                      style={{ width: "100%", padding: 12, borderRadius: 14, border: "1px solid rgba(0,0,0,0.12)", background: "rgba(255,255,255,0.9)", fontSize: 15 }}
                     >
                       <option value="">Choisir…</option>
                       {spas.map((spa) => (
@@ -1230,9 +975,7 @@ const lastThankYouKeyRef = useRef<string>("");
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 8, color: "#0f172a" }}>
-                      Pourcentage de don
-                    </label>
+                    <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 8, color: "#0f172a" }}>Pourcentage de don</label>
                     <div style={{ display: "flex", gap: 10 }}>
                       {[50, 100].map((p) => (
                         <button
@@ -1247,7 +990,6 @@ const lastThankYouKeyRef = useRef<string>("");
                             background: donationPercent === p ? "#0A8F44" : "rgba(255,255,255,0.9)",
                             color: donationPercent === p ? "white" : "#111827",
                             fontWeight: 800,
-                            cursor: "pointer",
                           }}
                         >
                           {p}%
@@ -1257,13 +999,9 @@ const lastThankYouKeyRef = useRef<string>("");
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>
-                      Ticket de caisse (photo ou PDF)
-                    </label>
+                    <label style={{ display: "block", fontWeight: 800, fontSize: 13, marginBottom: 6, color: "#0f172a" }}>Ticket de caisse (photo ou PDF)</label>
                     <input type="file" accept="image/*,application/pdf" onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)} />
-                    <div style={{ fontSize: 12, color: "#92400E", marginTop: 6 }}>
-                      Obligatoire pour les achats &gt; {minReceiptAmountForUI} €.
-                    </div>
+                    <div style={{ fontSize: 12, color: "#92400E", marginTop: 6 }}>Obligatoire pour les achats &gt; {minReceiptAmountForUI} €.</div>
                   </div>
 
                   <button
@@ -1280,7 +1018,6 @@ const lastThankYouKeyRef = useRef<string>("");
                       background: "#0A8F44",
                       color: "white",
                       opacity: isUploadingReceipt ? 0.7 : 1,
-                      cursor: isUploadingReceipt ? "not-allowed" : "pointer",
                     }}
                   >
                     {isUploadingReceipt ? "Envoi du ticket..." : "Valider l’achat"}
@@ -1293,18 +1030,7 @@ const lastThankYouKeyRef = useRef<string>("");
       </div>
 
       {showThankYou && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: 16,
-          }}
-        >
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 16 }}>
           <div
             style={{
               backgroundColor: "rgba(255,255,255,0.92)",
@@ -1320,19 +1046,7 @@ const lastThankYouKeyRef = useRef<string>("");
             }}
           >
             <div style={{ marginBottom: 10 }}>
-              <img
-                src="/goat-thankyou.gif?v=3"
-                alt="Merci !"
-                style={{
-                  width: "100%",
-                  maxWidth: 260,
-                  height: "auto",
-                  borderRadius: 16,
-                  objectFit: "contain",
-                  display: "block",
-                  margin: "0 auto",
-                }}
-              />
+              <img src="/goat-thankyou.gif?v=3" alt="Merci !" style={{ width: "100%", maxWidth: 260, height: "auto", borderRadius: 16, objectFit: "contain", display: "block", margin: "0 auto" }} />
             </div>
 
             <p style={{ fontWeight: 900, fontSize: 18, margin: "0 0 6px", color: "#0f172a" }}>Merci !</p>
@@ -1340,17 +1054,7 @@ const lastThankYouKeyRef = useRef<string>("");
 
             <button
               onClick={() => router.push("/dashboard")}
-              style={{
-                marginTop: 14,
-                padding: "12px 16px",
-                borderRadius: 14,
-                fontWeight: 900,
-                backgroundColor: "#0A8F44",
-                color: "white",
-                border: "none",
-                width: "100%",
-                cursor: "pointer",
-              }}
+              style={{ marginTop: 14, padding: "12px 16px", borderRadius: 14, fontWeight: 900, backgroundColor: "#0A8F44", color: "white", border: "none", width: "100%", cursor: "pointer" }}
             >
               Retour au tableau de bord
             </button>

@@ -80,7 +80,7 @@ export default function RegisterPage() {
     setErrorMsg("");
     setInfoMsg("");
 
-    // Petit garde-fou UX (optionnel mais utile)
+    // Garde-fou UX
     if (isMerchant && selectedCategorySlugs.length === 0) {
       setErrorMsg("Merci de sélectionner au moins une catégorie pour votre commerce.");
       return;
@@ -88,26 +88,15 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    const role = isMerchant ? "merchant" : "user";
-
+    // ✅ IMPORTANT SÉCURITÉ:
+    // On n'écrit plus de "role" / "is_merchant" dans les metadata auth.
+    // Les metadata doivent rester pour l'UX seulement.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          role,
-          is_merchant: isMerchant,
           has_seen_tutorial: false,
-
-          // Infos commerçant pour vérification admin
-          merchant_name: isMerchant ? shopName : null,
-          merchant_responsible_name: isMerchant ? responsibleName : null,
-          merchant_address: isMerchant ? address : null,
-          merchant_postal_code: isMerchant ? postalCode : null,
-          merchant_city: isMerchant ? city : null,
-          merchant_phone: isMerchant ? phone : null,
-          merchant_siret: isMerchant ? siret : null,
-          merchant_status: isMerchant ? "pending_validation" : null,
         },
       },
     });
@@ -120,57 +109,17 @@ export default function RegisterPage() {
 
     const newUser = data.user;
 
-    // ⚠️ Si confirmation email activée -> pas de session
-    if (!data.session) {
-      // On enregistre quand même la demande commerçant si besoin (pending)
-      if (isMerchant && newUser?.id) {
-        const { error: appError } = await supabase.from("merchant_applications").insert({
-          user_id: newUser.id,
-          business_name: shopName,
-          city: city,
-          address: address,
-          phone: phone,
-          postal_code: postalCode,
-          responsible_name: responsibleName,
-          siret: siret,
-          message: null,
-          status: "pending",
-          category_slugs: selectedCategorySlugs,
-        });
-
-        if (appError) {
-          console.error(appError);
-          setLoading(false);
-          setErrorMsg(
-            "Votre compte a été créé, mais la demande commerçant n'a pas pu être enregistrée. Merci de contacter PawPass."
-          );
-          return;
-        }
-      }
-
-      setLoading(false);
-      setInfoMsg(
-        "Compte créé. Vérifiez vos emails pour confirmer votre adresse, puis connectez-vous."
-      );
-
-      setTimeout(() => {
-        router.push("/login");
-      }, 900);
-
-      return;
-    }
-
-    // Si session OK : enregistrer la demande commerçant
+    // Enregistrer la demande commerçant (pending) dans la table métier
     if (isMerchant && newUser?.id) {
       const { error: appError } = await supabase.from("merchant_applications").insert({
         user_id: newUser.id,
         business_name: shopName,
-        city: city,
-        address: address,
-        phone: phone,
+        city,
+        address,
+        phone,
         postal_code: postalCode,
         responsible_name: responsibleName,
-        siret: siret,
+        siret,
         message: null,
         status: "pending",
         category_slugs: selectedCategorySlugs,
@@ -186,17 +135,32 @@ export default function RegisterPage() {
       }
     }
 
+    // ⚠️ Si confirmation email activée -> pas de session
+    if (!data.session) {
+      setLoading(false);
+      setInfoMsg(
+        "Compte créé. Vérifiez vos emails pour confirmer votre adresse, puis connectez-vous."
+      );
+
+      setTimeout(() => {
+        router.push("/login");
+      }, 900);
+
+      return;
+    }
+
     setLoading(false);
 
-    const newRole = (data.user?.user_metadata as any)?.role || role;
-
-    if (newRole === "merchant") {
-      router.push("/merchant");
-    } else if (newRole === "admin") {
-      router.push("/admin");
-    } else {
-      router.push(`/tutorial?next=${encodeURIComponent("/dashboard")}`);
+    // Routing post-signup:
+    // - User normal: tutoriel (on garde ton funnel)
+    // - Merchant: on peut aussi envoyer au tutoriel, mais souvent mieux = page info "en attente"
+    if (isMerchant) {
+      // Si tu as une page dédiée, mets-la ici (ex: /merchant/pending)
+      router.push(`/tutorial?next=${encodeURIComponent("/merchant")}`);
+      return;
     }
+
+    router.push(`/tutorial?next=${encodeURIComponent("/dashboard")}`);
   };
 
   return (
@@ -474,7 +438,6 @@ export default function RegisterPage() {
           )}
 
           {errorMsg && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{errorMsg}</p>}
-
           {infoMsg && <p style={{ color: "#065f46", marginBottom: 12 }}>{infoMsg}</p>}
 
           <button
