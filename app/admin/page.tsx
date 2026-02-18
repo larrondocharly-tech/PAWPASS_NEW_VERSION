@@ -35,6 +35,7 @@ export default function AdminDashboardPage() {
   // Tabs de navigation admin
   const tabs: Tab[] = [
     { href: "/admin", label: "Vue d’ensemble" },
+    { href: "/admin/analytics", label: "Analytics" },
     { href: "/admin/transactions", label: "Transactions" },
     { href: "/admin/merchants", label: "Gérer les commerçants" },
     { href: "/admin/merchant-applications", label: "Demandes commerçants" },
@@ -330,6 +331,13 @@ export default function AdminDashboardPage() {
                   </tr>
                 );
               })}
+              {summary.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ padding: 12, color: "#6b7280" }}>
+                    Aucune donnée.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
