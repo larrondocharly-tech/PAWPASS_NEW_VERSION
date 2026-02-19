@@ -20,6 +20,25 @@ interface Transaction {
 export default function AdminTransactionsPage() {
   const supabase = createClient();
 
+  function normalizeReceiptPath(raw: string | null): string | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (!v) return null;
+
+  if (!v.startsWith("http://") && !v.startsWith("https://")) {
+    return v.replace(/^\/+/, "").replace(/^receipts\/+/, "");
+  }
+
+  try {
+    const u = new URL(v);
+    const parts = u.pathname.split("/").filter(Boolean);
+    const idx = parts.findIndex((p) => p === "receipts");
+    if (idx >= 0 && idx + 1 < parts.length) return parts.slice(idx + 1).join("/");
+  } catch {}
+
+  return null;
+}
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,21 +133,23 @@ export default function AdminTransactionsPage() {
 
   // Voir le ticket — on ouvre une modale avec l'image
   const handleViewReceipt = async (tx: Transaction) => {
-    if (!tx.receipt_image_url) return;
+  const receiptPath = normalizeReceiptPath(tx.receipt_image_url);
+  console.log("[admin receipt]", tx.receipt_image_url, "->", receiptPath);
+  if (!receiptPath) return;
 
-    const { data, error } = await supabase.storage
-      .from("receipts")
-      .createSignedUrl(tx.receipt_image_url, 60 * 60); // URL valable 1h
+  const { data, error } = await supabase.storage
+    .from("receipts")
+    .createSignedUrl(receiptPath, 60 * 60);
 
-    if (error || !data?.signedUrl) {
-      console.error("Erreur URL ticket:", error);
-      alert("Impossible d'afficher le ticket. Réessayez plus tard.");
-      return;
-    }
+  if (error || !data?.signedUrl) {
+    console.error("Erreur URL ticket:", error);
+    alert("Impossible d'afficher le ticket. Réessayez plus tard.");
+    return;
+  }
 
-    // On affiche l'image dans une modale par-dessus la page
-    setReceiptModalUrl(data.signedUrl);
-  };
+  setReceiptModalUrl(data.signedUrl);
+};
+
 
   // Validation / refus par l'admin
   const handleUpdateStatus = async (
@@ -212,7 +233,7 @@ export default function AdminTransactionsPage() {
             <tbody>
               {transactions.map((tx) => {
                 const status = tx.status ?? "pending";
-                const isPending = status === "pending";
+                const isPending = tx.status === "pending" || tx.status === "pending_review";
                 const isLoadingRow = actionLoadingId === tx.id;
 
                 // IMPORTANT :
