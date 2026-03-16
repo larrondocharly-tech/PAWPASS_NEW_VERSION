@@ -220,17 +220,21 @@ async function runSync() {
 
     if (aErr) throw aErr;
 
-    const accounts = ((accountsRaw || []) as BankAccountRow[]).filter(
-      (a) => !!a.provider_account_id && a.provider_account_id !== "undefined"
-    );
+    // TEST : on limite à 1 seul compte pour éviter les timeouts
+    const accounts = ((accountsRaw || []) as BankAccountRow[])
+      .filter((a) => !!a.provider_account_id && a.provider_account_id !== "undefined")
+      .slice(0, 1);
 
     if (accounts.length === 0) continue;
 
     for (const acc of accounts) {
-      const booked = (await provider.fetchBookedTransactions({
+      const bookedAll = (await provider.fetchBookedTransactions({
         account_id: acc.provider_account_id,
         user_id: userId,
       })) as ProviderTx[];
+
+      // TEST : on limite à 20 transactions max
+      const booked = bookedAll.slice(0, 20);
 
       for (const t of booked || []) {
         if (!t?.provider_tx_id) continue;
@@ -398,6 +402,7 @@ export async function POST(req: Request) {
   }
 }
 
+// TEMPORAIRE : test direct dans le navigateur
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
