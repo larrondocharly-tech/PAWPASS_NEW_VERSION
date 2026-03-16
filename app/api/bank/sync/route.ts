@@ -94,7 +94,14 @@ function findBestMerchantMatch(opts: {
   descriptor: string;
   merchants: MerchantRow[];
 }) {
-  const desc = norm(opts.descriptor);
+  const desc = norm(opts.descriptor)
+    .replace(/\bcb\b/g, " ")
+    .replace(/\bcarte\b/g, " ")
+    .replace(/\bpayment\b/g, " ")
+    .replace(/\bpaiement\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
   if (!desc) return null;
 
   let best: { merchantId: string; score: number } | null = null;
@@ -103,14 +110,42 @@ function findBestMerchantMatch(opts: {
     if (!m?.id) continue;
     if (m.is_active === false) continue;
 
-    const tokens = getMerchantTokens(m);
+    const tokens = getMerchantTokens(m)
+      .map((t) =>
+        norm(t)
+          .replace(/\bcb\b/g, " ")
+          .replace(/\bcarte\b/g, " ")
+          .replace(/\bpayment\b/g, " ")
+          .replace(/\bpaiement\b/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+      )
+      .filter(Boolean);
 
     let score = 0;
+
     for (const token of tokens) {
       if (!token) continue;
-      if (desc.includes(token)) {
-        score += token.length >= 10 ? 3 : 2;
+
+      if (desc === token) {
+        score += 10;
+        continue;
       }
+
+      if (desc.includes(token)) {
+        score += token.length >= 10 ? 6 : 4;
+        continue;
+      }
+
+      if (token.includes(desc)) {
+        score += 2;
+        continue;
+      }
+
+      const descWords = desc.split(" ");
+      const tokenWords = token.split(" ");
+      const commonWords = tokenWords.filter((w) => w.length >= 3 && descWords.includes(w));
+      score += commonWords.length;
     }
 
     if (m.city && desc.includes(norm(m.city))) {
