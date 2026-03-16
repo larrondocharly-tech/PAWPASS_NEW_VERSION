@@ -102,10 +102,20 @@ type BridgeConnectSession = {
   url: string;
 };
 
-type BridgeAccountLoose = {
-  id?: number | string;
-  account_id?: number | string;
-  uuid?: string;
+type BridgeAccountsInformationResponse = {
+  resources?: Array<{
+    item_id?: number | string;
+    first_name?: string;
+    last_name?: string;
+    accounts?: Array<{
+      id?: number | string;
+      name?: string;
+      iban?: string;
+      type?: string;
+      currency_code?: string;
+      provider_id?: number | string;
+    }>;
+  }>;
 };
 
 type BridgeTransaction = {
@@ -113,69 +123,24 @@ type BridgeTransaction = {
   amount: number | string;
   currency_code?: string;
   booked_at?: string;
+  booking_date?: string;
   date?: string;
   updated_at?: string;
+  clean_description?: string;
   cleaned_description?: string;
+  provider_description?: string;
   bank_description?: string;
   description?: string;
 };
 
 function cleanStringIds(values: unknown[]): string[] {
-  return values
-    .map((v) => String(v ?? "").trim())
-    .filter((v) => !!v && v !== "undefined" && v !== "null");
-}
-
-function extractBridgeAccountIds(payload: any): string[] {
-  const candidates: unknown[] = [];
-
-  if (Array.isArray(payload)) {
-    for (const item of payload) {
-      if (item && typeof item === "object") {
-        const obj = item as BridgeAccountLoose;
-        candidates.push(obj.id, obj.account_id, obj.uuid);
-      } else {
-        candidates.push(item);
-      }
-    }
-  }
-
-  if (payload && typeof payload === "object") {
-    if (Array.isArray(payload.resources)) {
-      for (const item of payload.resources) {
-        if (item && typeof item === "object") {
-          const obj = item as BridgeAccountLoose;
-          candidates.push(obj.id, obj.account_id, obj.uuid);
-        } else {
-          candidates.push(item);
-        }
-      }
-    }
-
-    if (Array.isArray(payload.accounts)) {
-      for (const item of payload.accounts) {
-        if (item && typeof item === "object") {
-          const obj = item as BridgeAccountLoose;
-          candidates.push(obj.id, obj.account_id, obj.uuid);
-        } else {
-          candidates.push(item);
-        }
-      }
-    }
-
-    if (Array.isArray(payload.data)) {
-      for (const item of payload.data) {
-        if (item && typeof item === "object") {
-          const obj = item as BridgeAccountLoose;
-          candidates.push(obj.id, obj.account_id, obj.uuid);
-        } else {
-          candidates.push(item);
-        }
-      }
-    }
-  }
-
-  return Array.from(new Set(cleanStringIds(candidates)));
+  return Array.from(
+    new Set(
+      values
+        .map((v) => String(v ?? "").trim())
+        .filter((v) => !!v && v !== "undefined" && v !== "null")
+    )
+  );
 }
 
 async function createBridgeUserIfNeeded(userId: string) {
@@ -312,12 +277,16 @@ const bridgeProvider: BankProvider = {
       accessToken
     );
 
-    const data = await safeJson(res);
-    const accounts = extractBridgeAccountIds(data);
+    const data = (await res.json()) as BridgeAccountsInformationResponse;
 
-    return {
-      accounts,
-    };
+    const rawIds =
+      data.resources?.flatMap((resource) =>
+        (resource.accounts || []).map((account) => account.id)
+      ) || [];
+
+    const accounts = cleanStringIds(rawIds);
+
+    return { accounts };
   },
 
   async fetchBookedTransactions({ account_id, user_id }) {
@@ -350,12 +319,18 @@ const bridgeProvider: BankProvider = {
         return {
           provider_tx_id: String(t.id),
           booked_at: new Date(
-            t.booked_at || t.date || t.updated_at || new Date().toISOString()
+            t.booked_at ||
+              t.booking_date ||
+              t.date ||
+              t.updated_at ||
+              new Date().toISOString()
           ).toISOString(),
           amount: Math.abs(rawAmount),
           currency: t.currency_code || "EUR",
           raw_descriptor:
+            t.clean_description ||
             t.cleaned_description ||
+            t.provider_description ||
             t.bank_description ||
             t.description ||
             "unknown",
