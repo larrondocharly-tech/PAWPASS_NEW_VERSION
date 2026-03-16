@@ -46,7 +46,6 @@ type WalletRow = {
 type ProfileRow = {
   id: string;
   spa_id?: string | null;
-  donation_percent?: number | null;
 };
 
 function norm(s: string) {
@@ -75,7 +74,7 @@ function computeDedupKey(
   happenedAtIso: string
 ) {
   const happenedAt = new Date(happenedAtIso);
-  const bucket = Math.floor(happenedAt.getTime() / 1000 / 600); // 10 min
+  const bucket = Math.floor(happenedAt.getTime() / 1000 / 600);
   const payload = `${userId}:${merchantId}:${Number(amount).toFixed(2)}:${bucket}`;
   return crypto.createHash("sha256").update(payload).digest("hex");
 }
@@ -110,12 +109,10 @@ function findBestMerchantMatch(opts: {
     for (const token of tokens) {
       if (!token) continue;
       if (desc.includes(token)) {
-        // plus le token est précis/long, plus on le valorise
         score += token.length >= 10 ? 3 : 2;
       }
     }
 
-    // bonus ville
     if (m.city && desc.includes(norm(m.city))) {
       score += 1;
     }
@@ -130,7 +127,10 @@ function findBestMerchantMatch(opts: {
   return best;
 }
 
-async function ensureWallet(admin: ReturnType<typeof createAdminClient>, userId: string) {
+async function ensureWallet(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string
+) {
   const { data: walletRow, error: walletErr } = await admin
     .from("wallets")
     .select("user_id,balance,reserved_balance,pending_balance,pending_donated")
@@ -170,28 +170,32 @@ export async function POST(req: Request) {
 
     const admin = createAdminClient();
     const provider = await getBankProvider();
+    const providerMode = (process.env.BANK_PROVIDER || "mock").toLowerCase();
 
     const { data: conns, error: cErr } = await admin
       .from("bank_connections")
       .select("id,user_id,provider,requisition_id,status")
-      .eq("status", "active");
+      .eq("status", "active")
+      .eq("provider", providerMode);
 
     if (cErr) throw cErr;
 
     const connections = (conns || []) as BankConnectionRow[];
+
     if (connections.length === 0) {
       return NextResponse.json({
         ok: true,
         insertedBankTx: 0,
         linkedTx: 0,
         creditedPending: 0,
-        note: "no active connections",
+        note: "no active connections for current provider",
       });
     }
 
     const { data: merchantsRaw, error: mErr } = await admin
       .from("merchants")
-      .select("id,name,city,is_active,cashback_rate,bank_descriptor_hint,bank_aliases");
+      .select("id,name,city,is_active,cashback_rate,bank_descriptor_hint,bank_aliases")
+      .eq("is_active", true);
 
     if (mErr) throw mErr;
 
@@ -206,16 +210,19 @@ export async function POST(req: Request) {
 
       const { data: profileRaw, error: profileErr } = await admin
         .from("profiles")
-        .select("id,spa_id,donation_percent")
+        .select("id,spa_id")
         .eq("id", userId)
         .maybeSingle();
 
       if (profileErr) throw profileErr;
 
-      const profile = (profileRaw || { id: userId, spa_id: null, donation_percent: 50 }) as ProfileRow;
+      const profile = (profileRaw || {
+        id: userId,
+        spa_id: null,
+      }) as ProfileRow;
 
-      const donationPercent =
-        profile.donation_percent === 100 ? 100 : 50; // fallback simple MVP
+      // MVP simple : 50% pour le client / 50% pour la SPA par défaut
+      const donationPercent = 50;
 
       const { data: accountsRaw, error: aErr } = await admin
         .from("bank_accounts")
@@ -224,7 +231,10 @@ export async function POST(req: Request) {
 
       if (aErr) throw aErr;
 
-      const accounts = (accountsRaw || []) as BankAccountRow[];
+      const accounts = ((accountsRaw || []) as BankAccountRow[]).filter(
+        (a) => !!a.provider_account_id && a.provider_account_id !== "undefined"
+      );
+
       if (accounts.length === 0) continue;
 
       for (const acc of accounts) {
@@ -274,14 +284,16 @@ export async function POST(req: Request) {
           const cashbackTotal = round2(amount * cashbackRate);
           if (cashbackTotal <= 0) continue;
 
-          const donationAmount =
-            donationPercent === 100
-              ? cashbackTotal
-              : round2(cashbackTotal * 0.5);
+          const donationAmount = round2(cashbackTotal * 0.5);
 
           const cashbackToUser = round2(cashbackTotal - donationAmount);
 
-          const dedup_key = computeDedupKey(userId, match.merchantId, amount, bookedAt);
+          const dedup_key = computeDedupKey(
+            userId,
+            match.merchantId,
+            amount,
+            bookedAt
+          );
 
           const { data: btRow, error: btErr } = await admin
             .from("bank_transactions")
@@ -303,7 +315,8 @@ export async function POST(req: Request) {
           if (exErr) throw exErr;
 
           const existingId: string | null = (existing as any)?.id ?? null;
-          const existingBankTxId: string | null = (existing as any)?.bank_transaction_id ?? null;
+          const existingBankTxId: string | null =
+            (existing as any)?.bank_transaction_id ?? null;
 
           if (existingId) {
             if (!existingBankTxId && bank_transaction_id) {
@@ -345,8 +358,12 @@ export async function POST(req: Request) {
 
           const wallet = await ensureWallet(admin, userId);
 
-          const nextPendingBalance = round2(toNum(wallet.pending_balance) + cashbackToUser);
-          const nextPendingDonated = round2(toNum(wallet.pending_donated) + donationAmount);
+          const nextPendingBalance = round2(
+            toNum(wallet.pending_balance) + cashbackToUser
+          );
+          const nextPendingDonated = round2(
+            toNum(wallet.pending_donated) + donationAmount
+          );
 
           const { error: walletUpdateErr } = await admin
             .from("wallets")
@@ -366,6 +383,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      providerMode,
       insertedBankTx,
       linkedTx,
       creditedPending,
