@@ -78,7 +78,9 @@ async function bridgeFetch(
 
   if (!res.ok) {
     const body = await safeJson(res);
-    throw new Error(`Bridge ${res.status} ${res.statusText}: ${JSON.stringify(body)}`);
+    throw new Error(
+      `Bridge ${res.status} ${res.statusText}: ${JSON.stringify(body)}`
+    );
   }
 
   return res;
@@ -100,8 +102,10 @@ type BridgeConnectSession = {
   url: string;
 };
 
-type BridgeAccount = {
-  id: number | string;
+type BridgeAccountLoose = {
+  id?: number | string;
+  account_id?: number | string;
+  uuid?: string;
 };
 
 type BridgeTransaction = {
@@ -116,6 +120,64 @@ type BridgeTransaction = {
   description?: string;
 };
 
+function cleanStringIds(values: unknown[]): string[] {
+  return values
+    .map((v) => String(v ?? "").trim())
+    .filter((v) => !!v && v !== "undefined" && v !== "null");
+}
+
+function extractBridgeAccountIds(payload: any): string[] {
+  const candidates: unknown[] = [];
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      if (item && typeof item === "object") {
+        const obj = item as BridgeAccountLoose;
+        candidates.push(obj.id, obj.account_id, obj.uuid);
+      } else {
+        candidates.push(item);
+      }
+    }
+  }
+
+  if (payload && typeof payload === "object") {
+    if (Array.isArray(payload.resources)) {
+      for (const item of payload.resources) {
+        if (item && typeof item === "object") {
+          const obj = item as BridgeAccountLoose;
+          candidates.push(obj.id, obj.account_id, obj.uuid);
+        } else {
+          candidates.push(item);
+        }
+      }
+    }
+
+    if (Array.isArray(payload.accounts)) {
+      for (const item of payload.accounts) {
+        if (item && typeof item === "object") {
+          const obj = item as BridgeAccountLoose;
+          candidates.push(obj.id, obj.account_id, obj.uuid);
+        } else {
+          candidates.push(item);
+        }
+      }
+    }
+
+    if (Array.isArray(payload.data)) {
+      for (const item of payload.data) {
+        if (item && typeof item === "object") {
+          const obj = item as BridgeAccountLoose;
+          candidates.push(obj.id, obj.account_id, obj.uuid);
+        } else {
+          candidates.push(item);
+        }
+      }
+    }
+  }
+
+  return Array.from(new Set(cleanStringIds(candidates)));
+}
+
 async function createBridgeUserIfNeeded(userId: string) {
   const res = await fetch(`${BRIDGE_BASE_URL}/v3/aggregation/users`, {
     method: "POST",
@@ -128,7 +190,6 @@ async function createBridgeUserIfNeeded(userId: string) {
 
   if (res.ok) return;
 
-  // déjà créé côté Bridge
   if (res.status === 409 || res.status === 422) return;
 
   const body = await safeJson(res);
@@ -138,26 +199,32 @@ async function createBridgeUserIfNeeded(userId: string) {
 async function getBridgeUserAccessToken(
   userId: string
 ): Promise<{ accessToken: string; user?: BridgeUser }> {
-  let authRes = await fetch(`${BRIDGE_BASE_URL}/v3/aggregation/authorization/token`, {
-    method: "POST",
-    headers: bridgeBaseHeaders(),
-    body: JSON.stringify({
-      external_user_id: userId,
-    }),
-    cache: "no-store",
-  });
-
-  if (authRes.status === 404 || authRes.status === 401) {
-    await createBridgeUserIfNeeded(userId);
-
-    authRes = await fetch(`${BRIDGE_BASE_URL}/v3/aggregation/authorization/token`, {
+  let authRes = await fetch(
+    `${BRIDGE_BASE_URL}/v3/aggregation/authorization/token`,
+    {
       method: "POST",
       headers: bridgeBaseHeaders(),
       body: JSON.stringify({
         external_user_id: userId,
       }),
       cache: "no-store",
-    });
+    }
+  );
+
+  if (authRes.status === 404 || authRes.status === 401) {
+    await createBridgeUserIfNeeded(userId);
+
+    authRes = await fetch(
+      `${BRIDGE_BASE_URL}/v3/aggregation/authorization/token`,
+      {
+        method: "POST",
+        headers: bridgeBaseHeaders(),
+        body: JSON.stringify({
+          external_user_id: userId,
+        }),
+        cache: "no-store",
+      }
+    );
   }
 
   if (!authRes.ok) {
@@ -245,16 +312,21 @@ const bridgeProvider: BankProvider = {
       accessToken
     );
 
-    const data = (await res.json()) as { resources?: BridgeAccount[] };
+    const data = await safeJson(res);
+    const accounts = extractBridgeAccountIds(data);
 
     return {
-      accounts: (data.resources || []).map((a) => String(a.id)),
+      accounts,
     };
   },
 
   async fetchBookedTransactions({ account_id, user_id }) {
     if (!user_id) {
       throw new Error("BRIDGE_USER_ID_MISSING");
+    }
+
+    if (!account_id || account_id === "undefined" || account_id === "null") {
+      throw new Error("BRIDGE_ACCOUNT_ID_MISSING");
     }
 
     const { accessToken } = await getBridgeUserAccessToken(user_id);
