@@ -159,6 +159,226 @@ async function ensureWallet(
   return created as WalletRow;
 }
 
+async function runSync() {
+  const admin = createAdminClient();
+  const provider = await getBankProvider();
+  const providerMode = (process.env.BANK_PROVIDER || "mock").toLowerCase();
+
+  const { data: conns, error: cErr } = await admin
+    .from("bank_connections")
+    .select("id,user_id,provider,requisition_id,status")
+    .eq("status", "active")
+    .eq("provider", providerMode);
+
+  if (cErr) throw cErr;
+
+  const connections = (conns || []) as BankConnectionRow[];
+
+  if (connections.length === 0) {
+    return {
+      ok: true,
+      insertedBankTx: 0,
+      linkedTx: 0,
+      creditedPending: 0,
+      note: "no active connections for current provider",
+    };
+  }
+
+  const { data: merchantsRaw, error: mErr } = await admin
+    .from("merchants")
+    .select("id,name,city,is_active,cashback_rate,bank_descriptor_hint,bank_aliases")
+    .eq("is_active", true);
+
+  if (mErr) throw mErr;
+
+  const merchants = (merchantsRaw || []) as MerchantRow[];
+
+  let insertedBankTx = 0;
+  let linkedTx = 0;
+  let creditedPending = 0;
+
+  for (const conn of connections) {
+    const userId = conn.user_id;
+
+    const { data: profileRaw, error: profileErr } = await admin
+      .from("profiles")
+      .select("id,spa_id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profileErr) throw profileErr;
+
+    const profile = (profileRaw || {
+      id: userId,
+      spa_id: null,
+    }) as ProfileRow;
+
+    const { data: accountsRaw, error: aErr } = await admin
+      .from("bank_accounts")
+      .select("id,provider_account_id,user_id")
+      .eq("user_id", userId);
+
+    if (aErr) throw aErr;
+
+    const accounts = ((accountsRaw || []) as BankAccountRow[]).filter(
+      (a) => !!a.provider_account_id && a.provider_account_id !== "undefined"
+    );
+
+    if (accounts.length === 0) continue;
+
+    for (const acc of accounts) {
+      const booked = (await provider.fetchBookedTransactions({
+        account_id: acc.provider_account_id,
+        user_id: userId,
+      })) as ProviderTx[];
+
+      for (const t of booked || []) {
+        if (!t?.provider_tx_id) continue;
+
+        const providerTxId = t.provider_tx_id;
+        const bookedAt = t.booked_at;
+        const amount = Number(t.amount);
+
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+
+        const up = await admin.from("bank_transactions").upsert(
+          {
+            user_id: userId,
+            account_id: acc.id,
+            provider_tx_id: providerTxId,
+            booked_at: bookedAt,
+            amount,
+            currency: t.currency || "EUR",
+            raw_descriptor: t.raw_descriptor || "unknown",
+          },
+          { onConflict: "provider_tx_id" }
+        );
+
+        if (up.error) throw up.error;
+        insertedBankTx++;
+
+        const match = findBestMerchantMatch({
+          descriptor: t.raw_descriptor || "",
+          merchants,
+        });
+
+        if (!match) continue;
+
+        const matchedMerchant = merchants.find((m) => m.id === match.merchantId);
+        if (!matchedMerchant) continue;
+
+        const cashbackRate = toNum(matchedMerchant.cashback_rate);
+        if (cashbackRate <= 0) continue;
+
+        const cashbackTotal = round2(amount * cashbackRate);
+        if (cashbackTotal <= 0) continue;
+
+        // MVP actuel : 50% client / 50% SPA
+        const donationAmount = round2(cashbackTotal * 0.5);
+        const cashbackToUser = round2(cashbackTotal - donationAmount);
+
+        const dedup_key = computeDedupKey(
+          userId,
+          match.merchantId,
+          amount,
+          bookedAt
+        );
+
+        const { data: btRow, error: btErr } = await admin
+          .from("bank_transactions")
+          .select("id")
+          .eq("provider_tx_id", providerTxId)
+          .maybeSingle();
+
+        if (btErr) throw btErr;
+
+        const bank_transaction_id: string | null = (btRow as any)?.id ?? null;
+
+        const { data: existing, error: exErr } = await admin
+          .from("transactions")
+          .select("id,bank_transaction_id,status")
+          .eq("user_id", userId)
+          .eq("dedup_key", dedup_key)
+          .maybeSingle();
+
+        if (exErr) throw exErr;
+
+        const existingId: string | null = (existing as any)?.id ?? null;
+        const existingBankTxId: string | null =
+          (existing as any)?.bank_transaction_id ?? null;
+
+        if (existingId) {
+          if (!existingBankTxId && bank_transaction_id) {
+            const { error: updErr } = await admin
+              .from("transactions")
+              .update({
+                bank_transaction_id,
+                confirmed_at: new Date().toISOString(),
+                match_confidence: match.score,
+              })
+              .eq("id", existingId);
+
+            if (updErr) throw updErr;
+            linkedTx++;
+          }
+
+          continue;
+        }
+
+        const { error: insErr } = await admin.from("transactions").insert({
+          user_id: userId,
+          merchant_id: match.merchantId,
+          amount,
+          cashback_rate: cashbackRate,
+          cashback_total: cashbackTotal,
+          donation_amount: donationAmount,
+          cashback_to_user: cashbackToUser,
+          spa_id: profile.spa_id ?? null,
+          source: "bank",
+          dedup_key,
+          bank_transaction_id,
+          confirmed_at: new Date().toISOString(),
+          match_confidence: match.score,
+          status: "pending",
+        });
+
+        if (insErr) throw insErr;
+        linkedTx++;
+
+        const wallet = await ensureWallet(admin, userId);
+
+        const nextPendingBalance = round2(
+          toNum(wallet.pending_balance) + cashbackToUser
+        );
+        const nextPendingDonated = round2(
+          toNum(wallet.pending_donated) + donationAmount
+        );
+
+        const { error: walletUpdateErr } = await admin
+          .from("wallets")
+          .update({
+            pending_balance: nextPendingBalance,
+            pending_donated: nextPendingDonated,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", userId);
+
+        if (walletUpdateErr) throw walletUpdateErr;
+
+        creditedPending += cashbackToUser;
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    providerMode,
+    insertedBankTx,
+    linkedTx,
+    creditedPending,
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const secret = req.headers.get("x-bank-sync-secret");
@@ -168,226 +388,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
 
-    const admin = createAdminClient();
-    const provider = await getBankProvider();
-    const providerMode = (process.env.BANK_PROVIDER || "mock").toLowerCase();
+    const result = await runSync();
+    return NextResponse.json(result);
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e?.message || "BANK_SYNC_ERROR" },
+      { status: 500 }
+    );
+  }
+}
 
-    const { data: conns, error: cErr } = await admin
-      .from("bank_connections")
-      .select("id,user_id,provider,requisition_id,status")
-      .eq("status", "active")
-      .eq("provider", providerMode);
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const secret = url.searchParams.get("secret");
+    const envSecret = process.env.BANK_SYNC_SECRET;
 
-    if (cErr) throw cErr;
-
-    const connections = (conns || []) as BankConnectionRow[];
-
-    if (connections.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        insertedBankTx: 0,
-        linkedTx: 0,
-        creditedPending: 0,
-        note: "no active connections for current provider",
-      });
+    if (!secret || !envSecret || secret !== envSecret) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
 
-    const { data: merchantsRaw, error: mErr } = await admin
-      .from("merchants")
-      .select("id,name,city,is_active,cashback_rate,bank_descriptor_hint,bank_aliases")
-      .eq("is_active", true);
-
-    if (mErr) throw mErr;
-
-    const merchants = (merchantsRaw || []) as MerchantRow[];
-
-    let insertedBankTx = 0;
-    let linkedTx = 0;
-    let creditedPending = 0;
-
-    for (const conn of connections) {
-      const userId = conn.user_id;
-
-      const { data: profileRaw, error: profileErr } = await admin
-        .from("profiles")
-        .select("id,spa_id")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (profileErr) throw profileErr;
-
-      const profile = (profileRaw || {
-        id: userId,
-        spa_id: null,
-      }) as ProfileRow;
-
-      // MVP simple : 50% pour le client / 50% pour la SPA par défaut
-      const donationPercent = 50;
-
-      const { data: accountsRaw, error: aErr } = await admin
-        .from("bank_accounts")
-        .select("id,provider_account_id,user_id")
-        .eq("user_id", userId);
-
-      if (aErr) throw aErr;
-
-      const accounts = ((accountsRaw || []) as BankAccountRow[]).filter(
-        (a) => !!a.provider_account_id && a.provider_account_id !== "undefined"
-      );
-
-      if (accounts.length === 0) continue;
-
-      for (const acc of accounts) {
-        const booked = (await provider.fetchBookedTransactions({
-          account_id: acc.provider_account_id,
-          user_id: userId,
-        })) as ProviderTx[];
-
-        for (const t of booked || []) {
-          if (!t?.provider_tx_id) continue;
-
-          const providerTxId = t.provider_tx_id;
-          const bookedAt = t.booked_at;
-          const amount = Number(t.amount);
-
-          if (!Number.isFinite(amount) || amount <= 0) continue;
-
-          const up = await admin.from("bank_transactions").upsert(
-            {
-              user_id: userId,
-              account_id: acc.id,
-              provider_tx_id: providerTxId,
-              booked_at: bookedAt,
-              amount,
-              currency: t.currency || "EUR",
-              raw_descriptor: t.raw_descriptor || "unknown",
-            },
-            { onConflict: "provider_tx_id" }
-          );
-
-          if (up.error) throw up.error;
-          insertedBankTx++;
-
-          const match = findBestMerchantMatch({
-            descriptor: t.raw_descriptor || "",
-            merchants,
-          });
-
-          if (!match) continue;
-
-          const matchedMerchant = merchants.find((m) => m.id === match.merchantId);
-          if (!matchedMerchant) continue;
-
-          const cashbackRate = toNum(matchedMerchant.cashback_rate);
-          if (cashbackRate <= 0) continue;
-
-          const cashbackTotal = round2(amount * cashbackRate);
-          if (cashbackTotal <= 0) continue;
-
-          const donationAmount = round2(cashbackTotal * 0.5);
-
-          const cashbackToUser = round2(cashbackTotal - donationAmount);
-
-          const dedup_key = computeDedupKey(
-            userId,
-            match.merchantId,
-            amount,
-            bookedAt
-          );
-
-          const { data: btRow, error: btErr } = await admin
-            .from("bank_transactions")
-            .select("id")
-            .eq("provider_tx_id", providerTxId)
-            .maybeSingle();
-
-          if (btErr) throw btErr;
-
-          const bank_transaction_id: string | null = (btRow as any)?.id ?? null;
-
-          const { data: existing, error: exErr } = await admin
-            .from("transactions")
-            .select("id,bank_transaction_id,status")
-            .eq("user_id", userId)
-            .eq("dedup_key", dedup_key)
-            .maybeSingle();
-
-          if (exErr) throw exErr;
-
-          const existingId: string | null = (existing as any)?.id ?? null;
-          const existingBankTxId: string | null =
-            (existing as any)?.bank_transaction_id ?? null;
-
-          if (existingId) {
-            if (!existingBankTxId && bank_transaction_id) {
-              const { error: updErr } = await admin
-                .from("transactions")
-                .update({
-                  bank_transaction_id,
-                  confirmed_at: new Date().toISOString(),
-                  match_confidence: match.score,
-                })
-                .eq("id", existingId);
-
-              if (updErr) throw updErr;
-              linkedTx++;
-            }
-
-            continue;
-          }
-
-          const { error: insErr } = await admin.from("transactions").insert({
-            user_id: userId,
-            merchant_id: match.merchantId,
-            amount,
-            cashback_rate: cashbackRate,
-            cashback_total: cashbackTotal,
-            donation_amount: donationAmount,
-            cashback_to_user: cashbackToUser,
-            spa_id: profile.spa_id ?? null,
-            source: "bank",
-            dedup_key,
-            bank_transaction_id,
-            confirmed_at: new Date().toISOString(),
-            match_confidence: match.score,
-            status: "pending",
-          });
-
-          if (insErr) throw insErr;
-          linkedTx++;
-
-          const wallet = await ensureWallet(admin, userId);
-
-          const nextPendingBalance = round2(
-            toNum(wallet.pending_balance) + cashbackToUser
-          );
-          const nextPendingDonated = round2(
-            toNum(wallet.pending_donated) + donationAmount
-          );
-
-          const { error: walletUpdateErr } = await admin
-            .from("wallets")
-            .update({
-              pending_balance: nextPendingBalance,
-              pending_donated: nextPendingDonated,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("user_id", userId);
-
-          if (walletUpdateErr) throw walletUpdateErr;
-
-          creditedPending += cashbackToUser;
-        }
-      }
-    }
-
-    return NextResponse.json({
-      ok: true,
-      providerMode,
-      insertedBankTx,
-      linkedTx,
-      creditedPending,
-    });
+    const result = await runSync();
+    return NextResponse.json(result);
   } catch (e: any) {
     return NextResponse.json(
       { error: e?.message || "BANK_SYNC_ERROR" },
