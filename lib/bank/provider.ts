@@ -1,53 +1,303 @@
 // lib/bank/provider.ts
+
 export type BankTx = {
   provider_tx_id: string;
-  booked_at: string;     // ISO
-  amount: number;        // dépense en positif (simplifie)
+  booked_at: string;
+  amount: number;
   currency: string;
   raw_descriptor: string;
 };
 
 export type BankProvider = {
-  createConnectionLink(args: { user_id: string; redirect: string }): Promise<{ requisition_id: string; link: string }>;
-  completeConnection(args: { requisition_id: string }): Promise<{ accounts: string[] }>;
-  fetchBookedTransactions(args: { account_id: string }): Promise<BankTx[]>;
+  createConnectionLink(args: {
+    user_id: string;
+    user_email: string;
+    redirect: string;
+  }): Promise<{ requisition_id: string; link: string }>;
+
+  completeConnection(args: {
+    requisition_id: string;
+    user_id?: string;
+    user_email?: string;
+  }): Promise<{ accounts: string[] }>;
+
+  fetchBookedTransactions(args: {
+    account_id: string;
+    user_id?: string;
+    user_email?: string;
+  }): Promise<BankTx[]>;
 };
 
-function makeId(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+function requiredEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env var ${name}`);
+  return v;
+}
+
+async function safeJson(res: Response) {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { raw: text };
+  }
+}
+
+const BRIDGE_BASE_URL = "https://api.bridgeapi.io";
+const BRIDGE_VERSION = "2025-01-15";
+
+function bridgeBaseHeaders() {
+  return {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    "Bridge-Version": BRIDGE_VERSION,
+    "Client-Id": requiredEnv("BRIDGE_CLIENT_ID"),
+    "Client-Secret": requiredEnv("BRIDGE_CLIENT_SECRET"),
+  };
+}
+
+async function bridgeFetch(
+  path: string,
+  init?: RequestInit,
+  accessToken?: string
+) {
+  const headers: Record<string, string> = {
+    ...bridgeBaseHeaders(),
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const res = await fetch(`${BRIDGE_BASE_URL}${path}`, {
+    ...init,
+    headers,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new Error(`Bridge ${res.status} ${res.statusText}: ${JSON.stringify(body)}`);
+  }
+
+  return res;
+}
+
+type BridgeUser = {
+  uuid: string;
+  external_user_id?: string;
+};
+
+type BridgeAuthResponse = {
+  access_token: string;
+  expires_at?: string;
+  user?: BridgeUser;
+};
+
+type BridgeConnectSession = {
+  id: string;
+  url: string;
+};
+
+type BridgeAccount = {
+  id: number | string;
+};
+
+type BridgeTransaction = {
+  id: number | string;
+  amount: number | string;
+  currency_code?: string;
+  booked_at?: string;
+  date?: string;
+  updated_at?: string;
+  cleaned_description?: string;
+  bank_description?: string;
+  description?: string;
+};
+
+async function createBridgeUserIfNeeded(userId: string) {
+  const res = await fetch(`${BRIDGE_BASE_URL}/v3/aggregation/users`, {
+    method: "POST",
+    headers: bridgeBaseHeaders(),
+    body: JSON.stringify({
+      external_user_id: userId,
+    }),
+    cache: "no-store",
+  });
+
+  if (res.ok) return;
+
+  // déjà créé côté Bridge
+  if (res.status === 409 || res.status === 422) return;
+
+  const body = await safeJson(res);
+  throw new Error(`Bridge user create ${res.status}: ${JSON.stringify(body)}`);
+}
+
+async function getBridgeUserAccessToken(
+  userId: string
+): Promise<{ accessToken: string; user?: BridgeUser }> {
+  let authRes = await fetch(`${BRIDGE_BASE_URL}/v3/aggregation/authorization/token`, {
+    method: "POST",
+    headers: bridgeBaseHeaders(),
+    body: JSON.stringify({
+      external_user_id: userId,
+    }),
+    cache: "no-store",
+  });
+
+  if (authRes.status === 404 || authRes.status === 401) {
+    await createBridgeUserIfNeeded(userId);
+
+    authRes = await fetch(`${BRIDGE_BASE_URL}/v3/aggregation/authorization/token`, {
+      method: "POST",
+      headers: bridgeBaseHeaders(),
+      body: JSON.stringify({
+        external_user_id: userId,
+      }),
+      cache: "no-store",
+    });
+  }
+
+  if (!authRes.ok) {
+    const body = await safeJson(authRes);
+    throw new Error(`Bridge auth ${authRes.status}: ${JSON.stringify(body)}`);
+  }
+
+  const authJson = (await authRes.json()) as BridgeAuthResponse;
+
+  if (!authJson.access_token) {
+    throw new Error("Bridge auth response missing access_token");
+  }
+
+  return {
+    accessToken: authJson.access_token,
+    user: authJson.user,
+  };
 }
 
 const mockProvider: BankProvider = {
   async createConnectionLink({ user_id, redirect }) {
-    const requisition_id = makeId("req");
-    // on simule un “lien” qui revient sur ton callback
-    const link = `${redirect}?requisition_id=${encodeURIComponent(requisition_id)}&mock=1&user=${encodeURIComponent(user_id)}`;
-    return { requisition_id, link };
+    const id = `req_${Date.now()}`;
+    return {
+      requisition_id: id,
+      link: `${redirect}?mock=1&req=${id}&user=${user_id}`,
+    };
   },
 
   async completeConnection({ requisition_id }) {
-    // 2 comptes mock
-    return { accounts: [`acc_${requisition_id}_1`, `acc_${requisition_id}_2`] };
+    return { accounts: [`acc_${requisition_id}_1`] };
   },
 
   async fetchBookedTransactions({ account_id }) {
     const now = Date.now();
-    // Génère 5 transactions plausibles
-    const sample: BankTx[] = [
-      { provider_tx_id: makeId(`tx_${account_id}`), booked_at: new Date(now - 2 * 3600e3).toISOString(), amount: 12.5, currency: "EUR", raw_descriptor: "BOULANGERIE DUPONT BAYONNE CB" },
-      { provider_tx_id: makeId(`tx_${account_id}`), booked_at: new Date(now - 26 * 3600e3).toISOString(), amount: 7.9, currency: "EUR", raw_descriptor: "CAFE DE LA MAIRIE ANGLET CB" },
-      { provider_tx_id: makeId(`tx_${account_id}`), booked_at: new Date(now - 3 * 24 * 3600e3).toISOString(), amount: 24.2, currency: "EUR", raw_descriptor: "PHARMACIE CENTRALE BAYONNE" },
-      { provider_tx_id: makeId(`tx_${account_id}`), booked_at: new Date(now - 6 * 24 * 3600e3).toISOString(), amount: 35.0, currency: "EUR", raw_descriptor: "BOUTIQUE ANIMAUX ST JEAN" },
-      { provider_tx_id: makeId(`tx_${account_id}`), booked_at: new Date(now - 9 * 24 * 3600e3).toISOString(), amount: 18.3, currency: "EUR", raw_descriptor: "RESTAURANT TXIKI BIDART" },
+    return [
+      {
+        provider_tx_id: `tx_${account_id}_1`,
+        booked_at: new Date(now - 3600000).toISOString(),
+        amount: 12.5,
+        currency: "EUR",
+        raw_descriptor: "BOULANGERIE DUPONT BAYONNE",
+      },
     ];
-    return sample;
+  },
+};
+
+const bridgeProvider: BankProvider = {
+  async createConnectionLink({ user_id, user_email, redirect }) {
+    const { accessToken } = await getBridgeUserAccessToken(user_id);
+
+    const res = await bridgeFetch(
+      "/v3/aggregation/connect-sessions",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          user_email,
+          callback_url: redirect,
+        }),
+      },
+      accessToken
+    );
+
+    const data = (await res.json()) as BridgeConnectSession;
+
+    if (!data?.id || !data?.url) {
+      throw new Error("Bridge connect session missing id/url");
+    }
+
+    return {
+      requisition_id: String(data.id),
+      link: data.url,
+    };
+  },
+
+  async completeConnection({ user_id }) {
+    if (!user_id) {
+      throw new Error("BRIDGE_USER_ID_MISSING");
+    }
+
+    const { accessToken } = await getBridgeUserAccessToken(user_id);
+
+    const res = await bridgeFetch(
+      "/v3/aggregation/accounts-information",
+      { method: "GET" },
+      accessToken
+    );
+
+    const data = (await res.json()) as { resources?: BridgeAccount[] };
+
+    return {
+      accounts: (data.resources || []).map((a) => String(a.id)),
+    };
+  },
+
+  async fetchBookedTransactions({ account_id, user_id }) {
+    if (!user_id) {
+      throw new Error("BRIDGE_USER_ID_MISSING");
+    }
+
+    const { accessToken } = await getBridgeUserAccessToken(user_id);
+
+    const res = await bridgeFetch(
+      `/v3/aggregation/transactions?account_id=${encodeURIComponent(
+        String(account_id)
+      )}&limit=500`,
+      { method: "GET" },
+      accessToken
+    );
+
+    const data = (await res.json()) as { resources?: BridgeTransaction[] };
+    const txs = data.resources || [];
+
+    return txs
+      .map((t) => {
+        const rawAmount = Number(t.amount || 0);
+        if (!Number.isFinite(rawAmount) || rawAmount === 0) return null;
+
+        return {
+          provider_tx_id: String(t.id),
+          booked_at: new Date(
+            t.booked_at || t.date || t.updated_at || new Date().toISOString()
+          ).toISOString(),
+          amount: Math.abs(rawAmount),
+          currency: t.currency_code || "EUR",
+          raw_descriptor:
+            t.cleaned_description ||
+            t.bank_description ||
+            t.description ||
+            "unknown",
+        } satisfies BankTx;
+      })
+      .filter((x): x is BankTx => Boolean(x));
   },
 };
 
 export async function getBankProvider(): Promise<BankProvider> {
   const mode = (process.env.BANK_PROVIDER || "mock").toLowerCase();
-  if (mode === "mock") return mockProvider;
 
-  // plus tard: mode === "gocardless" => tu branches le vrai provider
+  if (mode === "mock") return mockProvider;
+  if (mode === "bridge") return bridgeProvider;
+
   throw new Error(`Unsupported BANK_PROVIDER=${mode}`);
 }

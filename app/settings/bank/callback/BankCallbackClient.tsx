@@ -13,22 +13,52 @@ export default function BankCallbackClient() {
 
     const run = async () => {
       try {
+        const source = params.get("source");
+        const success = params.get("success");
+        const user_uuid = params.get("user_uuid");
         const requisition_id = params.get("requisition_id");
 
-        if (!requisition_id) {
-          if (!cancelled) setStatus("Erreur : requisition_id manquant.");
-          return;
+        let url = "";
+
+        if (source === "connect") {
+          if (success !== "true") {
+            if (!cancelled) {
+              setStatus("Erreur : connexion bancaire non finalisée.");
+            }
+            return;
+          }
+
+          if (!user_uuid) {
+            if (!cancelled) {
+              setStatus("Erreur : user_uuid manquant.");
+            }
+            return;
+          }
+
+          url = `/api/bank/callback?source=connect&success=${encodeURIComponent(
+            success
+          )}&user_uuid=${encodeURIComponent(user_uuid)}`;
+        } else {
+          if (!requisition_id) {
+            if (!cancelled) {
+              setStatus("Erreur : requisition_id manquant.");
+            }
+            return;
+          }
+
+          url = `/api/bank/callback?requisition_id=${encodeURIComponent(
+            requisition_id
+          )}`;
         }
 
-        const url = `/api/bank/callback?requisition_id=${encodeURIComponent(requisition_id)}`;
         const res = await fetch(url, { method: "GET" });
-
-        // On essaye de lire du JSON, mais sans casser si ce n’est pas du JSON
         const json = await res.json().catch(() => ({} as any));
 
         if (!res.ok) {
           const msg = (json as any)?.error || res.statusText || "Erreur callback";
-          if (!cancelled) setStatus(`Erreur callback : ${msg}`);
+          if (!cancelled) {
+            setStatus(`Erreur callback : ${msg}`);
+          }
           return;
         }
 
@@ -37,12 +67,13 @@ export default function BankCallbackClient() {
         if (!cancelled) {
           setStatus(`✅ Banque connectée (comptes: ${accountsCount}). Redirection…`);
           setTimeout(() => {
-            // replace = évite de revenir sur la page callback avec "retour"
             router.replace("/settings");
-          }, 800);
+          }, 1000);
         }
       } catch (e: any) {
-        if (!cancelled) setStatus(e?.message || "Erreur inconnue");
+        if (!cancelled) {
+          setStatus(e?.message || "Erreur inconnue");
+        }
       }
     };
 
