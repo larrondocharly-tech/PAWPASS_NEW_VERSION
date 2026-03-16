@@ -16,8 +16,9 @@ export default function BankCallbackClient() {
         const source = params.get("source");
         const success = params.get("success");
         const user_uuid = params.get("user_uuid");
-        const requisition_id = params.get("requisition_id");
-
+const requisition_id =
+  params.get("requisition_id") ||
+  params.get("req");
         let url = "";
 
         if (source === "connect") {
