@@ -19,10 +19,13 @@ interface MerchantApplication {
   message: string | null;
   created_at: string;
 
-  // colonnes optionnelles (selon ton schéma)
   merchant_id?: string | null;
   category_slugs?: string[] | null;
   status?: string | null;
+
+  // ✅ nouveaux champs pour la reconnaissance bancaire
+  bank_descriptor_hint?: string | null;
+  bank_aliases?: string[] | null;
 }
 
 const buildMerchantToken = (userId: string) => {
@@ -87,7 +90,7 @@ export default function AdminMerchantApplicationsPage() {
       const { data, error: fetchError } = await supabase
         .from("merchant_applications")
         .select(
-          "id,user_id,business_name,city,address,postal_code,phone,responsible_name,siret,message,created_at,merchant_id,category_slugs,status"
+          "id,user_id,business_name,city,address,postal_code,phone,responsible_name,siret,message,created_at,merchant_id,category_slugs,status,bank_descriptor_hint,bank_aliases"
         )
         .eq("status", "pending")
         .order("created_at", { ascending: true });
@@ -114,24 +117,22 @@ export default function AdminMerchantApplicationsPage() {
   }, [router, supabase]);
 
   const handleApprove = async (application: MerchantApplication) => {
-    // anti double-clic
     if (actionId) return;
 
     setError(null);
     setActionId(application.id);
 
     try {
-      // 0) Lire le profil du demandeur
-      const { data: existingProfile, error: existingProfileError } =
-        await supabase
-          .from("profiles")
-          .select("role, merchant_id, merchant_code")
-          .eq("id", application.user_id)
-          .maybeSingle();
+      const { data: existingProfile, error: existingProfileError } = await supabase
+        .from("profiles")
+        .select("role, merchant_id, merchant_code")
+        .eq("id", application.user_id)
+        .maybeSingle();
 
-      if (existingProfileError) throw new Error(existingProfileError.message);
+      if (existingProfileError) {
+        throw new Error(existingProfileError.message);
+      }
 
-      // Si le profil est déjà relié à un merchant -> on valide juste la demande
       if (existingProfile?.merchant_id) {
         const { error: applicationUpdateError } = await supabase
           .from("merchant_applications")
@@ -141,45 +142,50 @@ export default function AdminMerchantApplicationsPage() {
           })
           .eq("id", application.id);
 
-        if (applicationUpdateError) throw new Error(applicationUpdateError.message);
+        if (applicationUpdateError) {
+          throw new Error(applicationUpdateError.message);
+        }
 
         setApplications((prev) => prev.filter((item) => item.id !== application.id));
         setActionId(null);
         return;
       }
 
-      // 1) Trouver le merchant EXISTANT par user_id (c’est ça qui empêche les doublons)
-      const { data: existingMerchant, error: existingMerchantError } =
-        await supabase
-          .from("merchants")
-          .select("id, qr_token, is_active")
-          .eq("user_id", application.user_id)
-          .maybeSingle();
+      const { data: existingMerchant, error: existingMerchantError } = await supabase
+        .from("merchants")
+        .select("id, qr_token, is_active")
+        .eq("user_id", application.user_id)
+        .maybeSingle();
 
-      if (existingMerchantError) throw new Error(existingMerchantError.message);
+      if (existingMerchantError) {
+        throw new Error(existingMerchantError.message);
+      }
 
       let merchantId: string | null = existingMerchant?.id ?? null;
       let finalQrToken: string | null = existingMerchant?.qr_token ?? null;
 
-      // 2) Si le merchant existe => UPDATE (activation + compléter champs si besoin)
       if (merchantId) {
         const { error: updateMerchantError } = await supabase
           .from("merchants")
           .update({
-            // on active seulement
             is_active: true,
-            // optionnel: mettre à jour les infos depuis la demande si tu veux
             name: application.business_name,
             city: application.city,
             address: application.address,
+
+            // ✅ nouveaux champs copiés depuis la demande
+            bank_descriptor_hint: application.bank_descriptor_hint ?? null,
+            bank_aliases: application.bank_aliases ?? [],
           })
           .eq("id", merchantId);
 
-        if (updateMerchantError) throw new Error(updateMerchantError.message);
+        if (updateMerchantError) {
+          throw new Error(updateMerchantError.message);
+        }
 
-        // si pas de qr_token (rare), on en génère 1 et on le pose
         if (!finalQrToken) {
           const generated = buildMerchantToken(application.user_id);
+
           const { data: updated, error: qrUpdateError } = await supabase
             .from("merchants")
             .update({ qr_token: generated })
@@ -187,22 +193,28 @@ export default function AdminMerchantApplicationsPage() {
             .select("qr_token")
             .single();
 
-          if (qrUpdateError) throw new Error(qrUpdateError.message);
+          if (qrUpdateError) {
+            throw new Error(qrUpdateError.message);
+          }
+
           finalQrToken = updated?.qr_token ?? generated;
         }
       } else {
-        // 3) Si le merchant N’EXISTE PAS (cas rare) => création UNIQUE par user_id
         const qrToken = buildMerchantToken(application.user_id);
 
         const { data: created, error: createMerchantError } = await supabase
           .from("merchants")
           .insert({
-            user_id: application.user_id, // <-- IMPORTANT: lien unique
+            user_id: application.user_id,
             name: application.business_name,
             city: application.city,
             address: application.address,
             qr_token: qrToken,
             is_active: true,
+
+            // ✅ nouveaux champs copiés depuis la demande
+            bank_descriptor_hint: application.bank_descriptor_hint ?? null,
+            bank_aliases: application.bank_aliases ?? [],
           })
           .select("id, qr_token")
           .single();
@@ -222,7 +234,6 @@ export default function AdminMerchantApplicationsPage() {
         throw new Error("MerchantId / QR token manquant après approbation.");
       }
 
-      // 4) Mise à jour du profil utilisateur -> rôle merchant
       const { error: profileUpdateError } = await supabase
         .from("profiles")
         .update({
@@ -232,9 +243,10 @@ export default function AdminMerchantApplicationsPage() {
         })
         .eq("id", application.user_id);
 
-      if (profileUpdateError) throw new Error(profileUpdateError.message);
+      if (profileUpdateError) {
+        throw new Error(profileUpdateError.message);
+      }
 
-      // 5) Marquer la demande comme approuvée
       const { error: applicationUpdateError } = await supabase
         .from("merchant_applications")
         .update({
@@ -243,9 +255,10 @@ export default function AdminMerchantApplicationsPage() {
         })
         .eq("id", application.id);
 
-      if (applicationUpdateError) throw new Error(applicationUpdateError.message);
+      if (applicationUpdateError) {
+        throw new Error(applicationUpdateError.message);
+      }
 
-      // 6) Retirer la demande de la liste
       setApplications((prev) => prev.filter((item) => item.id !== application.id));
       setActionId(null);
     } catch (e: any) {
@@ -270,7 +283,9 @@ export default function AdminMerchantApplicationsPage() {
         .eq("id", application.id)
         .eq("status", "pending");
 
-      if (updateError) throw new Error(updateError.message);
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
 
       setApplications((prev) => prev.filter((x) => x.id !== application.id));
     } catch (e: any) {
@@ -333,6 +348,18 @@ export default function AdminMerchantApplicationsPage() {
               {application.siret && (
                 <p className="helper" style={{ marginTop: 4 }}>
                   SIRET : {application.siret}
+                </p>
+              )}
+
+              {application.bank_descriptor_hint && (
+                <p className="helper" style={{ marginTop: 8 }}>
+                  Libellé bancaire principal : {application.bank_descriptor_hint}
+                </p>
+              )}
+
+              {application.bank_aliases && application.bank_aliases.length > 0 && (
+                <p className="helper" style={{ marginTop: 4 }}>
+                  Alias bancaires : {application.bank_aliases.join(", ")}
                 </p>
               )}
 

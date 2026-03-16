@@ -8,6 +8,13 @@ export const dynamic = "force-dynamic";
 
 type Category = { id: string; slug: string; label: string };
 
+function parseAliases(input: string): string[] {
+  return input
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -26,6 +33,10 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [siret, setSiret] = useState("");
 
+  // ✅ Nouveaux champs utiles pour la synchro bancaire
+  const [bankDescriptorHint, setBankDescriptorHint] = useState("");
+  const [bankAliasesInput, setBankAliasesInput] = useState("");
+
   // Catégories (merchant)
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategorySlugs, setSelectedCategorySlugs] = useState<string[]>([]);
@@ -35,11 +46,12 @@ export default function RegisterPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
 
-  // Charger catégories (une seule fois)
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       setCatError(null);
+
       const { data, error } = await supabase
         .from("categories")
         .select("id,slug,label")
@@ -61,9 +73,12 @@ export default function RegisterPage() {
     };
   }, [supabase]);
 
-  // Si on décoche "Je suis commerçant", on reset les catégories sélectionnées
   useEffect(() => {
-    if (!isMerchant) setSelectedCategorySlugs([]);
+    if (!isMerchant) {
+      setSelectedCategorySlugs([]);
+      setBankDescriptorHint("");
+      setBankAliasesInput("");
+    }
   }, [isMerchant]);
 
   function toggleCategory(slug: string) {
@@ -80,17 +95,18 @@ export default function RegisterPage() {
     setErrorMsg("");
     setInfoMsg("");
 
-    // Garde-fou UX
     if (isMerchant && selectedCategorySlugs.length === 0) {
       setErrorMsg("Merci de sélectionner au moins une catégorie pour votre commerce.");
       return;
     }
 
+    if (isMerchant && !bankDescriptorHint.trim()) {
+      setErrorMsg("Merci de renseigner le nom affiché sur le relevé bancaire du client.");
+      return;
+    }
+
     setLoading(true);
 
-    // ✅ IMPORTANT SÉCURITÉ:
-    // On n'écrit plus de "role" / "is_merchant" dans les metadata auth.
-    // Les metadata doivent rester pour l'UX seulement.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -109,8 +125,9 @@ export default function RegisterPage() {
 
     const newUser = data.user;
 
-    // Enregistrer la demande commerçant (pending) dans la table métier
     if (isMerchant && newUser?.id) {
+      const bankAliases = parseAliases(bankAliasesInput);
+
       const { error: appError } = await supabase.from("merchant_applications").insert({
         user_id: newUser.id,
         business_name: shopName,
@@ -123,6 +140,8 @@ export default function RegisterPage() {
         message: null,
         status: "pending",
         category_slugs: selectedCategorySlugs,
+        bank_descriptor_hint: bankDescriptorHint.trim(),
+        bank_aliases: bankAliases,
       });
 
       if (appError) {
@@ -135,7 +154,6 @@ export default function RegisterPage() {
       }
     }
 
-    // ⚠️ Si confirmation email activée -> pas de session
     if (!data.session) {
       setLoading(false);
       setInfoMsg(
@@ -151,11 +169,7 @@ export default function RegisterPage() {
 
     setLoading(false);
 
-    // Routing post-signup:
-    // - User normal: tutoriel (on garde ton funnel)
-    // - Merchant: on peut aussi envoyer au tutoriel, mais souvent mieux = page info "en attente"
     if (isMerchant) {
-      // Si tu as une page dédiée, mets-la ici (ex: /merchant/pending)
       router.push(`/tutorial?next=${encodeURIComponent("/merchant")}`);
       return;
     }
@@ -233,7 +247,6 @@ export default function RegisterPage() {
             6 caractères minimum. Tu pourras le modifier plus tard.
           </p>
 
-          {/* Case commerçant */}
           <label
             style={{
               display: "flex",
@@ -250,7 +263,6 @@ export default function RegisterPage() {
             <span>Je suis commerçant et je souhaite proposer PawPass</span>
           </label>
 
-          {/* Champs supplémentaires si commerçant */}
           {isMerchant && (
             <div
               style={{
@@ -374,11 +386,53 @@ export default function RegisterPage() {
                   padding: 10,
                   borderRadius: 8,
                   border: "1px solid #cbd5e1",
-                  marginBottom: 10,
+                  marginBottom: 12,
                 }}
               />
 
-              {/* CATEGORIES */}
+              <label style={{ fontWeight: 600 }}>
+                Nom affiché sur le relevé bancaire du client
+              </label>
+              <input
+                type="text"
+                value={bankDescriptorHint}
+                onChange={(e) => setBankDescriptorHint(e.target.value)}
+                required={isMerchant}
+                placeholder="Ex : BOULANGERIE MARTIN ou SARL MARTIN"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 8,
+                }}
+              />
+              <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 12 }}>
+                Indiquez le nom qui apparaît habituellement sur le relevé bancaire du client
+                après un paiement CB chez vous.
+              </p>
+
+              <label style={{ fontWeight: 600 }}>
+                Autres variantes possibles du nom bancaire
+              </label>
+              <input
+                type="text"
+                value={bankAliasesInput}
+                onChange={(e) => setBankAliasesInput(e.target.value)}
+                placeholder="Ex : MARTIN BAYONNE, BOUL MARTIN, LCL BOULANGERIE MARTIN"
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  marginBottom: 8,
+                }}
+              />
+              <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 12 }}>
+                Séparez les variantes par des virgules. Cela aide PawPass à reconnaître
+                automatiquement vos ventes sans QR code.
+              </p>
+
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontWeight: 700, marginBottom: 8, color: "#0f172a" }}>
                   Catégories du commerce
