@@ -7,8 +7,6 @@ import { createClient } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
-type Num = number | null;
-
 type SpaSummary = {
   spa_name: string;
   spa_id: string | null;
@@ -48,6 +46,9 @@ const toNum = (v: unknown) => {
 const eur = (v: unknown) =>
   toNum(v).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
+const amountToClaim = (dons: unknown, cashback: unknown) =>
+  toNum(dons) + toNum(cashback);
+
 export default function AdminAnalyticsPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -63,7 +64,6 @@ export default function AdminAnalyticsPage() {
 
   const [sectionsOpen, setSectionsOpen] = useState(false);
 
-  // Tabs admin (ajoute Analytics)
   const tabs: Tab[] = [
     { href: "/admin", label: "Vue d’ensemble" },
     { href: "/admin/analytics", label: "Analytics" },
@@ -81,7 +81,7 @@ export default function AdminAnalyticsPage() {
       }
       return best;
     }, null);
-  }, [currentPath, tabs]);
+  }, [currentPath]);
 
   const renderTabs = () => {
     const activeLabel = activeTab ? activeTab.label : "Sections admin";
@@ -158,7 +158,6 @@ export default function AdminAnalyticsPage() {
       setLoading(true);
       setError(null);
 
-      // 1) Auth
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -168,7 +167,6 @@ export default function AdminAnalyticsPage() {
         return;
       }
 
-      // 2) Role admin
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
@@ -180,7 +178,6 @@ export default function AdminAnalyticsPage() {
         return;
       }
 
-      // 3) Load datasets (3 queries)
       const [spaRes, merRes, msRes] = await Promise.all([
         supabase
           .from("admin_transactions_summary_by_spa")
@@ -231,6 +228,7 @@ export default function AdminAnalyticsPage() {
       achats: 0,
       dons: 0,
       cashback: 0,
+      aReclamer: 0,
       activeMerchants: 0,
       activeSpas: 0,
     };
@@ -238,12 +236,12 @@ export default function AdminAnalyticsPage() {
     totals.activeMerchants = byMerchant.length;
     totals.activeSpas = bySpa.length;
 
-    // On somme à partir de byMerchant (évite double comptage)
     for (const r of byMerchant) {
       totals.nbTx += toNum(r.nb_transactions);
       totals.achats += toNum(r.total_achats);
       totals.dons += toNum(r.total_dons);
       totals.cashback += toNum(r.total_cashback);
+      totals.aReclamer += amountToClaim(r.total_dons, r.total_cashback);
     }
 
     return totals;
@@ -281,7 +279,6 @@ export default function AdminAnalyticsPage() {
 
       {renderTabs()}
 
-      {/* KPIs */}
       <section
         style={{
           display: "grid",
@@ -295,6 +292,7 @@ export default function AdminAnalyticsPage() {
           { label: "Total achats", value: eur(kpis.achats) },
           { label: "Total dons", value: eur(kpis.dons) },
           { label: "Total cashback", value: eur(kpis.cashback) },
+          { label: "Total à réclamer", value: eur(kpis.aReclamer) },
           { label: "Commerçants actifs", value: kpis.activeMerchants },
           { label: "SPA actives", value: kpis.activeSpas },
         ].map((card) => (
@@ -317,7 +315,6 @@ export default function AdminAnalyticsPage() {
         ))}
       </section>
 
-      {/* Par commerçant */}
       <section
         style={{
           padding: 24,
@@ -340,6 +337,7 @@ export default function AdminAnalyticsPage() {
                 <th style={{ textAlign: "right", padding: "8px 12px" }}>Total achats</th>
                 <th style={{ textAlign: "right", padding: "8px 12px" }}>Total dons</th>
                 <th style={{ textAlign: "right", padding: "8px 12px" }}>Total cashback</th>
+                <th style={{ textAlign: "right", padding: "8px 12px" }}>Montant à réclamer</th>
               </tr>
             </thead>
             <tbody>
@@ -360,11 +358,22 @@ export default function AdminAnalyticsPage() {
                   <td style={{ padding: "8px 12px", borderTop: "1px solid #eee", textAlign: "right" }}>
                     {eur(r.total_cashback)}
                   </td>
+                  <td
+                    style={{
+                      padding: "8px 12px",
+                      borderTop: "1px solid #eee",
+                      textAlign: "right",
+                      fontWeight: 700,
+                      color: "#111827",
+                    }}
+                  >
+                    {eur(amountToClaim(r.total_dons, r.total_cashback))}
+                  </td>
                 </tr>
               ))}
               {byMerchant.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ padding: 12, color: "#6b7280" }}>
+                  <td colSpan={6} style={{ padding: 12, color: "#6b7280" }}>
                     Aucun résultat.
                   </td>
                 </tr>
@@ -374,7 +383,6 @@ export default function AdminAnalyticsPage() {
         </div>
       </section>
 
-      {/* Par SPA */}
       <section
         style={{
           padding: 24,
@@ -431,7 +439,6 @@ export default function AdminAnalyticsPage() {
         </div>
       </section>
 
-      {/* Merchant × SPA */}
       <section
         style={{
           padding: 24,
@@ -454,6 +461,7 @@ export default function AdminAnalyticsPage() {
                 <th style={{ textAlign: "right", padding: "8px 12px" }}>Total achats</th>
                 <th style={{ textAlign: "right", padding: "8px 12px" }}>Total dons</th>
                 <th style={{ textAlign: "right", padding: "8px 12px" }}>Total cashback</th>
+                <th style={{ textAlign: "right", padding: "8px 12px" }}>Montant à réclamer</th>
               </tr>
             </thead>
             <tbody>
@@ -477,11 +485,22 @@ export default function AdminAnalyticsPage() {
                   <td style={{ padding: "8px 12px", borderTop: "1px solid #eee", textAlign: "right" }}>
                     {eur(r.total_cashback)}
                   </td>
+                  <td
+                    style={{
+                      padding: "8px 12px",
+                      borderTop: "1px solid #eee",
+                      textAlign: "right",
+                      fontWeight: 700,
+                      color: "#111827",
+                    }}
+                  >
+                    {eur(amountToClaim(r.total_dons, r.total_cashback))}
+                  </td>
                 </tr>
               ))}
               {byMerchantSpa.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ padding: 12, color: "#6b7280" }}>
+                  <td colSpan={7} style={{ padding: 12, color: "#6b7280" }}>
                     Aucun résultat.
                   </td>
                 </tr>
