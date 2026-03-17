@@ -88,7 +88,9 @@ export function ClientHeader() {
         if (!isMounted) return;
 
         if (profileError || !profile) {
-          if (profileError) console.error("Erreur chargement profil header :", profileError);
+          if (profileError) {
+            console.error("Erreur chargement profil header :", profileError);
+          }
           applyNoUser();
           return;
         }
@@ -124,6 +126,7 @@ export function ClientHeader() {
     currentPath.startsWith("/scan") ||
     currentPath.startsWith("/account") ||
     currentPath.startsWith("/commerces") ||
+    currentPath.startsWith("/associations") ||
     currentPath.startsWith("/parrainage") ||
     currentPath.startsWith("/comment-ca-marche") ||
     currentPath.startsWith("/faq") ||
@@ -140,8 +143,24 @@ export function ClientHeader() {
   const isHome = currentPath === "/";
   const isAuthPage = isLogin || isRegister;
 
-  const logoHref = isAuthPage || isHome ? "/" : isSpa ? "/spa" : isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
-  const homeHref = isSpa ? "/spa" : isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
+  const logoHref =
+    isAuthPage || isHome
+      ? "/"
+      : isSpa
+      ? "/spa"
+      : isMerchant
+      ? "/merchant"
+      : isAdmin
+      ? "/admin"
+      : "/dashboard";
+
+  const homeHref = isSpa
+    ? "/spa"
+    : isMerchant
+    ? "/merchant"
+    : isAdmin
+    ? "/admin"
+    : "/dashboard";
 
   const isActive = (href: string) => currentPath === href;
 
@@ -265,7 +284,9 @@ export function ClientHeader() {
                   fontSize: "14px",
                   fontWeight: 600,
                   border: "1px solid rgba(15, 23, 42, 0.08)",
-                  backgroundColor: isActive(homeHref) ? "#111827" : "rgba(255,255,255,0.92)",
+                  backgroundColor: isActive(homeHref)
+                    ? "#111827"
+                    : "rgba(255,255,255,0.92)",
                   color: isActive(homeHref) ? "#FFFFFF" : "#111827",
                   textDecoration: "none",
                   whiteSpace: "nowrap",
@@ -348,7 +369,12 @@ export function ClientHeader() {
                         <span>Paramètres</span>
                       </Link>
 
-                      <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", margin: "6px 0 4px" }} />
+                      <div
+                        style={{
+                          borderTop: "1px solid rgba(0,0,0,0.08)",
+                          margin: "6px 0 4px",
+                        }}
+                      />
 
                       <button
                         type="button"
@@ -372,7 +398,13 @@ export function ClientHeader() {
                       </button>
 
                       {logoutError && (
-                        <div style={{ marginTop: "4px", fontSize: "11px", color: "#b91c1c" }}>
+                        <div
+                          style={{
+                            marginTop: "4px",
+                            fontSize: "11px",
+                            color: "#b91c1c",
+                          }}
+                        >
                           {logoutError}
                         </div>
                       )}
@@ -393,7 +425,9 @@ export function ClientHeader() {
                         href="/scan?mode=coupon"
                         onClick={() => setMenuOpen(false)}
                         {...itemHandlers("/scan?mode=coupon")}
-                        style={menuItemStyle(hoveredHref === "/scan?mode=coupon")}
+                        style={menuItemStyle(
+                          hoveredHref === "/scan?mode=coupon"
+                        )}
                       >
                         <span>🎟️</span>
                         <span>Utiliser mes crédits</span>
@@ -404,7 +438,9 @@ export function ClientHeader() {
                           href="/merchant/transactions"
                           onClick={() => setMenuOpen(false)}
                           {...itemHandlers("/merchant/transactions")}
-                          style={menuItemStyle(hoveredHref === "/merchant/transactions")}
+                          style={menuItemStyle(
+                            hoveredHref === "/merchant/transactions"
+                          )}
                         >
                           <span>📊</span>
                           <span>Transactions</span>
@@ -439,7 +475,9 @@ export function ClientHeader() {
                             href="/merchant/settings"
                             onClick={() => setMenuOpen(false)}
                             {...itemHandlers("/merchant/settings")}
-                            style={menuItemStyle(hoveredHref === "/merchant/settings")}
+                            style={menuItemStyle(
+                              hoveredHref === "/merchant/settings"
+                            )}
                           >
                             <span>⚙️</span>
                             <span>Paramètres commerçant</span>
@@ -468,6 +506,16 @@ export function ClientHeader() {
                       </Link>
 
                       <Link
+                        href="/associations"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/associations")}
+                        style={menuItemStyle(hoveredHref === "/associations")}
+                      >
+                        <span>🐾</span>
+                        <span>Associations partenaires</span>
+                      </Link>
+
+                      <Link
                         href="/parrainage"
                         onClick={() => setMenuOpen(false)}
                         {...itemHandlers("/parrainage")}
@@ -481,7 +529,9 @@ export function ClientHeader() {
                         href="/comment-ca-marche"
                         onClick={() => setMenuOpen(false)}
                         {...itemHandlers("/comment-ca-marche")}
-                        style={menuItemStyle(hoveredHref === "/comment-ca-marche")}
+                        style={menuItemStyle(
+                          hoveredHref === "/comment-ca-marche"
+                        )}
                       >
                         <span>📖</span>
                         <span>Comment ça marche ?</span>
@@ -511,7 +561,9 @@ export function ClientHeader() {
                         href="/mentions-legales"
                         onClick={() => setMenuOpen(false)}
                         {...itemHandlers("/mentions-legales")}
-                        style={menuItemStyle(hoveredHref === "/mentions-legales")}
+                        style={menuItemStyle(
+                          hoveredHref === "/mentions-legales"
+                        )}
                       >
                         <span>📄</span>
                         <span>Mentions légales</span>
@@ -527,7 +579,12 @@ export function ClientHeader() {
                         <span>CGU</span>
                       </Link>
 
-                      <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", margin: "6px 0 4px" }} />
+                      <div
+                        style={{
+                          borderTop: "1px solid rgba(0,0,0,0.08)",
+                          margin: "6px 0 4px",
+                        }}
+                      />
 
                       <button
                         type="button"
@@ -551,7 +608,13 @@ export function ClientHeader() {
                       </button>
 
                       {logoutError && (
-                        <div style={{ marginTop: "4px", fontSize: "11px", color: "#b91c1c" }}>
+                        <div
+                          style={{
+                            marginTop: "4px",
+                            fontSize: "11px",
+                            color: "#b91c1c",
+                          }}
+                        >
                           {logoutError}
                         </div>
                       )}
@@ -564,7 +627,10 @@ export function ClientHeader() {
 
           {isLogin && (
             <nav style={{ display: "flex", gap: "8px", marginLeft: "auto" }}>
-              <Link href="/register" style={{ fontSize: "14px", fontWeight: 600 }}>
+              <Link
+                href="/register"
+                style={{ fontSize: "14px", fontWeight: 600 }}
+              >
                 Créer un compte
               </Link>
             </nav>
