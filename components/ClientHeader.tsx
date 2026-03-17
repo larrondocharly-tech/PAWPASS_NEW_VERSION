@@ -20,7 +20,7 @@ export function ClientHeader() {
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [isMerchant, setIsMerchant] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isSpa, setIsSpa] = useState(false); // ✅ NEW
+  const [isSpa, setIsSpa] = useState(false);
 
   const [hoveredHref, setHoveredHref] = useState<string | null>(null);
 
@@ -29,7 +29,6 @@ export function ClientHeader() {
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const menuBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // ✅ mesure automatique de la hauteur du header pour le spacer
   const headerRef = useRef<HTMLElement | null>(null);
   const [headerH, setHeaderH] = useState<number>(0);
 
@@ -96,10 +95,7 @@ export function ClientHeader() {
 
         const role = profile.role?.toLowerCase() || null;
 
-        // ✅ NEW : détection SPA
         setIsSpa(role === "spa");
-
-        // inchangé
         setIsMerchant(role === "merchant" || profile.merchant_id !== null);
         setIsAdmin(role === "admin");
       } finally {
@@ -121,9 +117,8 @@ export function ClientHeader() {
 
   const isMerchantArea = currentPath.startsWith("/merchant");
   const isAdminArea = currentPath.startsWith("/admin");
-  const isSpaArea = currentPath.startsWith("/spa"); // ✅ NEW
+  const isSpaArea = currentPath.startsWith("/spa");
 
-  // ✅ NEW: inclure /spa pour afficher le header/menu sur l’espace SPA
   const isClientArea =
     currentPath.startsWith("/dashboard") ||
     currentPath.startsWith("/scan") ||
@@ -135,6 +130,7 @@ export function ClientHeader() {
     currentPath.startsWith("/contact") ||
     currentPath.startsWith("/mentions-legales") ||
     currentPath.startsWith("/cgu") ||
+    currentPath.startsWith("/settings") ||
     isMerchantArea ||
     isAdminArea ||
     isSpaArea;
@@ -144,7 +140,6 @@ export function ClientHeader() {
   const isHome = currentPath === "/";
   const isAuthPage = isLogin || isRegister;
 
-  // ✅ NEW : logo/home pour SPA
   const logoHref = isAuthPage || isHome ? "/" : isSpa ? "/spa" : isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
   const homeHref = isSpa ? "/spa" : isMerchant ? "/merchant" : isAdmin ? "/admin" : "/dashboard";
 
@@ -227,12 +222,10 @@ export function ClientHeader() {
           left: 0,
           right: 0,
           zIndex: 1000,
-
           background: "rgba(255, 255, 255, 0.72)",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
           borderBottom: "1px solid rgba(0,0,0,0.06)",
-
           paddingTop: 6,
         }}
       >
@@ -264,7 +257,6 @@ export function ClientHeader() {
 
           {isClientArea && (
             <nav style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-              {/* ✅ SPA: bouton "Accueil" devient "Tableau SPA" */}
               <Link
                 href={homeHref}
                 style={{
@@ -334,7 +326,6 @@ export function ClientHeader() {
                     zIndex: 2000,
                   }}
                 >
-                  {/* ✅ SPA MENU MINIMAL */}
                   {isSpa ? (
                     <>
                       <Link
@@ -345,6 +336,16 @@ export function ClientHeader() {
                       >
                         <span>📊</span>
                         <span>Tableau SPA</span>
+                      </Link>
+
+                      <Link
+                        href="/settings"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/settings")}
+                        style={menuItemStyle(hoveredHref === "/settings")}
+                      >
+                        <span>⚙️</span>
+                        <span>Paramètres</span>
                       </Link>
 
                       <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", margin: "6px 0 4px" }} />
@@ -378,7 +379,6 @@ export function ClientHeader() {
                     </>
                   ) : (
                     <>
-                      {/* ✅ MENU EXISTANT (inchangé) */}
                       <Link
                         href="/scan"
                         onClick={() => setMenuOpen(false)}
@@ -446,6 +446,16 @@ export function ClientHeader() {
                           </Link>
                         </>
                       )}
+
+                      <Link
+                        href="/settings"
+                        onClick={() => setMenuOpen(false)}
+                        {...itemHandlers("/settings")}
+                        style={menuItemStyle(hoveredHref === "/settings")}
+                      >
+                        <span>⚙️</span>
+                        <span>Paramètres</span>
+                      </Link>
 
                       <Link
                         href="/commerces"
@@ -587,7 +597,6 @@ export function ClientHeader() {
         `}</style>
       </header>
 
-      {/* ✅ Spacer auto (hauteur exacte du header) */}
       <div aria-hidden="true" style={{ height: headerH }} />
     </>
   );
