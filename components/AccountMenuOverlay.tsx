@@ -25,6 +25,7 @@ const buildMenuItems = (
   const items: MenuItem[] = [
     { label: 'Comment ça marche ?', href: '/how-it-works', icon: '🧭' },
     { label: 'FAQ', href: '/faq', icon: '❓' },
+    { label: 'Paramètres', href: '/settings', icon: '⚙️' },
     { label: 'Contact', href: '/contact', icon: '✉️' },
     { label: 'Mentions légales', href: '/mentions-legales', icon: '⚖️' }
   ];
