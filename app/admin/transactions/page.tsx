@@ -68,7 +68,7 @@ export default function AdminTransactionsPage() {
   const [closures, setClosures] = useState<MonthlyClosure[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthValue());
 
-  const [loading, setLoading] = useState(true);
+  const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [loadingClosures, setLoadingClosures] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -97,8 +97,12 @@ export default function AdminTransactionsPage() {
 
   const monthInfo = useMemo(() => getMonthRange(selectedMonth), [selectedMonth]);
 
-  const loadTransactions = async () => {
-    const { data, error } = await supabase
+  const loadTransactions = async (monthValue: string) => {
+    const info = getMonthRange(monthValue);
+
+    setLoadingTransactions(true);
+
+    let query = supabase
       .from("admin_transactions_detailed")
       .select(`
         id,
@@ -113,11 +117,20 @@ export default function AdminTransactionsPage() {
       `)
       .order("created_at", { ascending: false });
 
+    if (info) {
+      query = query
+        .gte("created_at", `${info.dateFrom}T00:00:00`)
+        .lte("created_at", `${info.dateTo}T23:59:59.999`);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
       throw error;
     }
 
     setTransactions((data ?? []) as Transaction[]);
+    setLoadingTransactions(false);
   };
 
   const loadClosures = async () => {
@@ -136,25 +149,31 @@ export default function AdminTransactionsPage() {
     setLoadingClosures(false);
   };
 
-  const loadData = async () => {
+  const loadInitialData = async () => {
     try {
-      setLoading(true);
       setError(null);
-
-      await Promise.all([loadTransactions(), loadClosures()]);
+      await Promise.all([loadTransactions(selectedMonth), loadClosures()]);
     } catch (e: any) {
       console.error("Erreur chargement admin transactions:", e);
       setError(e?.message || "Erreur de chargement.");
-    } finally {
-      setLoading(false);
+      setLoadingTransactions(false);
       setLoadingClosures(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    loadTransactions(selectedMonth).catch((e: any) => {
+      console.error("Erreur chargement transactions filtrées:", e);
+      setError(e?.message || "Erreur de chargement des transactions.");
+      setLoadingTransactions(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth]);
 
   const formatEuro = (value: number | null | undefined) => {
     const safe =
@@ -300,7 +319,7 @@ export default function AdminTransactionsPage() {
         return;
       }
 
-      await Promise.all([loadTransactions(), loadClosures()]);
+      await Promise.all([loadTransactions(selectedMonth), loadClosures()]);
       alert("Mois validé avec succès.");
     } finally {
       setClosingMonth(false);
@@ -319,7 +338,6 @@ export default function AdminTransactionsPage() {
         </p>
       )}
 
-      {/* Bloc clôture mensuelle */}
       <section
         style={{
           marginBottom: 24,
@@ -424,7 +442,6 @@ export default function AdminTransactionsPage() {
         </div>
       </section>
 
-      {/* Historique clôtures */}
       <section
         style={{
           marginBottom: 24,
@@ -492,7 +509,6 @@ export default function AdminTransactionsPage() {
         )}
       </section>
 
-      {/* Transactions */}
       <section
         style={{
           padding: 20,
@@ -502,10 +518,28 @@ export default function AdminTransactionsPage() {
           border: "1px solid #E5E7EB",
         }}
       >
-        {loading ? (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 14,
+            flexWrap: "wrap",
+          }}
+        >
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+            Transactions du mois sélectionné
+          </h2>
+          <div style={{ fontSize: 14, color: "#6B7280" }}>
+            {monthInfo ? `${monthInfo.label} (${monthInfo.dateFrom} → ${monthInfo.dateTo})` : ""}
+          </div>
+        </div>
+
+        {loadingTransactions ? (
           <p>Chargement des transactions…</p>
         ) : transactions.length === 0 ? (
-          <p>Aucune transaction pour le moment.</p>
+          <p>Aucune transaction pour ce mois.</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table
@@ -663,7 +697,6 @@ export default function AdminTransactionsPage() {
         )}
       </section>
 
-      {/* MODALE D'AFFICHAGE DU TICKET */}
       {receiptModalUrl && (
         <div
           style={{
